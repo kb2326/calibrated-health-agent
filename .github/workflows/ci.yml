@@ -40,3 +40,15 @@ jobs:
           python-version: "3.13"
       - run: uv sync --all-packages --frozen
       - run: uv run pytest -q
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate

@@ -1,0 +1,65 @@
+# infra: free-tier GCP slice for the daily sync
+
+Project `artful-timing-506108-n8`, region `us-central1`. Cloud Run **job** only
+(no always-on service, no load balancer, no VPC, no Cloud Build). Expected cost:
+well under the $5/month budget (see table).
+
+## What it creates (26 resources)
+
+8 project services (+ cloudresourcemanager, needed to read the project number),
+GCS data bucket `…-health-db`, secrets `oauth-client` / `oauth-token`
+(containers only), Artifact Registry repo `cha`, service accounts `sync-job` and
+`sync-scheduler`, Cloud Run job `sync` (2Gi, 1 vCPU, 15 min, 1 retry), Cloud
+Scheduler `sync-hourly` (`0 5-12 * * *`) and `sync-evening` (`30 22 * * *`),
+`Asia/Kolkata`, calling the Run Admin API with an OAuth token, a $5 budget
+(alerts at $2 and $4), an email channel and a log-based alert on
+`severity>=ERROR` from the `sync` job.
+
+| Resource | Monthly cost |
+|---|---|
+| Cloud Run job | $0 (a few minutes/day of 1 vCPU / 2 GiB is inside the free tier) |
+| Cloud Scheduler | $0 (2 of 3 free jobs per billing account) |
+| Secret Manager | $0 (2 secrets, few versions/accesses; free tier 6 versions) |
+| GCS data bucket | $0 (tens of MB, under 5 GB free) |
+| Artifact Registry | ~$0 (3 images x ~260 MB is under 0.5 GB free) |
+| Budgets, Monitoring alert, email channel | $0 |
+
+## Auth
+
+    export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token)
+
+The identity needs project owner/editor plus Billing Account Costs Manager on
+`01DA8F-C0DAA3-A37763`. The provider uses `user_project_override = true` and
+`billing_project = "artful-timing-506108-n8"`.
+
+Local `infra/terraform.tfvars` (gitignored, never commit) holds
+`journal_form_id` (from `config/journal_form.json`) and `job_image`.
+
+## Offline checks (also run in CI)
+
+    terraform fmt -check -recursive
+    terraform init -backend=false && terraform validate
+
+## Apply order (needs owner approval)
+
+1. `infra/bootstrap.sh` creates the versioned state bucket
+   `artful-timing-506108-n8-tfstate` (once).
+2. `terraform init -migrate-state` (backend.tf points at that bucket).
+3. Targeted apply so the repo exists before the image:
+   `terraform apply -target=google_project_service.enabled -target=google_artifact_registry_repository.cha`
+4. Build and push (no Cloud Build):
+   `gcloud auth configure-docker us-central1-docker.pkg.dev`, then
+   `docker build -f apps/jobs/Dockerfile -t us-central1-docker.pkg.dev/artful-timing-506108-n8/cha/sync-job:<git-sha> .`
+   and `docker push` the same tag. Set `job_image` in terraform.tfvars.
+5. Full `terraform plan -out tfplan` then `terraform apply tfplan`.
+6. Put secret values: add versions to `oauth-client` and `oauth-token`.
+7. Alert test: run the job once with a deliberate failure, e.g.
+   `gcloud run jobs execute sync --region us-central1 --args=--dry-run --update-env-vars CHA_TOKEN_SECRET=does-not-exist`
+   then confirm the alert email arrives (rate limited to one per hour), and
+   re-run normally to reset the env.
+
+## Plan-only review without the real backend
+
+Add a temporary `infra/backend_override.tf` containing
+`terraform { backend "local" {} }` (gitignored), `terraform init`, `terraform
+plan -out tfplan`, then delete the override and plan files.
