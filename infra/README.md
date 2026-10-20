@@ -2,7 +2,7 @@
 
 Project `artful-timing-506108-n8`, region `us-central1`. Cloud Run **job** only
 (no always-on service, no load balancer, no VPC, no Cloud Build). Expected cost:
-well under the $5/month budget (see table).
+about $0.03/month, far under the $5/month budget (see table).
 
 ## What it creates (26 resources)
 
@@ -13,7 +13,9 @@ GCS data bucket `…-health-db`, secrets `oauth-client` / `oauth-token`
 Scheduler `sync-hourly` (`0 5-12 * * *`) and `sync-evening` (`30 22 * * *`),
 `Asia/Kolkata`, calling the Run Admin API with an OAuth token, a $5 budget
 (alerts at $2 and $4), an email channel and a log-based alert on
-`severity>=ERROR` from the `sync` job.
+`severity>=ERROR` from the `sync` job or from the two scheduler jobs, and a
+metric alert on `run.googleapis.com/job/completed_task_attempt_count` with
+`result="failed"`.
 
 | Resource | Monthly cost |
 |---|---|
@@ -21,7 +23,7 @@ Scheduler `sync-hourly` (`0 5-12 * * *`) and `sync-evening` (`30 22 * * *`),
 | Cloud Scheduler | $0 (2 of 3 free jobs per billing account) |
 | Secret Manager | $0 (2 secrets, few versions/accesses; free tier 6 versions) |
 | GCS data bucket | $0 (tens of MB, under 5 GB free) |
-| Artifact Registry | ~$0 (3 images x ~260 MB is under 0.5 GB free) |
+| Artifact Registry | ~$0.03 (3 images x ~260 MB = ~0.78 GB; 0.5 GB is free, ~0.28 GB x $0.10/GB) |
 | Budgets, Monitoring alert, email channel | $0 |
 
 ## Auth
@@ -53,10 +55,14 @@ Local `infra/terraform.tfvars` (gitignored, never commit) holds
    and `docker push` the same tag. Set `job_image` in terraform.tfvars.
 5. Full `terraform plan -out tfplan` then `terraform apply tfplan`.
 6. Put secret values: add versions to `oauth-client` and `oauth-token`.
-7. Alert test: run the job once with a deliberate failure, e.g.
+7. Alert test (no drift): the job's secret names are env vars, so override
+   them for one execution only; this does not touch the job template or
+   Terraform state:
    `gcloud run jobs execute sync --region us-central1 --args=--dry-run --update-env-vars CHA_TOKEN_SECRET=does-not-exist`
-   then confirm the alert email arrives (rate limited to one per hour), and
-   re-run normally to reset the env.
+   NOTE: `--update-env-vars` on `jobs execute` applies to that execution only
+   (override); if gcloud instead reports it modified the job, run
+   `terraform apply` to restore the template. Confirm the alert email arrives
+   (log policy is rate limited to one per hour).
 
 ## Plan-only review without the real backend
 

@@ -27,13 +27,6 @@ resource "google_secret_manager_secret_iam_member" "sync_job_secrets" {
   member    = "serviceAccount:${google_service_account.sync_job.email}"
 }
 
-# health_data.secrets writes refreshed tokens as new versions of oauth-token only.
-resource "google_secret_manager_secret_iam_member" "sync_job_token_writer" {
-  secret_id = google_secret_manager_secret.oauth_token.id
-  role      = "roles/secretmanager.secretVersionAdder"
-  member    = "serviceAccount:${google_service_account.sync_job.email}"
-}
-
 resource "google_cloud_run_v2_job_iam_member" "invoker" {
   name     = google_cloud_run_v2_job.sync.name
   location = var.region
