@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -31,13 +32,23 @@ def _auth_guard(fn):
         raise typer.Exit(1) from None
 
 
-def _db_fingerprint() -> tuple:
-    """(size, mtime_ns) of the db and its -wal; a change means the command wrote something."""
-    out = []
+def _db_fingerprint() -> tuple[str | None, ...]:
+    """sha256 of the db file and its -wal (None if absent); a change means the command wrote.
+
+    Content, not size/mtime: a same-size write inside one filesystem timestamp tick must
+    still be detected, or it would silently never be pushed.
+    """
+    out: list[str | None] = []
     for suffix in ("", "-wal"):
         path = Path(str(db.DB_PATH) + suffix)
-        st = path.stat() if path.exists() else None
-        out.append((st.st_size, st.st_mtime_ns) if st else None)
+        if not path.exists():
+            out.append(None)
+            continue
+        digest = hashlib.sha256()
+        with path.open("rb") as fh:
+            while chunk := fh.read(1 << 20):
+                digest.update(chunk)
+        out.append(digest.hexdigest())
     return tuple(out)
 
 
@@ -48,7 +59,7 @@ def _persisted(fn):
     typer.Exit (e.g. a partial sync), so successful work is never lost to a later pull;
     the same exit code is then re-raised. Any other exception, or a run that left the db
     file unchanged (e.g. auth error before writing), does not push. "Wrote" is detected
-    by a size/mtime change of the db file or its -wal.
+    by a content-hash change of the db file or its -wal.
     """
 
     @functools.wraps(fn)
@@ -67,7 +78,13 @@ def _persisted(fn):
             except typer.Exit as exc:
                 pending = exc
             if _db_fingerprint() != before:
-                store.push_recorded(bucket, settings.db_object, db.DB_PATH)
+                try:
+                    store.push_recorded(bucket, settings.db_object, db.DB_PATH)
+                except store.ConcurrentUpdateError:
+                    raise  # handled below with its own message
+                except (RuntimeError, FileNotFoundError) as exc:  # busy checkpoint, missing source
+                    typer.echo(f"db error: {type(exc).__name__}: {exc}", err=True)
+                    raise typer.Exit(1) from None
         except (store.StaleLocalDbError, store.ConcurrentUpdateError) as exc:
             typer.echo(f"db error: {exc}", err=True)
             raise typer.Exit(1) from None
@@ -187,6 +204,9 @@ def db_push_cmd() -> None:
         generation = store.push_recorded(bucket, obj, db.DB_PATH)
     except store.ConcurrentUpdateError as exc:
         typer.echo(f"db error: {exc}", err=True)
+        raise typer.Exit(1) from None
+    except (RuntimeError, FileNotFoundError) as exc:
+        typer.echo(f"db error: {type(exc).__name__}: {exc}", err=True)
         raise typer.Exit(1) from None
     typer.echo(f"pushed generation {generation}")
 

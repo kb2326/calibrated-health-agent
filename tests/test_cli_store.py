@@ -149,3 +149,35 @@ def test_db_pull_push_require_bucket(monkeypatch, sub):
     _settings(monkeypatch, None)
     result = runner.invoke(cli.app, ["db", sub])
     assert result.exit_code != 0 and "CHA_DB_BUCKET is not set" in result.output
+
+
+def test_same_size_write_with_equal_mtime_is_still_pushed(monkeypatch, calls):
+    import os
+
+    _settings(monkeypatch, "bkt")
+    path = cli.db.DB_PATH
+    path.write_bytes(b"value=1111")
+    st = path.stat()
+
+    def write():
+        path.write_bytes(b"value=2222")  # same size
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))  # same mtime
+
+    monkeypatch.setattr(cli.db, "init_db", write)
+    assert runner.invoke(cli.app, ["db", "migrate"]).exit_code == 0
+    assert calls == ["fresh", "push"]
+
+
+@pytest.mark.parametrize("error", [RuntimeError("database busy"), FileNotFoundError("gone")])
+def test_push_runtime_errors_become_one_line(monkeypatch, calls, error):
+    _settings(monkeypatch, "bkt")
+    monkeypatch.setattr(cli.db, "init_db", _write(calls))
+
+    def fail(*a, **k):
+        raise error
+
+    monkeypatch.setattr(store, "push_recorded", fail)
+    result = runner.invoke(cli.app, ["db", "migrate"])
+    assert result.exit_code == 1
+    assert f"db error: {type(error).__name__}: {error}" in result.output
+    assert "Traceback" not in result.output
