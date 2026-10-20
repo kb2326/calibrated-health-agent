@@ -3,6 +3,7 @@ name = "calibrated-health-agent"
 version = "0.1.0"
 description = "A personal health agent that keeps score"
 requires-python = ">=3.13"
+license = "Apache-2.0"
 dependencies = ["health-core", "health-data", "health-agents"]
 
 [dependency-groups]

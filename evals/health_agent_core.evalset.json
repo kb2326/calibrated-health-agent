@@ -40,7 +40,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -80,7 +80,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -122,7 +122,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -172,7 +172,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -214,7 +214,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -256,7 +256,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -299,7 +299,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -339,7 +339,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -381,7 +381,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
@@ -416,7 +416,7 @@
         }
       ],
       "session_input": {
-        "app_name": "health_agent",
+        "app_name": "health_agents",
         "user_id": "user",
         "state": {}
       },
