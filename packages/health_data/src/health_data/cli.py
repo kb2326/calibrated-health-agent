@@ -1,13 +1,14 @@
 """`cha-data`: data-layer commands. Never prints answer values."""
 from __future__ import annotations
 
+import functools
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 
 import typer
 from health_core.settings import get_settings
 
-from health_data import db
+from health_data import db, store
 
 app = typer.Typer(pretty_exceptions_show_locals=False, no_args_is_help=True, help="Calibrated Health Agent data commands.")
 journal_app = typer.Typer(pretty_exceptions_show_locals=False, no_args_is_help=True, help="Daily journal (Google Form).")
@@ -29,7 +30,36 @@ def _auth_guard(fn):
         raise typer.Exit(1) from None
 
 
+def _persisted(fn):
+    """Writing commands: with CHA_DB_BUCKET set, refuse on a stale local db, push after success."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        settings = get_settings()
+        bucket = settings.db_bucket
+        if not bucket:
+            return fn(*args, **kwargs)
+        try:
+            store.require_fresh(bucket, settings.db_object)
+            exit_code = 0
+            try:
+                result = fn(*args, **kwargs)
+            except typer.Exit as exc:
+                result, exit_code = exc, exc.exit_code
+            if exit_code == 0:
+                store.push_recorded(bucket, settings.db_object, db.DB_PATH)
+        except (store.StaleLocalDbError, store.ConcurrentUpdateError) as exc:
+            typer.echo(f"db error: {exc}", err=True)
+            raise typer.Exit(1) from None
+        if isinstance(result, typer.Exit):
+            raise result
+        return result
+
+    return wrapper
+
+
 @app.command("sync")
+@_persisted
 def sync_cmd() -> None:
     """Incremental sync of every tracked type; prints counts only. Exit 1 on any failure."""
     from health_data import sync
@@ -41,6 +71,7 @@ def sync_cmd() -> None:
 
 
 @app.command("backfill")
+@_persisted
 def backfill_cmd(
     since: Annotated[datetime, typer.Option("--since", formats=["%Y-%m-%d"], help="First day to cover, YYYY-MM-DD.")],
     types: Annotated[list[str] | None, typer.Option("--type", help="Restrict to these data types (repeatable).")] = None,
@@ -95,6 +126,7 @@ def parity_cmd(days: Annotated[int, typer.Option("--days", min=1)] = 30) -> None
 
 
 @db_app.command("vacuum")
+@_persisted
 def db_vacuum_cmd() -> None:
     """VACUUM the local database and report its size."""
     before, after = db.vacuum(db.DB_PATH)
@@ -102,12 +134,41 @@ def db_vacuum_cmd() -> None:
 
 
 @db_app.command("migrate")
+@_persisted
 def db_migrate_cmd() -> None:
     """Apply pending schema migrations."""
     db.init_db()
     with db.connect() as conn:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
     typer.echo(f"schema version: {version}")
+
+
+def _require_bucket() -> tuple[str, str]:
+    settings = get_settings()
+    if not settings.db_bucket:
+        typer.echo("CHA_DB_BUCKET is not set", err=True)
+        raise typer.Exit(1)
+    return settings.db_bucket, settings.db_object
+
+
+@db_app.command("pull")
+def db_pull_cmd() -> None:
+    """Download the bucket database (source of truth) and record its generation."""
+    bucket, obj = _require_bucket()
+    generation = store.pull_db(bucket, obj, db.DB_PATH)
+    typer.echo("no remote database yet" if generation is None else f"pulled generation {generation}")
+
+
+@db_app.command("push")
+def db_push_cmd() -> None:
+    """Upload the local database, conditional on the recorded generation."""
+    bucket, obj = _require_bucket()
+    try:
+        generation = store.push_recorded(bucket, obj, db.DB_PATH)
+    except store.ConcurrentUpdateError as exc:
+        typer.echo(f"db error: {exc}", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(f"pushed generation {generation}")
 
 
 @auth_app.command("login")
@@ -127,6 +188,7 @@ def auth_status_cmd() -> None:
 
 
 @journal_app.command("import")
+@_persisted
 def journal_import_cmd() -> None:
     """Import Form responses into the append-only journal; prints status counts only."""
     from health_data.journal_import import append_submissions, fetch_responses, parse_responses

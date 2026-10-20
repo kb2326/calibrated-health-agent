@@ -154,7 +154,7 @@ def test_cli_wires_expected_commands_only():
     assert "push-secret" not in runner.invoke(app, ["auth", "--help"]).output
     dbhelp = runner.invoke(app, ["db", "--help"]).output
     assert "vacuum" in dbhelp and "migrate" in dbhelp
-    assert "pull" not in dbhelp and "push" not in dbhelp
+    assert "pull" in dbhelp and "push" in dbhelp  # wired by the GCS persistence task
 
 
 def test_cli_db_migrate_and_vacuum(env):
