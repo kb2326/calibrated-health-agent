@@ -31,7 +31,7 @@ def test_job_happy_path_order(calls, capsys):
     assert sync_job.main([]) == 0
     assert calls == ["pull", "migrate", "sync", "import", "push"]
     lines = _lines(capsys)
-    assert [line["step"] for line in lines] == ["pull", "migrate", "sync", "journal_import", "push"]
+    assert [line["step"] for line in lines] == ["pull", "migrate", "sync", "journal", "push"]
     assert {line["severity"] for line in lines} == {"INFO"}
 
 
@@ -63,13 +63,32 @@ def test_partial_sync_pushes_then_fails(calls, monkeypatch, capsys):
     assert any(line["severity"] == "ERROR" for line in _lines(capsys))
 
 
-def test_exception_in_import_does_not_push(calls, monkeypatch):
+def test_journal_failure_still_pushes_sync_work(calls, monkeypatch, capsys):
     def boom(_s):
         raise RuntimeError("x")
 
     monkeypatch.setattr(sync_job, "_journal_import", boom)
     assert sync_job.main([]) == 1
+    assert calls[-1] == "push"
+    assert any(x["severity"] == "ERROR" and x["step"] == "journal" for x in _lines(capsys))
+
+
+def test_failed_pull_runs_nothing_downstream(calls, monkeypatch, capsys):
+    def boom(*a, **k):
+        raise RuntimeError("gcs down")
+
+    monkeypatch.setattr(store, "pull_db", boom)
+    assert sync_job.main([]) == 1
+    assert calls == []
+    lines = _lines(capsys)
+    assert len(lines) == 1 and lines[0]["severity"] == "ERROR" and lines[0]["step"] == "pull"
+
+
+def test_empty_sync_summary_is_an_error(calls, monkeypatch, capsys):
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {})
+    assert sync_job.main([]) == 1
     assert "push" not in calls
+    assert any(x["severity"] == "ERROR" and x["step"] == "sync" for x in _lines(capsys))
 
 
 def test_dry_run_never_pushes(calls):

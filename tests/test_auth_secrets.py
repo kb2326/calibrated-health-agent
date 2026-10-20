@@ -108,3 +108,30 @@ def test_login_requests_health_plus_forms_scope():
     assert auth.login_scopes()[:-1] == auth.scopes()
     assert auth.login_scopes()[-1] == "https://www.googleapis.com/auth/forms.responses.readonly"
     assert all(s.endswith(".readonly") for s in auth.login_scopes())
+
+
+def test_refresh_token_without_expiry_is_refreshed(monkeypatch):
+    """Real Credentials: a secret holding only a refresh token (no token/expiry) must refresh."""
+    from google.oauth2 import credentials as oauth_creds
+    from google.oauth2 import reauth
+
+    monkeypatch.setattr(auth, "get_settings", lambda: Settings.model_validate({"token_secret": "tok"}))
+    monkeypatch.setattr(auth, "_cloud_token", lambda: {
+        "refresh_token": "r", "client_id": "id", "client_secret": "s",  # noqa: S106
+        "token_uri": "https://oauth2.googleapis.com/token"})
+    # Real Credentials with no token and no expiry: `expired` is False here, `valid` is False.
+    bare = oauth_creds.Credentials(
+        None, refresh_token="r", client_id="id", client_secret="s",  # noqa: S106
+        token_uri="https://oauth2.googleapis.com/token")
+    assert not bare.expired and not bare.valid
+    monkeypatch.setattr(oauth_creds.Credentials, "from_authorized_user_info", lambda *a, **k: bare)
+    refreshed = []
+
+    def fake_refresh(*a, **k):
+        refreshed.append(1)
+        from datetime import datetime, timedelta
+        return "access", "r", datetime.utcnow() + timedelta(hours=1), {}, None
+
+    monkeypatch.setattr(reauth, "refresh_grant", fake_refresh)
+    creds = auth.get_credentials()
+    assert refreshed and creds.valid

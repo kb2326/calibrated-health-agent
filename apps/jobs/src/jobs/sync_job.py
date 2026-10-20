@@ -5,7 +5,8 @@ the ERROR lines feed the failed-job alert. Exit 0 only if every step succeeded.
 
 Push rules (same as the CLI guard): a sync that completed with some failed data types is
 still pushed (completed work is never lost) and the job exits non-zero; an exception or a
-reauth failure in any step means no push. `--dry-run` works on a temp copy and never pushes.
+reauth failure in pull, migrate or sync means no push, while a journal-import failure after a
+completed sync still pushes the sync work (and exits non-zero). `--dry-run` works on a temp copy and never pushes.
 
 Synthetic mode (`CHA_DATA_MODE=synthetic`) is the offline smoke test: it starts from an
 empty local database, runs migrate, and logs sync, journal import and push as
@@ -56,6 +57,8 @@ def _sync() -> dict[str, Any]:
     from health_data import sync
 
     summary = sync.run()
+    if not summary:
+        raise RuntimeError("sync returned an empty summary; nothing was synced")
     failed = sorted(t for t, v in summary.items() if "error" in v)
     return {"types_ok": len(summary) - len(failed), "types_failed": len(failed), "failed": failed,
             "exit_code": sync.exit_code(summary)}
@@ -91,18 +94,24 @@ def _run(settings: Settings, dry_run: bool) -> int:
             _step("pull", lambda: {"generation": store.pull_db(bucket, settings.db_object, db.DB_PATH, gen_path=generation_path)})
         _step("migrate", _migrate)
         if synthetic:
-            for name in ("sync", "journal_import", "push"):
+            for name in ("sync", "journal", "push"):
                 log(name, result=SKIPPED)
             return 0
         sync_result = _step("sync", _sync)
-        _step("journal_import", lambda: _journal_import(settings))
+        # A journal failure must not discard the completed sync: still push, exit 1.
+        journal_failed = False
+        try:
+            _step("journal", lambda: _journal_import(settings))
+        except _Abort:
+            journal_failed = True
         if sync_result["types_failed"]:
             log("sync", "ERROR", error="partial sync", failed=sync_result["failed"])
+        failed = bool(sync_result["types_failed"]) or journal_failed
         if dry_run or not bucket:
             log("push", result="skipped (dry-run)" if dry_run else "skipped (CHA_DB_BUCKET not set)")
         else:
             _step("push", lambda: {"generation": store.push_recorded(bucket, settings.db_object, db.DB_PATH)})
-        return 1 if sync_result["types_failed"] else 0
+        return 1 if failed else 0
     except _Abort:
         return 1
     finally:

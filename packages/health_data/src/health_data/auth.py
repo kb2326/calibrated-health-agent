@@ -148,7 +148,7 @@ def get_credentials() -> Credentials:
         creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
     if creds.valid:
         return creds
-    if creds.expired and creds.refresh_token:
+    if not creds.valid and creds.refresh_token:  # `expired` is False when expiry is unset
         try:
             creds.refresh(Request())
         except RefreshError:
