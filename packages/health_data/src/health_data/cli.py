@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -30,8 +31,25 @@ def _auth_guard(fn):
         raise typer.Exit(1) from None
 
 
+def _db_fingerprint() -> tuple:
+    """(size, mtime_ns) of the db and its -wal; a change means the command wrote something."""
+    out = []
+    for suffix in ("", "-wal"):
+        path = Path(str(db.DB_PATH) + suffix)
+        st = path.stat() if path.exists() else None
+        out.append((st.st_size, st.st_mtime_ns) if st else None)
+    return tuple(out)
+
+
 def _persisted(fn):
-    """Writing commands: with CHA_DB_BUCKET set, refuse on a stale local db, push after success."""
+    """Writing commands: with CHA_DB_BUCKET set, refuse on a stale local db, push after a run.
+
+    A run that completes and wrote to the db is pushed even when it ends in a nonzero
+    typer.Exit (e.g. a partial sync), so successful work is never lost to a later pull;
+    the same exit code is then re-raised. Any other exception, or a run that left the db
+    file unchanged (e.g. auth error before writing), does not push. "Wrote" is detected
+    by a size/mtime change of the db file or its -wal.
+    """
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -39,20 +57,22 @@ def _persisted(fn):
         bucket = settings.db_bucket
         if not bucket:
             return fn(*args, **kwargs)
+        pending: typer.Exit | None = None
+        result = None
         try:
             store.require_fresh(bucket, settings.db_object)
-            exit_code = 0
+            before = _db_fingerprint()
             try:
                 result = fn(*args, **kwargs)
             except typer.Exit as exc:
-                result, exit_code = exc, exc.exit_code
-            if exit_code == 0:
+                pending = exc
+            if _db_fingerprint() != before:
                 store.push_recorded(bucket, settings.db_object, db.DB_PATH)
         except (store.StaleLocalDbError, store.ConcurrentUpdateError) as exc:
             typer.echo(f"db error: {exc}", err=True)
             raise typer.Exit(1) from None
-        if isinstance(result, typer.Exit):
-            raise result
+        if pending is not None:
+            raise pending
         return result
 
     return wrapper

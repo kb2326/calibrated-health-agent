@@ -66,7 +66,11 @@ def pull_db(bucket: str, obj: str, dest: Path, *, client: Any | None = None, gen
     generation = int(blob.generation)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
-    blob.download_to_filename(str(tmp), if_generation_match=generation)
+    try:
+        blob.download_to_filename(str(tmp), if_generation_match=generation)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     for suffix in ("-wal", "-shm"):  # stale sidecars would corrupt the pulled file
         Path(str(dest) + suffix).unlink(missing_ok=True)
     os.replace(tmp, dest)
@@ -84,11 +88,15 @@ def push_db(
     gen_path: Path | None = None,
 ) -> int:
     """Upload `src` iff the object is still at `if_generation_match` (0 = must not exist)."""
+    if not src.exists():  # sqlite3.connect would create an empty db, which must never be uploaded
+        raise FileNotFoundError(f"{src} does not exist; nothing to push")
     conn = sqlite3.connect(src)
     try:
-        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # fold -wal into the main file
+        busy = conn.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]  # fold -wal into main file
     finally:
         conn.close()
+    if busy:
+        raise RuntimeError(f"could not checkpoint {src} (database busy); not uploading")
     blob = _client(client).bucket(bucket).blob(obj)
     try:
         blob.upload_from_filename(str(src), if_generation_match=if_generation_match)
