@@ -148,6 +148,12 @@ class TestLearningLoop:
 class TestAgentTools:
     """The agent's capability surface — read-only, grounded, honest about n."""
 
+    @pytest.fixture(autouse=True)
+    def empty_db(self, tmp_path, monkeypatch):
+        """Bind tools to a throwaway schema-only DB so no real data/ is needed."""
+        monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+        db.init_db()
+
     def test_sql_tool_refuses_every_mutation(self):
         from health_agents import tools
         for q in ("DELETE FROM journal", "UPDATE journal SET mood=1",
@@ -171,7 +177,7 @@ class TestAgentTools:
 
         from health_agents import tools
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
-            tools._ro_connect().execute("DELETE FROM journal")
+            tools._ro_connect().execute("DELETE FROM daily_metrics")
 
     def test_every_tool_reports_a_sample_count(self):
         """Grounding rule: a claim without n is not checkable."""

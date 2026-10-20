@@ -10,6 +10,7 @@ import argparse
 from datetime import date
 
 from health_data import db
+from health_data.db import utc_stamp
 
 
 def _prompt_int(label: str) -> int:
@@ -41,13 +42,14 @@ def log(day: str, mood: int | None, energy: int | None, soreness: int | None, no
         note = input("note (optional): ").strip() or None
 
     with db.connect() as conn:
+        now = utc_stamp()
         conn.execute(
-            """INSERT INTO journal (date, mood, energy, soreness, note, logged_at)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT(date) DO UPDATE SET
-                 mood=excluded.mood, energy=excluded.energy, soreness=excluded.soreness,
-                 note=excluded.note, logged_at=excluded.logged_at""",
-            (day, mood, energy, soreness, note, db.now_iso()),
+            """INSERT INTO journal_submissions
+               (date, mood, energy, soreness, note, submitted_at, source,
+                row_hash, imported_at, status)
+               VALUES (?, ?, ?, ?, ?, ?, 'cli', ?, ?, 'ok')""",
+            (day, mood, energy, soreness, note, now,
+             db.journal_row_hash(day, mood, energy, soreness, note, now, "cli"), now),
         )
     print(f"Logged for {day}: mood={mood} energy={energy} soreness={soreness}")
 

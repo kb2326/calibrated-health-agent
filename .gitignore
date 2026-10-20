@@ -15,3 +15,9 @@ config/*.bak*
 .env
 infra/.terraform/
 *.tfstate*
+
+infra/*_override.tf
+infra/*.tfplan
+infra/tfplan
+infra/terraform.tfvars
+*.auto.tfvars

@@ -20,7 +20,8 @@ class Settings(BaseSettings):
     db_object: str = "health.db"
     token_secret: str | None = None
     client_secret_secret: str | None = None
-    journal_sheet_id: str | None = None
+    journal_form_id: str | None = None
+    forms_token_path: Path = Path("config/forms_token.json")
     timezone: str = "Asia/Kolkata"
     # Verified against https://ai.google.dev/gemini-api/docs/models (stable).
     model_default: str = "gemini-3.5-flash-lite"

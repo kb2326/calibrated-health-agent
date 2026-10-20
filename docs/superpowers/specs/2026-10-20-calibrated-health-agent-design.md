@@ -197,15 +197,15 @@ The system runs on the owner's **real** Google Health API data. **[owner]**
 
 Daily journaling must be effortless and must start before the web app exists. **[call]**
 
-**Outcome integrity [call]:** every submission is stored append-only with a row hash; Sheet
+**Outcome integrity [call]:** every submission is stored append-only with a row hash; Form
 edits and resubmissions are kept as flagged submissions, never overwrites. The scored
 outcome for day D is the first valid submission after D's lock and before D+1 06:00 IST;
 later ones are stored but excluded from headline scores. Outcomes join the hash chain.
 
 - **Now:** a mobile-friendly Google Form (mood, energy, soreness 1–10, optional note,
   plus up to five optional yes/no **behaviour tags** — alcohol, caffeine after 2pm, late
-  meal, high stress, hard training — borrowed from WHOOP's journal idea) writing to a
-  Google Sheet; an import job pulls entries with their submit timestamp. Tags are inputs
+  meal, high stress, hard training — borrowed from WHOOP's journal idea); an import job
+  reads responses directly from the Google Forms API (no Sheet) with their submit timestamp. Tags are inputs
   for the investigator, never forecast targets. **[call]**
 - **Later (Phase 7):** a journal form in owner mode replaces it. Both sources are kept
   with provenance; entry latency is recorded (late entries flagged as lower quality).

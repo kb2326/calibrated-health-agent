@@ -2,7 +2,22 @@
 name = "health-data"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = ["health-core", "google-auth>=2.56", "google-auth-oauthlib>=1.4", "google-api-python-client>=2.198", "PyYAML>=6.0", "pandas>=2.2", "numpy>=1.26", "python-dateutil>=2.9"]
+dependencies = [
+    "health-core",
+    "google-auth>=2.56",
+    "google-auth-oauthlib>=1.4",
+    "google-api-python-client>=2.198",
+    "PyYAML>=6.0",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "python-dateutil>=2.9",
+    "typer>=0.12",
+    "google-cloud-storage>=3.17.1",
+    "google-cloud-secret-manager>=2.31.0",
+]
+
+[project.scripts]
+cha-data = "health_data.cli:app"
 
 [build-system]
 requires = ["hatchling"]

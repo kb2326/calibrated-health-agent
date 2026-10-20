@@ -46,7 +46,7 @@ flowchart LR
   mcpc([MCP client<br/>Claude Desktop · Cursor])
   watch[[Fitbit / Pixel Watch]]
   ghapi[(Google Health API v4)]
-  form[[Journal form<br/>Google Form → Sheet]]
+  form[[Journal form<br/>Google Form, read via the Forms API]]
   gemini[(Gemini models<br/>Gemini Enterprise Agent Platform)]
   ks{{Calibrated Health Agent}}
   gh[(GitHub kb2326<br/>code · CI · public hash log)]
@@ -61,7 +61,7 @@ flowchart LR
   ks -- daily ledger hash --> gh
 ```
 
-External dependencies: the Google Health API (data), Gemini (reasoning), Google Forms/Sheets
+External dependencies: the Google Health API (data), Gemini (reasoning), Google Forms API
 (journal until the owner UI exists), GitHub (code, CI, public hash log).
 
 ---
@@ -73,7 +73,7 @@ flowchart TB
   subgraph EXT["External"]
     direction LR
     ghapi[("Google Health API<br/>read-only")]
-    sheet[("Journal Sheet")]
+    form[("Journal Form<br/>Forms API")]
     gemini[("Gemini<br/>paid key · quota-capped")]
   end
 
@@ -110,7 +110,7 @@ flowchart TB
   end
 
   ghapi --> sync
-  sheet --> sync
+  form --> sync
   gemini <--> lock
   gemini <--> api_o
   lock -- "daily hash" --> ghrepo[("GitHub · public hash log")]
@@ -340,7 +340,7 @@ sequenceDiagram
 | Web ↔ agent | AG-UI 1.0 over SSE (`ag-ui-adk`) | streamed text, tool calls, step timeline, confirmations |
 | MCP server | MCP spec 2026-07-28, stdio + Streamable HTTP | read-only tools (metrics, series, scoreboard, receipts) + resources per data type |
 | Jobs | Workflows → Cloud Run jobs | sync, quality, lock, score, mirror, digest |
-| Journal | Google Form → Sheet (now), owner web form (later) | daily entries with timestamps |
+| Journal | Google Form, read directly via the Forms API (now), owner web form (later) | daily entries with timestamps |
 
 ---
 

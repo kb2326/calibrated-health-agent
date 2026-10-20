@@ -80,7 +80,7 @@ def describe_substrate() -> dict:
             except sqlite3.OperationalError:
                 counts[t] = None
         cursors = _rows(conn.execute(
-            "SELECT data_type AS metric, last_synced_at FROM sync_state ORDER BY data_type"
+            "SELECT data_type AS metric, last_synced_at FROM sync_state WHERE data_type NOT LIKE 'backfill:%' ORDER BY data_type"
         ))
     return {"row_counts": counts, "sync_state": cursors}
 
