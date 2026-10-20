@@ -1,0 +1,14 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+      - id: ruff-format
+        args: [--check]
+  - repo: local
+    hooks:
+      - id: no-secrets
+        name: block secret and data files
+        entry: python -c "import sys; sys.exit(1)"
+        language: system
+        files: (^data/|^config/.*\.json$|\.env$|token)

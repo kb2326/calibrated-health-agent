@@ -1,0 +1,63 @@
+# Tracked Google Health API data types.
+# `agg` controls how raw points are rolled up into one daily value in daily_metrics:
+#   sum  -> steps, distance, calories (counted totals)
+#   mean -> heart rate, HRV, SpO2, weight (point-in-time measurements)
+data_types:
+  steps:
+    scope: activity_and_fitness
+    agg: sum
+  active-minutes:
+    scope: activity_and_fitness
+    agg: sum
+  distance:
+    scope: activity_and_fitness
+    agg: sum
+  total-calories:
+    scope: activity_and_fitness
+    agg: sum
+  exercise:
+    scope: activity_and_fitness
+    agg: sum
+  sleep:
+    scope: sleep
+    agg: sum          # total sleep minutes/night
+  heart-rate:
+    scope: health_metrics_and_measurements
+    agg: mean
+  daily-resting-heart-rate:
+    scope: health_metrics_and_measurements
+    agg: mean
+  heart-rate-variability:
+    scope: health_metrics_and_measurements
+    agg: mean
+  oxygen-saturation:
+    scope: health_metrics_and_measurements
+    agg: mean
+  weight:
+    scope: health_metrics_and_measurements
+    agg: mean
+
+# OAuth scopes are requested read-only, one per category actually used above.
+oauth_scope_prefix: "https://www.googleapis.com/auth/googlehealth"
+scope_categories:
+  - activity_and_fitness
+  - sleep
+  - health_metrics_and_measurements
+
+# how far back to backfill on the very first sync
+initial_backfill_days: 30
+
+# analysis thresholds
+analysis:
+  min_history_days: 7        # need at least this many prior days before scoring anomalies
+  watch_z: 1.5
+  alert_z: 3.0
+
+# correlation thresholds
+correlation:
+  min_abs_r: 0.3
+  min_n: 10
+  lags_days: [0, 1]           # same-day and next-day lag
+
+# manual daily journal — subjective axis correlated against wearable data
+journal_fields: [mood, energy, soreness]   # each logged 1-10

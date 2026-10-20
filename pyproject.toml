@@ -1,0 +1,34 @@
+[project]
+name = "calibrated-health-agent"
+version = "0.1.0"
+description = "A personal health agent that keeps score"
+requires-python = ">=3.13"
+dependencies = ["health-core", "health-data", "health-agents"]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "ruff>=0.6", "pyright>=1.1.380", "pre-commit>=3.8", "pandas-stubs", "types-PyYAML"]
+
+[tool.uv.workspace]
+members = ["packages/*", "apps/*"]
+
+[tool.uv.sources]
+health-core = { workspace = true }
+health-data = { workspace = true }
+health-agents = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["packages", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "basic"
