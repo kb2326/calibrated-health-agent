@@ -132,6 +132,71 @@ def _upsert_rollup(conn, data_type: str, bucket: dict, day_of=None, value_of=Non
     return True
 
 
+def sync_devices(conn) -> int:
+    """Upsert the paired-device inventory; returns how many devices were seen."""
+    import json
+
+    devices = client.list_paired_devices().get("pairedDevices", [])
+    for dev in devices:
+        conn.execute(
+            """INSERT INTO devices (id, display_name, raw_json, fetched_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 display_name=excluded.display_name, raw_json=excluded.raw_json,
+                 fetched_at=excluded.fetched_at""",
+            (dev.get("name", ""), dev.get("deviceVersion") or dev.get("deviceType"),
+             json.dumps(dev), db.now_iso()),
+        )
+    return len(devices)
+
+
+def exit_code(summary: dict) -> int:
+    """0 when every type synced, 1 when any failed (partial failure is a failure)."""
+    return 1 if any("error" in s for s in summary.values()) else 0
+
+
+# Types worth probing beyond whatever is already tracked.
+PROBE_CANDIDATES = (
+    "daily-heart-rate-variability", "daily-oxygen-saturation", "daily-respiratory-rate",
+    "respiratory-rate-sleep-summary", "daily-sleep-temperature-derivations",
+    "active-zone-minutes", "time-in-heart-rate-zone", "daily-vo2-max",
+    "sedentary-period", "floors",
+)
+
+
+def probe(days: int, candidates: tuple[str, ...] | None = None) -> dict[str, int]:
+    """Points (or rollup days with data) per readable type over the last `days`.
+
+    Types the API rejects are left out of the result, not reported as zero.
+    """
+    end = datetime.now(UTC).date()
+    start = end - timedelta(days=days)
+    names = candidates if candidates is not None else tuple(
+        dict.fromkeys([*CONFIG["data_types"], *PROBE_CANDIDATES])
+    )
+    out: dict[str, int] = {}
+    for data_type in names:
+        try:
+            if data_type in client.ROLLUP_TYPES:
+                out[data_type] = sum(
+                    1
+                    for b in client.iter_daily_rollups(data_type, start, end)
+                    if client.extract_rollup_value(data_type, b)[0] is not None
+                )
+            elif data_type in client.WINDOW_ROLLUP_TYPES:
+                out[data_type] = sum(1 for _ in client.iter_window_rollups(data_type, start, end))
+            else:
+                out[data_type] = sum(
+                    1
+                    for _ in client.iter_data_points(
+                        data_type, f"{start.isoformat()}T00:00:00Z", f"{end.isoformat()}T00:00:00Z"
+                    )
+                )
+        except client.HealthApiError as e:
+            log.warning(f"probe.{data_type} unreadable: {str(e)[:120]}")
+    return out
+
+
 def run() -> dict:
     db.init_db()
     summary: defaultdict[str, dict[str, Any]] = defaultdict(
@@ -215,6 +280,13 @@ def run() -> dict:
                 f"{data_type:30s} fetched={s['fetched']:7d}  inserted={s['inserted']:7d}",
                 flush=True,
             )
+        try:
+            summary["_devices"]["fetched"] = sync_devices(conn)
+            conn.commit()
+        except client.HealthApiError as e:
+            # Needs the settings scope; absent until re-consent. Never fatal.
+            summary["_devices"]["error"] = str(e)[:200]
+            conn.rollback()
     result = dict(summary)
     db.write_stage_output("ingest", datetime.now(UTC).date().isoformat(), result)
     return result
@@ -228,3 +300,4 @@ if __name__ == "__main__":
         sys.exit(1)
     errs = [d for d, s in summary.items() if "error" in s]
     print(f"done: {len(summary) - len(errs)} ok, {len(errs)} failed")
+    sys.exit(exit_code(summary))

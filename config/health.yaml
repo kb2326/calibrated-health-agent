@@ -37,12 +37,49 @@ data_types:
     scope: health_metrics_and_measurements
     agg: mean
 
+  # Added after the 2026-10-20 device probe (each returned >=1 point in 30 days).
+  # Daily summaries and one-per-night samples: stored as given.
+  daily-heart-rate-variability:
+    scope: health_metrics_and_measurements
+    agg: mean
+  daily-oxygen-saturation:
+    scope: health_metrics_and_measurements
+    agg: mean
+  daily-respiratory-rate:
+    scope: health_metrics_and_measurements
+    agg: mean
+  respiratory-rate-sleep-summary:
+    scope: health_metrics_and_measurements
+    agg: mean
+  daily-sleep-temperature-derivations:
+    scope: health_metrics_and_measurements
+    agg: mean
+  daily-vo2-max:
+    scope: health_metrics_and_measurements
+    agg: mean
+  # Counted/duration totals: stored as one dailyRollUp value per day (minutes
+  # for the duration types; time-in-heart-rate-zone sums every zone).
+  active-zone-minutes:
+    scope: activity_and_fitness
+    agg: sum
+  time-in-heart-rate-zone:
+    scope: activity_and_fitness
+    agg: sum
+  sedentary-period:
+    scope: activity_and_fitness
+    agg: sum
+  floors:
+    scope: activity_and_fitness
+    agg: sum
+
 # OAuth scopes are requested read-only, one per category actually used above.
 oauth_scope_prefix: "https://www.googleapis.com/auth/googlehealth"
 scope_categories:
   - activity_and_fitness
   - sleep
   - health_metrics_and_measurements
+  - profile     # getProfile; needs owner re-consent
+  - settings    # getSettings + pairedDevices; needs owner re-consent
 
 # how far back to backfill on the very first sync
 initial_backfill_days: 30

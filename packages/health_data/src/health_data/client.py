@@ -122,6 +122,20 @@ TIME_FIELD = {
     "heart-rate-variability": "sample",
     "oxygen-saturation": "sample",
     "weight": "sample",
+    # Daily summaries filter on <name>.date; the discovery doc's filter help
+    # gives `daily_heart_rate_variability.date` as the canonical example.
+    "daily-heart-rate-variability": "daily",
+    "daily-oxygen-saturation": "daily",
+    "daily-respiratory-rate": "daily",
+    "daily-sleep-temperature-derivations": "daily",
+    "daily-vo2-max": "daily",
+    # One sample per night, stamped with sampleTime.
+    "respiratory-rate-sleep-summary": "sample",
+    # Interval types (the default); listed so the table is the full inventory.
+    "floors": "interval",
+    "active-zone-minutes": "interval",
+    "sedentary-period": "interval",
+    "time-in-heart-rate-zone": "interval",
 }
 
 # Types whose filter path isn't derivable from the rule above.
@@ -282,7 +296,12 @@ def _iter_window(
 # Counted totals are not served by list — it returns zero points for them.
 # dailyRollUp pre-aggregates per civil day, which is also more correct than
 # summing raw points ourselves since the server owns day-boundary semantics.
-ROLLUP_TYPES = {"steps", "distance", "total-calories", "active-minutes"}
+ROLLUP_TYPES = {
+    "steps", "distance", "total-calories", "active-minutes",
+    # floors rejects `list` outright (reconcile/rollup/dailyRollup only); the
+    # other three are minute-granular streams, stored as one bucket per day.
+    "floors", "active-zone-minutes", "sedentary-period", "time-in-heart-rate-zone",
+}
 
 # The API rejects a rollup range longer than this, per type (surfaced in its
 # own INVALID_ROLLUP_QUERY_DURATION error metadata). Chunk requests to fit.
@@ -413,6 +432,21 @@ def extract_rollup_value(data_type: str, bucket: dict) -> tuple[float | None, st
                 return float(section[key]), unit
             except (TypeError, ValueError):
                 return None, None
+    # Duration-valued rollups: "28920s" strings, stored as minutes.
+    if "durationSum" in section:
+        secs = _seconds(section["durationSum"])
+        return (None, None) if secs is None else (round(secs / 60, 2), "minutes")
+    zones = section.get("timeInHeartRateZones")
+    if isinstance(zones, list):
+        parts = [_seconds((z or {}).get("duration")) for z in zones]
+        known = [p for p in parts if p is not None]
+        return (round(sum(known) / 60, 2), "minutes") if known else (None, None)
+    zone_sums = [
+        _num(section.get(k))
+        for k in ("sumInFatBurnHeartZone", "sumInCardioHeartZone", "sumInPeakHeartZone")
+    ]
+    if any(v is not None for v in zone_sums):
+        return sum(v for v in zone_sums if v is not None), "minutes"
     for value in section.values():  # active-minutes: sum the per-level breakdown
         if isinstance(value, list):
             total, found = 0.0, False
@@ -427,6 +461,13 @@ def extract_rollup_value(data_type: str, bucket: dict) -> tuple[float | None, st
             if found:
                 return total, "minutes"
     return None, None
+
+
+def _seconds(v) -> float | None:
+    """A protobuf Duration string such as "3600s" -> 3600.0."""
+    if isinstance(v, str) and v.endswith("s"):
+        v = v[:-1]
+    return _num(v)
 
 
 def _section(data_type: str, point: dict) -> dict:
@@ -478,6 +519,13 @@ VALUE_FIELD: dict[str, tuple[str, str, float]] = {
         1,
     ),
     "weight": ("weightGrams", "kg", 0.001),
+    # Dotted paths descend into nested messages.
+    "daily-heart-rate-variability": ("averageHeartRateVariabilityMilliseconds", "ms", 1),
+    "daily-oxygen-saturation": ("averagePercentage", "percent", 1),
+    "daily-respiratory-rate": ("breathsPerMinute", "breaths/min", 1),
+    "daily-sleep-temperature-derivations": ("nightlyTemperatureCelsius", "celsius", 1),
+    "daily-vo2-max": ("vo2Max", "ml/kg/min", 1),
+    "respiratory-rate-sleep-summary": ("fullSleepStats.breathsPerMinute", "breaths/min", 1),
 }
 
 # Types with no scalar of their own — the meaningful daily figure is how long
@@ -517,7 +565,10 @@ def extract_value(data_type: str, point: dict) -> tuple[float | None, str | None
     spec = VALUE_FIELD.get(data_type)
     if spec:
         field, unit, mult = spec
-        raw = _num(section.get(field))
+        node: object = section
+        for part in field.split("."):
+            node = node.get(part) if isinstance(node, dict) else None
+        raw = _num(node)
         # A zero is not a reading for any of these — no one has a heart rate,
         # SpO2, HRV, or mass of zero. It means the source did not populate
         # this particular field. That happens because the API reconciles
@@ -542,7 +593,7 @@ def get_profile() -> dict:
     return _read("getProfile", service().users().getProfile(name="users/me/profile"))
 
 
-def get_settings() -> dict:
+def get_user_settings() -> dict:
     return _read("getSettings", service().users().getSettings(name="users/me/settings"))
 
 
