@@ -172,3 +172,43 @@ def test_fetch_responses_maps_titles_and_paginates(monkeypatch):
     assert qids == {"Mood": "qm", "Date": "qd"}
     assert [r["responseId"] for r in responses] == ["a", "b"]
     assert lst.call_args.kwargs.get("pageToken") == "t2"
+
+
+def test_future_dated_entry_stored_invalid(conn):
+    # createTime 2026-03-10 15:00Z is 2026-03-10 IST; date 2026-03-11 is in the future
+    counts, _ = run(conn, resp(day="2026-03-11"))
+    assert counts == {"invalid": 1}
+    assert conn.execute("SELECT reason FROM journal_submissions").fetchone()[0] == (
+        "date after submission")
+    assert conn.execute("SELECT count(*) FROM journal_outcome").fetchone()[0] == 0
+
+
+def test_row_hash_distinguishes_pipe_in_note(conn):
+    counts, _ = run(conn, resp("r1", note="a|b", tags=["c"]), resp("r2", note="a", tags=["b|c"]))
+    assert counts == {"ok": 2}
+    rows, _ = parse_responses(QIDS, [resp("r1", note="a|1"), resp("r1", note="a", tags=["1"])], TZ)
+    assert journal_import._row_hash(rows[0]) != journal_import._row_hash(rows[1])
+
+
+def test_cli_failure_prints_no_answer_values(tmp_path, monkeypatch):
+    from health_core.settings import get_settings
+    from health_data import cli
+    from typer.testing import CliRunner
+
+    secret = "SECRET-NOTE-VALUE"
+    monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+    monkeypatch.setenv("CHA_JOURNAL_FORM_ID", "FID")
+    get_settings.cache_clear()
+    monkeypatch.setattr(journal_import, "fetch_responses",
+                        lambda fid: (QIDS, [resp(note=secret)]))
+
+    def boom(*a, **k):
+        local_rows = [secret]  # noqa: F841  (a frame local an unguarded traceback would show)
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(journal_import, "parse_responses", boom)
+    result = CliRunner().invoke(cli.app, ["journal", "import"])
+    get_settings.cache_clear()
+    assert result.exit_code == 1
+    assert secret not in result.output
+    assert "RuntimeError" in result.output

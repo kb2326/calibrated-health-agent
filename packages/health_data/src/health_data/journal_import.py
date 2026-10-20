@@ -136,6 +136,9 @@ def parse_responses(
         status: Literal["ok", "late", "invalid"] = "invalid" if reasons else "ok"
         if day is None:
             day = created.astimezone(zone).date()  # best guess; the row is invalid anyway
+        elif day > created.astimezone(zone).date():
+            status = "invalid"
+            reasons.append("date after submission")
         elif status == "ok":
             deadline = datetime.combine(day + timedelta(days=1), time(6), tzinfo=zone)
             if created > deadline:
@@ -154,11 +157,10 @@ def parse_responses(
 
 
 def _row_hash(row: JournalRow) -> str:
-    payload = "|".join([
+    payload = json.dumps([
         row.response_id, utc_stamp(row.last_submitted_at), row.date.isoformat(),
-        str(row.mood), str(row.energy), str(row.soreness), row.note or "",
-        json.dumps(sorted(row.tags)),
-    ])
+        row.mood, row.energy, row.soreness, row.note or "", sorted(row.tags),
+    ], ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
