@@ -16,8 +16,8 @@ authorization code the browser hands back on the loopback redirect.
 
 Run:
     uv run python -m health_data.auth import-client <client_secret.json>   # adopt a client
-    uv run python -m health_data.auth login                                # authorize
-    uv run python -m health_data.auth status                               # verify
+    uv run cha-data auth login                                             # authorize
+    uv run cha-data auth status                                            # verify
 """
 from __future__ import annotations
 
@@ -110,7 +110,7 @@ def get_credentials() -> Credentials:
     _migrate_legacy_token()
     if not TOKEN_PATH.exists():
         raise AuthError(
-            f"{TOKEN_PATH} not found — run: uv run python -m health_data.auth login"
+            f"{TOKEN_PATH} not found — run: cha-data auth login"
         )
     # No scopes override: a refresh must request exactly what the token was
     # granted, or Google answers invalid_scope for scopes not yet consented to.
@@ -129,7 +129,7 @@ def get_credentials() -> Credentials:
         return creds
     raise AuthError(
         "stored credentials are unusable and cannot be refreshed — "
-        "re-run: uv run python -m health_data.auth login"
+        "re-run: cha-data auth login"
     )
 
 

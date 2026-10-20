@@ -197,6 +197,48 @@ def probe(days: int, candidates: tuple[str, ...] | None = None) -> dict[str, int
     return out
 
 
+def ingest(
+    conn, data_type: str, start: str, end: str, counters: dict[str, Any],
+    inclusive_end_day: bool = True,
+) -> None:
+    """Fetch [start, end) for one type and store it; shared by sync and backfill.
+
+    Summed types arrive as dailyRollUp buckets (never per-minute points). With
+    `inclusive_end_day` the civil day containing `end` is fetched too (sync,
+    which wants today); backfill passes False for strict [start, end) windows.
+    Raises HealthApiError; the caller owns rollback and cursor handling.
+    """
+    if data_type in client.ROLLUP_TYPES or data_type in client.WINDOW_ROLLUP_TYPES:
+        lo = datetime.fromisoformat(start).date()
+        hi = datetime.fromisoformat(end).date() + timedelta(days=1 if inclusive_end_day else 0)
+        windowed = data_type in client.WINDOW_ROLLUP_TYPES
+        buckets = (client.iter_window_rollups if windowed else client.iter_daily_rollups)(
+            data_type, lo, hi)
+        extra = (
+            {"day_of": client.window_rollup_day, "value_of": client.extract_window_value}
+            if windowed else {}
+        )
+        for bucket in buckets:
+            counters["fetched"] += 1
+            if _upsert_rollup(conn, data_type, bucket, **extra):
+                counters["inserted"] += 1
+    else:
+        # Batched: 740k individual execute() calls held a write lock for
+        # minutes. executemany amortises that, and the chunk boundary keeps
+        # peak memory bounded on a backfill.
+        batch: list[tuple] = []
+        for point in client.iter_data_points(data_type, start, end):
+            counters["fetched"] += 1
+            batch.append(_point_row(data_type, point))
+            if len(batch) >= INSERT_BATCH:
+                counters["inserted"] += _flush(conn, batch)
+                batch.clear()
+        if batch:
+            counters["inserted"] += _flush(conn, batch)
+    if data_type not in client.ROLLUP_TYPES:
+        _rollup_daily(conn, data_type)
+
+
 def run() -> dict:
     db.init_db()
     summary: defaultdict[str, dict[str, Any]] = defaultdict(
@@ -206,37 +248,7 @@ def run() -> dict:
         for data_type in CONFIG["data_types"]:
             start, end = _window_for(data_type, conn)
             try:
-                if data_type in client.ROLLUP_TYPES:
-                    lo = datetime.fromisoformat(start).date()
-                    hi = datetime.fromisoformat(end).date() + timedelta(days=1)
-                    for bucket in client.iter_daily_rollups(data_type, lo, hi):
-                        summary[data_type]["fetched"] += 1
-                        if _upsert_rollup(conn, data_type, bucket):
-                            summary[data_type]["inserted"] += 1
-                elif data_type in client.WINDOW_ROLLUP_TYPES:
-                    lo = datetime.fromisoformat(start).date()
-                    hi = datetime.fromisoformat(end).date() + timedelta(days=1)
-                    for bucket in client.iter_window_rollups(data_type, lo, hi):
-                        summary[data_type]["fetched"] += 1
-                        if _upsert_rollup(
-                            conn, data_type, bucket,
-                            day_of=client.window_rollup_day,
-                            value_of=client.extract_window_value,
-                        ):
-                            summary[data_type]["inserted"] += 1
-                else:
-                    # Batched: 740k individual execute() calls held a write
-                    # lock for minutes. executemany amortises that, and the
-                    # chunk boundary keeps peak memory bounded on a backfill.
-                    batch = []
-                    for point in client.iter_data_points(data_type, start, end):
-                        summary[data_type]["fetched"] += 1
-                        batch.append(_point_row(data_type, point))
-                        if len(batch) >= INSERT_BATCH:
-                            summary[data_type]["inserted"] += _flush(conn, batch)
-                            batch.clear()
-                    if batch:
-                        summary[data_type]["inserted"] += _flush(conn, batch)
+                ingest(conn, data_type, start, end, summary[data_type])
             except client.HealthApiError as e:
                 summary[data_type]["error"] = str(e)
                 conn.rollback()  # discard this type's partial work, keep prior types
@@ -250,8 +262,6 @@ def run() -> dict:
                 )
                 print(f"{data_type:30s} ERROR {e}", file=sys.stderr, flush=True)
                 continue  # bounded: skip this type this run, don't spin retrying
-            if data_type not in client.ROLLUP_TYPES:
-                _rollup_daily(conn, data_type)
             conn.execute(
                 """INSERT INTO sync_state (data_type, cursor_time, last_synced_at)
                    VALUES (?, ?, ?)
