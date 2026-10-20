@@ -177,7 +177,7 @@ class TestAgentTools:
 
         from health_agents import tools
         with pytest.raises(sqlite3.OperationalError, match="readonly"):
-            tools._ro_connect().execute("DELETE FROM journal")
+            tools._ro_connect().execute("DELETE FROM daily_metrics")
 
     def test_every_tool_reports_a_sample_count(self):
         """Grounding rule: a claim without n is not checkable."""

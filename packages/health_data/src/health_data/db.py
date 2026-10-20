@@ -6,10 +6,12 @@ window. Schema is created idempotently on first use.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 from health_core.settings import get_settings
 
@@ -41,15 +43,6 @@ CREATE TABLE IF NOT EXISTS daily_metrics (
     agg_value REAL NOT NULL,
     n_points INTEGER NOT NULL,
     PRIMARY KEY (date, data_type)
-);
-
-CREATE TABLE IF NOT EXISTS journal (
-    date TEXT PRIMARY KEY,
-    mood INTEGER,
-    energy INTEGER,
-    soreness INTEGER,
-    note TEXT,
-    logged_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS anomalies (
@@ -130,6 +123,157 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def journal_row_hash(
+    day: str, mood: int | None, energy: int | None, soreness: int | None,
+    note: str | None, submitted_at: str, source: str,
+) -> str:
+    """Content hash of one journal submission (submitted_at makes repeats distinct)."""
+    payload = json.dumps([day, mood, energy, soreness, note, submitted_at, source])
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+_V1_TABLES = """
+CREATE TABLE journal_submissions (
+    id INTEGER PRIMARY KEY,
+    date TEXT NOT NULL,
+    mood INT,
+    energy INT,
+    soreness INT,
+    note TEXT,
+    tags TEXT,
+    submitted_at TEXT NOT NULL,
+    source TEXT NOT NULL,
+    sheet_row INT,
+    row_hash TEXT NOT NULL,
+    imported_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('ok','late','edited','invalid')),
+    response_id TEXT,
+    reason TEXT,
+    UNIQUE(row_hash)
+);
+
+CREATE TRIGGER journal_submissions_no_update
+BEFORE UPDATE ON journal_submissions
+BEGIN SELECT RAISE(ABORT, 'journal_submissions is append-only'); END;
+
+CREATE TRIGGER journal_submissions_no_delete
+BEFORE DELETE ON journal_submissions
+BEGIN SELECT RAISE(ABORT, 'journal_submissions is append-only'); END;
+
+CREATE TABLE IF NOT EXISTS devices (
+    id TEXT PRIMARY KEY,
+    display_name TEXT,
+    raw_json TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
+"""
+
+# Views are created after the legacy table is gone (they share its name).
+_V1_VIEWS = """
+CREATE VIEW journal_outcome AS
+SELECT s.date, s.mood, s.energy, s.soreness, s.id AS submission_id
+FROM journal_submissions s
+WHERE s.status = 'ok'
+  AND s.id = (SELECT s2.id FROM journal_submissions s2
+              WHERE s2.date = s.date AND s2.status = 'ok'
+              ORDER BY s2.submitted_at, s2.id LIMIT 1);
+
+-- Compatibility view: carried readers still query `journal`.
+CREATE VIEW journal AS
+SELECT o.date, o.mood, o.energy, o.soreness, s.note, s.submitted_at AS logged_at
+FROM journal_outcome o JOIN journal_submissions s ON s.id = o.submission_id;
+
+-- Compatibility writer: an insert into `journal` appends a submission.
+CREATE TRIGGER journal_insert INSTEAD OF INSERT ON journal
+BEGIN
+    INSERT INTO journal_submissions
+        (date, mood, energy, soreness, note, submitted_at, source, row_hash,
+         imported_at, status)
+    VALUES (NEW.date, NEW.mood, NEW.energy, NEW.soreness, NEW.note,
+            COALESCE(NEW.logged_at, strftime('%Y-%m-%dT%H:%M:%fZ','now')), 'cli',
+            'view:' || lower(hex(randomblob(16))),
+            strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'ok');
+END;
+"""
+
+
+def _is_table(conn: sqlite3.Connection, name: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone() is not None
+
+
+def _migrate_v1(conn: sqlite3.Connection) -> None:
+    legacy = []
+    if _is_table(conn, "journal"):
+        legacy = conn.execute(
+            "SELECT date, mood, energy, soreness, note, logged_at FROM journal ORDER BY date"
+        ).fetchall()
+    conn.execute("BEGIN")
+    try:
+        for stmt in _split(_V1_TABLES):
+            conn.execute(stmt)
+        imported = now_iso()
+        for day, mood, energy, soreness, note, logged_at in legacy:
+            conn.execute(
+                """INSERT INTO journal_submissions
+                   (date, mood, energy, soreness, note, submitted_at, source,
+                    row_hash, imported_at, status)
+                   VALUES (?,?,?,?,?,?, 'cli', ?, ?, 'ok')""",
+                (day, mood, energy, soreness, note, logged_at,
+                 journal_row_hash(day, mood, energy, soreness, note, logged_at, "cli"),
+                 imported),
+            )
+        if _is_table(conn, "journal"):
+            conn.execute("DROP TABLE journal")
+        for stmt in _split(_V1_VIEWS):
+            conn.execute(stmt)
+        conn.execute("PRAGMA user_version = 1")
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def _split(script: str) -> list[str]:
+    """Split a script into statements (triggers contain inner semicolons)."""
+    out, buf = [], ""
+    for line in script.splitlines():
+        if line.strip().startswith("--"):
+            continue
+        buf += line + chr(10)
+        if sqlite3.complete_statement(buf):
+            out.append(buf.strip())
+            buf = ""
+    return out
+
+
+MIGRATIONS = [_migrate_v1]
+
+
+def migrate(conn: sqlite3.Connection) -> int:
+    """Apply pending schema migrations; return the resulting user_version."""
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    for target, step in enumerate(MIGRATIONS, start=1):
+        if version < target:
+            step(conn)
+            version = target
+    return version
+
+
+def vacuum(path: Path) -> tuple[int, int]:
+    """VACUUM the DB at `path`; return (bytes before, bytes after)."""
+    path = Path(path)
+    before = path.stat().st_size
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
+    return before, path.stat().st_size
+
+
 @contextmanager
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -150,6 +294,7 @@ def connect():
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        migrate(conn)
 
 
 def write_stage_output(stage: str, run_key: str, payload: dict) -> None:
