@@ -42,25 +42,52 @@ def _today() -> date:
     return datetime.now(ZoneInfo(get_settings().timezone)).date()
 
 
-def _resume_from(conn, data_type: str, since: date) -> date:
+def _coverage(conn, data_type: str) -> tuple[date, date] | None:
+    """The contiguous [since, covered-through) range already ingested, if any."""
     row = conn.execute(
         "SELECT cursor_time FROM sync_state WHERE data_type=?", (PREFIX + data_type,)
     ).fetchone()
     if not row:
-        return since
+        return None
     try:
-        stored_since, covered = (date.fromisoformat(p) for p in row[0].split(".."))
+        lo, hi = (date.fromisoformat(p) for p in row[0].split(".."))
     except ValueError:
-        return since
-    if since < stored_since:  # asked for older history than before: start over (idempotent)
-        return since
-    return max(since, covered)
+        return None
+    return lo, hi
 
 
 def _count(conn, data_type: str) -> int:
     return conn.execute(
         "SELECT COUNT(*) FROM raw_points WHERE data_type=?", (data_type,)
     ).fetchone()[0]
+
+
+def _save(conn, data_type: str, lo: date, hi: date) -> None:
+    conn.execute(
+        """INSERT INTO sync_state (data_type, cursor_time, last_synced_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(data_type) DO UPDATE SET
+             cursor_time=excluded.cursor_time, last_synced_at=excluded.last_synced_at""",
+        (PREFIX + data_type, f"{lo.isoformat()}..{hi.isoformat()}", db.now_iso()),
+    )
+    conn.commit()  # rows (committed per window below) and cursor land together
+
+
+def _window(conn, data_type: str, lo: date, hi: date, inserted: dict, errors: dict) -> bool:
+    """Ingest [lo, hi); False (with the window rolled back) on an API failure."""
+    before = _count(conn, data_type)
+    counters = {"fetched": 0, "inserted": 0}
+    try:
+        sync.ingest(
+            conn, data_type, f"{lo.isoformat()}T00:00:00+00:00",
+            f"{hi.isoformat()}T00:00:00+00:00", counters, inclusive_end_day=False,
+        )
+    except client.HealthApiError as e:
+        conn.rollback()  # drop the partial window, keep completed ones
+        errors[data_type] = str(e)[:200]
+        return False
+    inserted[data_type] += _count(conn, data_type) - before
+    return True
 
 
 def backfill(since: date, types: list[str] | None = None) -> dict[str, int]:
@@ -74,32 +101,28 @@ def backfill(since: date, types: list[str] | None = None) -> dict[str, int]:
         for data_type in names:
             inserted[data_type] = 0
             step = timedelta(days=window_days(data_type))
-            cursor = _resume_from(conn, data_type, since)
-            while cursor < end:
+            cov = _coverage(conn, data_type)
+            if cov is None or since > cov[1]:  # nothing stored, or a gap: start a fresh range
+                cov = (since, since)
+            known_lo, known_hi = cov
+            ok = True
+            # Forward: from the end of known coverage (or `since`) up to today.
+            cursor = max(since, known_hi)
+            while ok and cursor < end:
                 window_end = min(cursor + step, end)
-                before = _count(conn, data_type)
-                counters = {"fetched": 0, "inserted": 0}
-                try:
-                    sync.ingest(
-                        conn, data_type, f"{cursor.isoformat()}T00:00:00+00:00",
-                        f"{window_end.isoformat()}T00:00:00+00:00", counters,
-                        inclusive_end_day=False,
-                    )
-                except client.HealthApiError as e:
-                    conn.rollback()  # drop the partial window, keep completed ones
-                    errors[data_type] = str(e)[:200]
-                    break
-                conn.execute(
-                    """INSERT INTO sync_state (data_type, cursor_time, last_synced_at)
-                       VALUES (?, ?, ?)
-                       ON CONFLICT(data_type) DO UPDATE SET
-                         cursor_time=excluded.cursor_time, last_synced_at=excluded.last_synced_at""",
-                    (PREFIX + data_type, f"{since.isoformat()}..{window_end.isoformat()}",
-                     db.now_iso()),
-                )
-                conn.commit()
-                inserted[data_type] += _count(conn, data_type) - before
+                ok = _window(conn, data_type, cursor, window_end, inserted, errors)
+                if ok:
+                    known_hi = window_end
+                    _save(conn, data_type, known_lo, known_hi)
                 cursor = window_end
+            # Backward: extend coverage down to `since`, newest window first, so the
+            # recorded range stays contiguous and never shrinks.
+            while ok and since < known_lo:
+                lo = max(since, known_lo - step)
+                ok = _window(conn, data_type, lo, known_lo, inserted, errors)
+                if ok:
+                    known_lo = lo
+                    _save(conn, data_type, known_lo, known_hi)
     if errors:
         raise BackfillError(inserted, errors)
     return inserted

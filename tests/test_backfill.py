@@ -38,6 +38,7 @@ def env(tmp_path, monkeypatch):
         calls.setdefault(data_type, []).append((lo, hi))
         if state["fail_on"] == (data_type, len(calls[data_type])):
             raise client.HealthApiError("429: quota")
+        state["mid"] = state.get("mid_on") == (data_type, len(calls[data_type]))
 
     def fake_daily(data_type, lo, hi):
         _record(data_type, lo, hi)
@@ -51,6 +52,8 @@ def env(tmp_path, monkeypatch):
             d = lo + timedelta(days=i)
             yield {"startTime": f"{d.isoformat()}T00:00:00Z",
                    "heartRate": {"beatsPerMinuteAvg": 60.0}}
+            if state["mid"] and i == 3:  # fail partway through the window
+                raise client.HealthApiError("429: quota")
 
     def fake_points(data_type, start, end):
         _record(data_type, date.fromisoformat(start[:10]), date.fromisoformat(end[:10]))
@@ -170,3 +173,44 @@ def test_auth_error_names_cha_data_login(monkeypatch, tmp_path):
         auth.get_credentials()
     res = CliRunner().invoke(app, ["auth", "status"])
     assert res.exit_code == 1 and "cha-data auth login" in res.output
+
+
+def test_failed_window_rolls_back_partial_rows_and_keeps_cursor(env):
+    calls, state, path = env
+    state["mid_on"] = ("heart-rate", 3)
+    with pytest.raises(bf.BackfillError) as err:
+        bf.backfill(SINCE, ["heart-rate"])
+    assert err.value.inserted["heart-rate"] == 28
+    total, distinct = _rows(path, "heart-rate")
+    assert total == distinct == 28  # nothing from the failed window persisted
+    with closing(sqlite3.connect(path)) as conn:
+        cursor = conn.execute(
+            "SELECT cursor_time FROM sync_state WHERE data_type='backfill:heart-rate'"
+        ).fetchone()[0]
+    assert cursor == f"{SINCE}..{SINCE + timedelta(days=28)}"
+
+
+def test_coverage_never_shrinks_on_a_later_since(env):
+    calls, _, path = env
+    march, june = date(2026, 3, 1), date(2026, 6, 1)
+    first = bf.backfill(march, ["steps", "heart-rate"])
+    assert all(n > 0 for n in first.values())
+    calls.clear()
+    assert bf.backfill(june, ["steps", "heart-rate"]) == {"steps": 0, "heart-rate": 0}
+    assert calls == {}  # June is inside covered history
+    with closing(sqlite3.connect(path)) as conn:
+        cursor = conn.execute(
+            "SELECT cursor_time FROM sync_state WHERE data_type='backfill:steps'"
+        ).fetchone()[0]
+    assert cursor == f"{march}..{TODAY}"
+    assert bf.backfill(march, ["steps", "heart-rate"]) == {"steps": 0, "heart-rate": 0}
+    assert calls == {}  # no refetch of already-covered windows
+
+
+def test_earlier_since_fetches_only_the_missing_prefix(env):
+    calls, _, _ = env
+    bf.backfill(SINCE, ["steps"])
+    calls.clear()
+    bf.backfill(SINCE - timedelta(days=100), ["steps"])
+    assert all(hi <= SINCE for _, hi in calls["steps"])
+    assert sum((hi - lo).days for lo, hi in calls["steps"]) == 100
