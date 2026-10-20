@@ -10,6 +10,7 @@ import argparse
 from datetime import date
 
 from health_data import db
+from health_data.db import utc_stamp
 
 
 def _prompt_int(label: str) -> int:
@@ -41,7 +42,7 @@ def log(day: str, mood: int | None, energy: int | None, soreness: int | None, no
         note = input("note (optional): ").strip() or None
 
     with db.connect() as conn:
-        now = db.now_iso()
+        now = utc_stamp()
         conn.execute(
             """INSERT INTO journal_submissions
                (date, mood, energy, soreness, note, submitted_at, source,

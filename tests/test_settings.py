@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from health_core.settings import Settings
 from pydantic import ValidationError
@@ -20,6 +22,16 @@ def test_rejects_unknown_mode(monkeypatch):
         Settings()
 
 
-def test_defaults_pin_project_and_timezone():
-    s = Settings()
+def test_defaults_pin_project_and_timezone(monkeypatch):
+    for key in [k for k in os.environ if k.startswith("CHA_")]:
+        monkeypatch.delenv(key)
+    s = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
     assert s.gcp_project == "artful-timing-506108-n8" and s.timezone == "Asia/Kolkata"
+
+
+def test_forms_settings_defaults(monkeypatch):
+    for key in [k for k in os.environ if k.startswith("CHA_")]:
+        monkeypatch.delenv(key)
+    s = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+    assert s.journal_form_id is None
+    assert str(s.forms_token_path).replace("\\", "/") == "config/forms_token.json"

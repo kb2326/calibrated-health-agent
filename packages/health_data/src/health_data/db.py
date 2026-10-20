@@ -123,6 +123,14 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def utc_stamp(moment: datetime | None = None) -> str:
+    """UTC ISO-8601 with fixed width (microseconds, `Z`), so text order is time order."""
+    moment = moment or datetime.now(UTC)
+    if moment.tzinfo is None:
+        raise ValueError("utc_stamp needs a timezone-aware datetime")
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
 def journal_row_hash(
     day: str, mood: int | None, energy: int | None, soreness: int | None,
     note: str | None, submitted_at: str, source: str,
