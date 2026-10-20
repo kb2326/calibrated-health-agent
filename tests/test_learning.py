@@ -148,6 +148,12 @@ class TestLearningLoop:
 class TestAgentTools:
     """The agent's capability surface — read-only, grounded, honest about n."""
 
+    @pytest.fixture(autouse=True)
+    def empty_db(self, tmp_path, monkeypatch):
+        """Bind tools to a throwaway schema-only DB so no real data/ is needed."""
+        monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
+        db.init_db()
+
     def test_sql_tool_refuses_every_mutation(self):
         from health_agents import tools
         for q in ("DELETE FROM journal", "UPDATE journal SET mood=1",
