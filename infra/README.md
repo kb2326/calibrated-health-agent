@@ -4,7 +4,7 @@ Project `artful-timing-506108-n8`, region `us-central1`. Cloud Run **job** only
 (no always-on service, no load balancer, no VPC, no Cloud Build). Expected cost:
 about $0.03/month, far under the $5/month budget (see table).
 
-## What it creates (26 resources)
+## What it creates (27 resources)
 
 8 project services (+ cloudresourcemanager, needed to read the project number),
 GCS data bucket `…-health-db`, secrets `oauth-client` / `oauth-token`

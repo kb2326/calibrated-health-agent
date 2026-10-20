@@ -16,12 +16,29 @@ resource "google_monitoring_alert_policy" "sync_failure" {
     }
   }
 
+  alert_strategy {
+    notification_rate_limit {
+      period = "3600s"
+    }
+    auto_close = "86400s"
+  }
+
+  notification_channels = [google_monitoring_notification_channel.owner_email.id]
+  depends_on            = [google_project_service.enabled]
+}
+
+# Cloud Monitoring allows only one condition in a policy with a log-match
+# condition, so the scheduler failures get their own policy.
+resource "google_monitoring_alert_policy" "scheduler_failure" {
+  display_name = "sync scheduler failure"
+  combiner     = "OR"
+
   conditions {
     display_name = "scheduler could not invoke the sync job"
     condition_matched_log {
       filter = <<-EOT
         resource.type="cloud_scheduler_job"
-        resource.labels.job_id=("sync-hourly" OR "sync-evening")
+        (resource.labels.job_id="sync-hourly" OR resource.labels.job_id="sync-evening")
         severity>=ERROR
       EOT
     }
