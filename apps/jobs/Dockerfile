@@ -10,7 +10,7 @@ COPY apps ./apps
 # googleapiclient bundles ~600 static discovery docs (100+ MB); the job needs Forms only
 # (the Health API client fetches its own discovery doc with static_discovery=False).
 RUN uv sync --package jobs --no-dev --frozen --no-editable \
-    && find .venv/lib/python3.13/site-packages/googleapiclient/discovery_cache/documents \n        -type f ! -name forms.v1.json -delete \
+    && find .venv/lib/python3.13/site-packages/googleapiclient/discovery_cache/documents -type f ! -name forms.v1.json -delete \
     && find .venv -type d \( -name tests -o -name __pycache__ \) -prune -exec rm -rf {} +
 
 FROM python:3.13-slim
