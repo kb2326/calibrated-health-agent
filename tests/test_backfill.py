@@ -214,3 +214,28 @@ def test_earlier_since_fetches_only_the_missing_prefix(env):
     bf.backfill(SINCE - timedelta(days=100), ["steps"])
     assert all(hi <= SINCE for _, hi in calls["steps"])
     assert sum((hi - lo).days for lo, hi in calls["steps"]) == 100
+
+
+def test_gap_since_keeps_covered_history_contiguous(env):
+    calls, state, path = env
+    march, june = date(2026, 3, 1), date(2026, 6, 1)
+    state["fail_on"] = ("steps", 2)  # window 1 (90 days) lands, window 2 fails
+    with pytest.raises(bf.BackfillError):
+        bf.backfill(march, ["steps"])
+    with closing(sqlite3.connect(path)) as conn:
+        stored = conn.execute(
+            "SELECT cursor_time FROM sync_state WHERE data_type='backfill:steps'"
+        ).fetchone()[0]
+    assert stored == f"{march}..{march + timedelta(days=90)}"  # ends before June
+    state["fail_on"] = None
+    bf.backfill(june, ["steps"])  # gap: fills stored end .. today, keeps lo
+    calls.clear()
+    assert bf.backfill(march, ["steps"]) == {"steps": 0}
+    assert calls == {}
+    with closing(sqlite3.connect(path)) as conn:
+        cursor = conn.execute(
+            "SELECT cursor_time FROM sync_state WHERE data_type='backfill:steps'"
+        ).fetchone()[0]
+    assert cursor == f"{march}..{TODAY}"
+    total, distinct = _rows(path, "steps")
+    assert total == distinct == (TODAY - march).days

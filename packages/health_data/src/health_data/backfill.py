@@ -102,12 +102,12 @@ def backfill(since: date, types: list[str] | None = None) -> dict[str, int]:
             inserted[data_type] = 0
             step = timedelta(days=window_days(data_type))
             cov = _coverage(conn, data_type)
-            if cov is None or since > cov[1]:  # nothing stored, or a gap: start a fresh range
-                cov = (since, since)
-            known_lo, known_hi = cov
+            # Covered history is never discarded: with a stored range, a later `since`
+            # (even past its end) fills the gap forward from the stored end.
+            known_lo, known_hi = cov if cov is not None else (since, since)
             ok = True
-            # Forward: from the end of known coverage (or `since`) up to today.
-            cursor = max(since, known_hi)
+            # Forward: from the end of known coverage up to today.
+            cursor = known_hi
             while ok and cursor < end:
                 window_end = min(cursor + step, end)
                 ok = _window(conn, data_type, cursor, window_end, inserted, errors)
