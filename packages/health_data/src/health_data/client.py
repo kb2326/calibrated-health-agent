@@ -305,8 +305,13 @@ ROLLUP_TYPES = {
 
 # The API rejects a rollup range longer than this, per type (surfaced in its
 # own INVALID_ROLLUP_QUERY_DURATION error metadata). Chunk requests to fit.
-ROLLUP_MAX_DAYS = {"total-calories": 14, "active-minutes": 14}
-ROLLUP_DEFAULT_MAX_DAYS = 30
+ROLLUP_MAX_DAYS = {
+    "calories-in-heart-rate-zone": 14,
+    "heart-rate": 14,
+    "active-minutes": 14,
+    "total-calories": 14,
+}
+ROLLUP_DEFAULT_MAX_DAYS = 90
 
 
 def _civil(d: date) -> dict:

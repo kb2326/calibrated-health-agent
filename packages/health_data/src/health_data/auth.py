@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -111,11 +112,19 @@ def get_credentials() -> Credentials:
         raise AuthError(
             f"{TOKEN_PATH} not found — run: uv run python -m health_data.auth login"
         )
-    creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), scopes())
+    # No scopes override: a refresh must request exactly what the token was
+    # granted, or Google answers invalid_scope for scopes not yet consented to.
+    creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
     if creds.valid:
         return creds
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except RefreshError:
+            raise AuthError(
+                "refresh token rejected (revoked, expired or scope mismatch) - "
+                "re-login: cha-data auth login"
+            ) from None
         TOKEN_PATH.write_text(creds.to_json())
         return creds
     raise AuthError(
@@ -139,12 +148,23 @@ def _cli_login() -> None:
     print("Authorized. Tokens saved to", TOKEN_PATH)
 
 
+def scope_gap(granted: list[str] | None) -> list[str]:
+    """Configured scopes the token has not been granted."""
+    have = set(granted or [])
+    return [s for s in scopes() if s not in have]
+
+
 def _cli_status() -> None:
     creds = get_credentials()
     print("valid        :", creds.valid)
     print("expiry       :", creds.expiry)
-    print("scopes       :")
+    print("granted scopes:")
     for s in creds.scopes or []:
+        print("  ", s)
+    print("configured scopes:", len(scopes()))
+    missing = scope_gap(list(creds.scopes or []))
+    print("missing (re-consent needed):" if missing else "missing: none")
+    for s in missing:
         print("  ", s)
 
 
