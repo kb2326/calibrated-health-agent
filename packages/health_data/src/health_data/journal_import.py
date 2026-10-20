@@ -13,7 +13,6 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from health_core.settings import get_settings
 from pydantic import BaseModel, model_validator
 
 from health_data.db import utc_stamp
@@ -46,15 +45,11 @@ class JournalRow(BaseModel):
 
 
 def _forms_service() -> Any:
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    path = get_settings().forms_token_path
-    creds = Credentials.from_authorized_user_file(str(path), [SCOPE])  # type: ignore[no-untyped-call]
-    if not creds.valid:
-        creds.refresh(Request())
-        path.write_text(creds.to_json())
+    from health_data import auth
+
+    creds = auth.get_forms_credentials()
     return build("forms", "v1", credentials=creds, cache_discovery=False)
 
 

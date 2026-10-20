@@ -151,7 +151,7 @@ def test_cli_wires_expected_commands_only():
     top = runner.invoke(app, ["--help"]).output
     for name in ("sync", "backfill", "probe", "parity", "db", "auth", "journal"):
         assert name in top
-    assert "push-secret" not in runner.invoke(app, ["auth", "--help"]).output
+    assert "push-secret" in runner.invoke(app, ["auth", "--help"]).output  # wired by the Secret Manager task
     dbhelp = runner.invoke(app, ["db", "--help"]).output
     assert "vacuum" in dbhelp and "migrate" in dbhelp
     assert "pull" in dbhelp and "push" in dbhelp  # wired by the GCS persistence task

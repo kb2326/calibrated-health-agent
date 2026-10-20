@@ -1,0 +1,12 @@
+.git
+.venv
+**/__pycache__
+data
+config/*.json
+config/*.bak*
+.env
+docs
+research_notes
+evals
+tests
+.github

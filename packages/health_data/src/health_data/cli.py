@@ -219,6 +219,14 @@ def auth_login_cmd() -> None:
     _auth_guard(auth._cli_login)
 
 
+@auth_app.command("push-secret")
+def auth_push_secret_cmd() -> None:
+    """Upload config/client_secret.json and config/token.json to Secret Manager."""
+    from health_data import auth
+
+    _auth_guard(auth.push_secrets)
+
+
 @auth_app.command("status")
 def auth_status_cmd() -> None:
     """Show token validity, granted scopes and any scope gap."""

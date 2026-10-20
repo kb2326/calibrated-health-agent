@@ -43,14 +43,27 @@ HEALTH_YAML = CONFIG_DIR / "health.yaml"
 LEGACY_CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
 
 
+FORMS_SCOPE = "https://www.googleapis.com/auth/forms.responses.readonly"
+REAUTH_MESSAGE = "Run `cha-data auth login` then `cha-data auth push-secret`"
+
+
 class AuthError(RuntimeError):
     pass
+
+
+class ReauthRequired(AuthError):  # noqa: N818 - public name fixed by the interface contract
+    """The stored refresh token is no longer accepted (invalid_grant); a human must re-consent."""
 
 
 def scopes() -> list[str]:
     cfg = yaml.safe_load(HEALTH_YAML.read_text())
     prefix = cfg["oauth_scope_prefix"]
     return [f"{prefix}.{cat}.readonly" for cat in cfg["scope_categories"]]
+
+
+def login_scopes() -> list[str]:
+    """Health read-only scopes plus the Forms responses scope: one consent, one owner token."""
+    return [*scopes(), FORMS_SCOPE]
 
 
 def _migrate_legacy_token() -> None:
@@ -101,36 +114,87 @@ def import_client(path: str) -> str:
     return kind
 
 
+def _cloud_token() -> dict:
+    """The owner token from Secret Manager, completed with the client when it lacks one."""
+    from health_data import secrets
+
+    settings = get_settings()
+    info = json.loads(secrets.read_secret(settings.gcp_project, settings.token_secret or ""))
+    if settings.client_secret_secret and not (info.get("client_id") and info.get("client_secret")):
+        raw = json.loads(secrets.read_secret(settings.gcp_project, settings.client_secret_secret))
+        client = raw[next(k for k in ("installed", "web") if k in raw)]
+        info.setdefault("client_id", client["client_id"])
+        info.setdefault("client_secret", client["client_secret"])
+        info.setdefault("token_uri", "https://oauth2.googleapis.com/token")
+    return info
+
+
 def get_credentials() -> Credentials:
     """Valid user credentials, refreshing silently when the token has aged out.
 
-    Never launches a browser: unattended callers (sync, analyze, the scheduler)
-    must fail loudly rather than block waiting for a human.
+    With `CHA_TOKEN_SECRET` set (the cloud job) the client and token come from
+    Secret Manager and a refreshed access token stays in memory; otherwise they
+    are read from config/. Never launches a browser: unattended callers must
+    fail loudly rather than block waiting for a human.
     """
-    _migrate_legacy_token()
-    if not TOKEN_PATH.exists():
-        raise AuthError(
-            f"{TOKEN_PATH} not found — run: cha-data auth login"
-        )
-    # No scopes override: a refresh must request exactly what the token was
-    # granted, or Google answers invalid_scope for scopes not yet consented to.
-    creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
+    cloud = bool(get_settings().token_secret)
+    if cloud:
+        # No scopes override: a refresh must request exactly what the token was granted.
+        creds = Credentials.from_authorized_user_info(_cloud_token())  # type: ignore[no-untyped-call]
+    else:
+        _migrate_legacy_token()
+        if not TOKEN_PATH.exists():
+            raise AuthError(f"{TOKEN_PATH} not found - run: cha-data auth login")
+        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH))
     if creds.valid:
         return creds
     if creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
         except RefreshError:
-            raise AuthError(
-                "refresh token rejected (revoked, expired or scope mismatch) - "
-                "re-login: cha-data auth login"
-            ) from None
-        TOKEN_PATH.write_text(creds.to_json())
+            raise ReauthRequired(REAUTH_MESSAGE) from None
+        if not cloud:
+            TOKEN_PATH.write_text(creds.to_json())
         return creds
-    raise AuthError(
-        "stored credentials are unusable and cannot be refreshed — "
-        "re-run: cha-data auth login"
-    )
+    raise ReauthRequired(f"stored credentials are unusable. {REAUTH_MESSAGE}")
+
+
+def get_forms_credentials() -> Credentials:
+    """Credentials for the Forms responses API.
+
+    Cloud: the single owner token. Local: config/token.json when it was granted the
+    Forms scope, else the legacy config/forms_token.json.
+    """
+    settings = get_settings()
+    if settings.token_secret:
+        return get_credentials()
+    if TOKEN_PATH.exists() and FORMS_SCOPE in (json.loads(TOKEN_PATH.read_text()).get("scopes") or []):
+        return get_credentials()
+    path = settings.forms_token_path
+    if not path.exists():
+        raise AuthError(f"no Forms token ({TOKEN_PATH} lacks the Forms scope, {path} missing): {REAUTH_MESSAGE}")
+    creds = Credentials.from_authorized_user_file(str(path), [FORMS_SCOPE])
+    if not creds.valid:
+        try:
+            creds.refresh(Request())
+        except RefreshError:
+            raise ReauthRequired(REAUTH_MESSAGE) from None
+        path.write_text(creds.to_json())
+    return creds
+
+
+def push_secrets() -> None:
+    """Upload config/client_secret.json and config/token.json to Secret Manager."""
+    from health_data import secrets
+
+    settings = get_settings()
+    if not settings.token_secret or not settings.client_secret_secret:
+        raise AuthError("CHA_TOKEN_SECRET and CHA_CLIENT_SECRET_SECRET must both be set")
+    for path, name in ((CLIENT_SECRET_PATH, settings.client_secret_secret), (TOKEN_PATH, settings.token_secret)):
+        if not path.exists():
+            raise AuthError(f"{path} not found - run: cha-data auth login")
+        secrets.write_secret(settings.gcp_project, name, path.read_text())
+        print(f"pushed {path.name} to secret {name}")
 
 
 def _cli_login() -> None:
@@ -140,7 +204,7 @@ def _cli_login() -> None:
             '"Desktop app" from the Cloud console, then run:\n'
             "  uv run python -m health_data.auth import-client <downloaded.json>"
         )
-    flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_PATH), scopes())
+    flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_PATH), login_scopes())
     # port=0 lets the OS pick a free port; the library registers the matching
     # loopback redirect, runs the server, and validates state + PKCE for us.
     creds = flow.run_local_server(port=0, prompt="consent")
@@ -166,6 +230,8 @@ def _cli_status() -> None:
     print("missing (re-consent needed):" if missing else "missing: none")
     for s in missing:
         print("  ", s)
+    if FORMS_SCOPE not in (creds.scopes or []):
+        print("forms scope missing (journal import needs re-consent): cha-data auth login")
 
 
 if __name__ == "__main__":
@@ -180,6 +246,8 @@ if __name__ == "__main__":
             print(f"Imported {'Desktop app' if kind == 'installed' else 'Web app'} client.")
             if kind == "web":
                 print("Note: Desktop-app clients are preferred — they need no redirect URI registration.")
+        elif cmd == "push-secret":
+            push_secrets()
         elif cmd == "status":
             _cli_status()
         else:
