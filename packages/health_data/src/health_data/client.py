@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterator
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from health_data import civil
 from health_data.auth import get_credentials
 
 MAX_RETRIES = 3
@@ -160,25 +161,39 @@ def filter_path(data_type: str) -> str:
     return f"{name}.interval.civil_start_time"
 
 
-def _has_timezone(ts: str) -> bool:
-    if ts.endswith("Z"):
-        return True
-    tail = ts.partition("T")[2]
-    return "+" in tail or "-" in tail
+def _parse(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
 def _as_utc(ts: str) -> str:
-    """RFC3339 with an explicit zone, as physical-time fields expect."""
-    return ts if _has_timezone(ts) else ts + "Z"
+    """RFC3339 UTC instant, as physical-time fields expect (zone-less input is read as UTC)."""
+    moment = _parse(ts)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment.astimezone(UTC).isoformat()
 
 
 def _as_civil(ts: str) -> str:
-    """Zone-less local datetime — civil fields reject a timezone designator."""
-    ts = ts.split("+")[0].split("Z")[0]
-    if "T" in ts:
-        day, _, clock = ts.partition("T")
-        ts = f"{day}T{clock.split('-')[0]}"
-    return ts[:19]
+    """Zone-less owner-zone wall clock; civil fields reject a timezone designator.
+
+    An aware timestamp is converted to the owner zone first (stripping the offset
+    instead would compare UTC wall clock against owner-zone civil fields). Zone-less
+    input is already civil and passes through.
+    """
+    moment = _parse(ts)
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(civil.zone()).replace(tzinfo=None)
+    return moment.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _as_date(ts: str) -> str:
+    """The owner-zone civil date of a bound, as daily `date` fields expect."""
+    if len(ts) == 10:
+        return ts
+    moment = _parse(ts)
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(civil.zone())
+    return moment.date().isoformat()
 
 
 def build_filter(data_type: str, start_time: str, end_time: str) -> str:
@@ -186,6 +201,7 @@ def build_filter(data_type: str, start_time: str, end_time: str) -> str:
 
     The API supports only >= and < (never <= or >), so the window is
     half-open, which also keeps consecutive syncs from double-counting.
+    Bounds are converted per filter kind (see health_data.civil).
     """
     path = filter_path(data_type)
     kind = (
@@ -196,7 +212,7 @@ def build_filter(data_type: str, start_time: str, end_time: str) -> str:
     if kind == "sample":
         lo, hi = _as_utc(start_time), _as_utc(end_time)
     elif kind == "daily":
-        lo, hi = start_time[:10], end_time[:10]
+        lo, hi = _as_date(start_time), _as_date(end_time)
     else:  # interval and override are both civil-time comparisons
         lo, hi = _as_civil(start_time), _as_civil(end_time)
     return f'{path} >= "{lo}" AND {path} < "{hi}"'
@@ -237,8 +253,7 @@ def iter_data_points(
     compliant requests instead of one silently-truncated one.
     """
     span = LIST_MAX_DAYS.get(data_type, LIST_DEFAULT_MAX_DAYS)
-    lo = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
-    hi = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+    lo, hi = _parse(start_time), _parse(end_time)
     if lo >= hi:
         return
     # Daily-summary types compare bare dates, so a window that opens and
@@ -246,7 +261,7 @@ def iter_data_points(
     # date < "X"` — an empty range the API rejects outright. Re-running a
     # sync on the day one already ran is normal, so treat it as "nothing
     # new" rather than an error.
-    if TIME_FIELD.get(data_type) == "daily" and lo.date() >= hi.date():
+    if TIME_FIELD.get(data_type) == "daily" and _as_date(start_time) >= _as_date(end_time):
         return
     cursor = lo
     while cursor < hi:
@@ -349,10 +364,12 @@ WINDOW_ROLLUP_TYPES = {"heart-rate"}
 
 
 def iter_window_rollups(data_type: str, start: date, end: date) -> Iterator[dict]:
-    """Yields one server-aggregated bucket per day via dataPoints.rollUp.
+    """Yields one server-aggregated bucket per owner-zone civil day in [start, end).
 
     Unlike dailyRollUp this takes a physical-time interval and an explicit
     windowSize, so it works for sample types that have no civil-day concept.
+    The range starts at owner-zone midnight (converted to UTC), so each 24 h
+    window is exactly one owner civil day (Asia/Kolkata has no DST).
     """
     points_api = service().users().dataTypes().dataPoints()
     max_days = LIST_MAX_DAYS.get(data_type, LIST_DEFAULT_MAX_DAYS)
@@ -365,8 +382,8 @@ def iter_window_rollups(data_type: str, start: date, end: date) -> Iterator[dict
                 parent=_parent(data_type),
                 body={
                     "range": {
-                        "startTime": f"{cursor.isoformat()}T00:00:00Z",
-                        "endTime": f"{chunk_end.isoformat()}T00:00:00Z",
+                        "startTime": _utc_z(civil.midnight(cursor)),
+                        "endTime": _utc_z(civil.midnight(chunk_end)),
                     },
                     "windowSize": "86400s",
                 },
@@ -376,18 +393,13 @@ def iter_window_rollups(data_type: str, start: date, end: date) -> Iterator[dict
         cursor = chunk_end
 
 
+def _utc_z(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def window_rollup_day(bucket: dict) -> str | None:
-    """The civil date a windowed rollup bucket covers, as YYYY-MM-DD."""
-    for key in ("startTime", "physicalTimeInterval", "interval"):
-        v = bucket.get(key)
-        if isinstance(v, str):
-            return v[:10]
-        if isinstance(v, dict) and isinstance(v.get("startTime"), str):
-            return v["startTime"][:10]
-    civil = (bucket.get("civilStartTime") or {}).get("date") or {}
-    if civil.get("year"):
-        return f"{civil['year']:04d}-{civil['month']:02d}-{civil['day']:02d}"
-    return None
+    """The owner-zone civil date a windowed rollup bucket covers, as YYYY-MM-DD."""
+    return civil.day_of_window_bucket(bucket)
 
 
 def extract_window_value(data_type: str, bucket: dict) -> tuple[float | None, str | None]:

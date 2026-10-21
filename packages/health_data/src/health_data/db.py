@@ -1,8 +1,10 @@
 """SQLite persistence layer — the harness's memory substrate.
 
-Every loop script (sync/analyze/correlate/digest) reads and writes through
-here instead of re-querying the API or holding state only in an LLM context
-window. Schema is created idempotently on first use.
+Sync, backfill, journal import and the agent tools read and write through here.
+The base schema is created idempotently; later changes are numbered migrations
+(`MIGRATIONS`, tracked in `PRAGMA user_version`), each applied inside
+BEGIN IMMEDIATE. A database whose schema is newer than this code is refused
+rather than written with older code.
 """
 from __future__ import annotations
 
@@ -14,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from health_core.settings import get_settings
+
+from health_data import civil
 
 DB_PATH = get_settings().db_path
 
@@ -69,45 +73,10 @@ CREATE TABLE IF NOT EXISTS correlations (
     UNIQUE(metric_a, metric_b, lag_days)
 );
 
--- The learning loop. An anomaly is not just a finding, it is a claim about
--- what tomorrow will feel like; recording it as a dated prediction lets the
--- next journal entry score it. Signals that never predict correctly for
--- this person get demoted, which is what turns a static threshold in YAML
--- into a parameter learned from their own history.
-CREATE TABLE IF NOT EXISTS predictions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    made_on TEXT NOT NULL,          -- date the prediction was emitted
-    signal TEXT NOT NULL,           -- metric that triggered it
-    signal_date TEXT NOT NULL,      -- day the signal was observed
-    signal_z REAL NOT NULL,
-    target TEXT NOT NULL,           -- journal field it predicts
-    target_date TEXT NOT NULL,      -- day the prediction is about
-    lag_days INTEGER NOT NULL,
-    expected_direction TEXT NOT NULL,   -- 'low' or 'high'
-    actual_value REAL,              -- filled by learn.py once known
-    hit INTEGER,                    -- 1 / 0 / NULL while unscored
-    scored_at TEXT,
-    UNIQUE(signal, signal_date, target, lag_days)
-);
-
-CREATE TABLE IF NOT EXISTS signal_weights (
-    signal TEXT NOT NULL,
-    target TEXT NOT NULL,
-    lag_days INTEGER NOT NULL,
-    n_scored INTEGER NOT NULL DEFAULT 0,
-    n_hit INTEGER NOT NULL DEFAULT 0,
-    hit_rate REAL,
-    weight REAL NOT NULL DEFAULT 1.0,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (signal, target, lag_days)
-);
-
 CREATE INDEX IF NOT EXISTS idx_daily_metrics_type_date
     ON daily_metrics(data_type, date);
 CREATE INDEX IF NOT EXISTS idx_raw_points_type_start
     ON raw_points(data_type, start_time);
-CREATE INDEX IF NOT EXISTS idx_predictions_unscored
-    ON predictions(target_date) WHERE hit IS NULL;
 
 CREATE TABLE IF NOT EXISTS stage_output (
     stage TEXT NOT NULL,
@@ -217,30 +186,177 @@ def _migrate_v1(conn: sqlite3.Connection) -> None:
         legacy = conn.execute(
             "SELECT date, mood, energy, soreness, note, logged_at FROM journal ORDER BY date"
         ).fetchall()
-    conn.execute("BEGIN")
+    for stmt in _split(_V1_TABLES):
+        conn.execute(stmt)
+    imported = now_iso()
+    for day, mood, energy, soreness, note, logged_at in legacy:
+        conn.execute(
+            """INSERT INTO journal_submissions
+               (date, mood, energy, soreness, note, submitted_at, source,
+                row_hash, imported_at, status)
+               VALUES (?,?,?,?,?,?, 'cli', ?, ?, 'ok')""",
+            (day, mood, energy, soreness, note, logged_at,
+             journal_row_hash(day, mood, energy, soreness, note, logged_at, "cli"),
+             imported),
+        )
+    if _is_table(conn, "journal"):
+        conn.execute("DROP TABLE journal")
+    for stmt in _split(_V1_VIEWS):
+        conn.execute(stmt)
+
+
+# v2: the Google Form is the only journal writer (the INSERT-into-view path and the
+# `journal` compatibility view go), ok rows must carry 1..10 scores, the retired learning
+# loop's tables are dropped, listed raw_points are re-keyed on their stable platform source
+# (see point_source), and raw_points gains the owner-zone civil day each row belongs to
+# (rule: health_data.civil).
+_SCORES_OK = ("mood BETWEEN 1 AND 10 AND energy BETWEEN 1 AND 10 "
+              "AND soreness BETWEEN 1 AND 10")
+
+_V2_JOURNAL = f"""
+CREATE TABLE journal_submissions_v2 (
+    id INTEGER PRIMARY KEY,
+    date TEXT NOT NULL,
+    mood INT,
+    energy INT,
+    soreness INT,
+    note TEXT,
+    tags TEXT,
+    submitted_at TEXT NOT NULL,
+    source TEXT NOT NULL,
+    sheet_row INT,
+    row_hash TEXT NOT NULL,
+    imported_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('ok','late','edited','invalid')),
+    response_id TEXT,
+    reason TEXT,
+    UNIQUE(row_hash),
+    CHECK(status <> 'ok' OR COALESCE({_SCORES_OK}, 0))
+);
+
+INSERT INTO journal_submissions_v2
+SELECT id, date, mood, energy, soreness, note, tags, submitted_at, source, sheet_row,
+       row_hash, imported_at,
+       CASE WHEN status = 'ok' AND NOT COALESCE({_SCORES_OK}, 0) THEN 'invalid' ELSE status END,
+       response_id,
+       CASE WHEN status = 'ok' AND NOT COALESCE({_SCORES_OK}, 0)
+            THEN 'score out of range 1..10 (schema v2)' ELSE reason END
+FROM journal_submissions ORDER BY id;
+
+DROP TABLE journal_submissions;
+
+ALTER TABLE journal_submissions_v2 RENAME TO journal_submissions;
+
+CREATE TRIGGER journal_submissions_no_update
+BEFORE UPDATE ON journal_submissions
+BEGIN SELECT RAISE(ABORT, 'journal_submissions is append-only'); END;
+
+CREATE TRIGGER journal_submissions_no_delete
+BEFORE DELETE ON journal_submissions
+BEGIN SELECT RAISE(ABORT, 'journal_submissions is append-only'); END;
+
+CREATE VIEW journal_outcome AS
+SELECT s.date, s.mood, s.energy, s.soreness, s.id AS submission_id
+FROM journal_submissions s
+WHERE s.status = 'ok'
+  AND s.id = (SELECT s2.id FROM journal_submissions s2
+              WHERE s2.date = s.date AND s2.status = 'ok'
+              ORDER BY s2.submitted_at, s2.id LIMIT 1);
+"""
+
+
+def point_source(point: dict) -> str:
+    """The stable source key of a listed point: its platform (FITBIT, HEALTH_KIT, ...).
+
+    It is part of raw_points' unique key, so it must not change when the same point is
+    fetched again. Device display names do change upstream ("Google Fitbit Air" became
+    "Fitbit Air"), which duplicated every refetched point; the platform does not. The
+    device name stays available in raw_json.
+    """
+    ds = point.get("dataSource") or {}
+    return str(ds.get("platform") or (ds.get("device") or {}).get("displayName") or "unknown")
+
+
+def rekey_sources(conn: sqlite3.Connection) -> int:
+    """Re-key listed raw_points on `point_source`, keeping the newest row per key.
+
+    Returns how many duplicate rows were removed.
+    """
+    rows = conn.execute(
+        "SELECT id, data_type, start_time, end_time, source, raw_json FROM raw_points "
+        "WHERE source IS NOT 'dailyRollUp' ORDER BY id DESC"
+    ).fetchall()
+    seen: set[tuple] = set()
+    drop: list[tuple[int]] = []
+    rename: list[tuple[str, int]] = []
+    for rid, data_type, start, end, source, raw_json in rows:
+        try:
+            point = json.loads(raw_json)
+        except ValueError:
+            point = {}
+        key_source = point_source(point) if point.get("dataSource") else source
+        key = (data_type, start, end, key_source)
+        if key in seen:
+            drop.append((rid,))
+            continue
+        seen.add(key)
+        if key_source != source:
+            rename.append((key_source, rid))
+    conn.executemany("DELETE FROM raw_points WHERE id=?", drop)
+    # Two phases so no intermediate state can collide on the unique key.
+    conn.executemany("UPDATE raw_points SET source='~rekey~' || id WHERE id=?", [(r,) for _, r in rename])
+    conn.executemany("UPDATE raw_points SET source=? WHERE id=?", rename)
+    return len(drop)
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def raw_civil_date(data_type: str, start_time: str, source: str | None, raw_json: str) -> str | None:
+    """The civil day of a stored raw_points row (rollup rows already store their day)."""
+    if source == "dailyRollUp":
+        return start_time[:10]
     try:
-        for stmt in _split(_V1_TABLES):
-            conn.execute(stmt)
-        imported = now_iso()
-        for day, mood, energy, soreness, note, logged_at in legacy:
-            conn.execute(
-                """INSERT INTO journal_submissions
-                   (date, mood, energy, soreness, note, submitted_at, source,
-                    row_hash, imported_at, status)
-                   VALUES (?,?,?,?,?,?, 'cli', ?, ?, 'ok')""",
-                (day, mood, energy, soreness, note, logged_at,
-                 journal_row_hash(day, mood, energy, soreness, note, logged_at, "cli"),
-                 imported),
-            )
-        if _is_table(conn, "journal"):
-            conn.execute("DROP TABLE journal")
-        for stmt in _split(_V1_VIEWS):
-            conn.execute(stmt)
-        conn.execute("PRAGMA user_version = 1")
-        conn.execute("COMMIT")
-    except BaseException:
-        conn.execute("ROLLBACK")
-        raise
+        point = json.loads(raw_json)
+    except ValueError:
+        point = {}
+    return civil.day_of_point(data_type, point) or civil.day_of_instant(start_time)
+
+
+def fill_civil_dates(conn: sqlite3.Connection, data_type: str | None = None) -> None:
+    """(Re)compute raw_points.civil_date for every row (of one type, if given)."""
+    sql = "SELECT id, data_type, start_time, source, raw_json FROM raw_points"
+    rows = conn.execute(sql + (" WHERE data_type=?" if data_type else ""),
+                        (data_type,) if data_type else ()).fetchall()
+    conn.executemany(
+        "UPDATE raw_points SET civil_date=? WHERE id=?",
+        [(raw_civil_date(dt, st, src, rj), rid) for rid, dt, st, src, rj in rows],
+    )
+
+
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    for stmt in (
+        "DROP TRIGGER IF EXISTS journal_insert",
+        "DROP VIEW IF EXISTS journal",
+        "DROP VIEW IF EXISTS journal_outcome",
+        "DROP TRIGGER IF EXISTS journal_submissions_no_update",
+        "DROP TRIGGER IF EXISTS journal_submissions_no_delete",
+        "DROP INDEX IF EXISTS idx_predictions_unscored",
+        "DROP TABLE IF EXISTS predictions",
+        "DROP TABLE IF EXISTS signal_weights",
+    ):
+        conn.execute(stmt)
+    for stmt in _split(_V2_JOURNAL):
+        conn.execute(stmt)
+    if _is_table(conn, "raw_points"):
+        if "civil_date" not in _columns(conn, "raw_points"):
+            conn.execute("ALTER TABLE raw_points ADD COLUMN civil_date TEXT")
+        rekey_sources(conn)
+        fill_civil_dates(conn)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_raw_points_type_civil ON raw_points(data_type, civil_date)"
+        )
 
 
 def _split(script: str) -> list[str]:
@@ -256,16 +372,55 @@ def _split(script: str) -> list[str]:
     return out
 
 
-MIGRATIONS = [_migrate_v1]
+MIGRATIONS = [_migrate_v1, _migrate_v2]
+
+
+class SchemaTooNewError(RuntimeError):
+    """The database was written by newer code; this code must not open it."""
+
+
+def _user_version(conn: sqlite3.Connection) -> int:
+    return conn.execute("PRAGMA user_version").fetchone()[0]
+
+
+def check_schema(conn: sqlite3.Connection, path: object = None) -> int:
+    """Return user_version; raise SchemaTooNewError if it is newer than MIGRATIONS."""
+    version = _user_version(conn)
+    known = len(MIGRATIONS)
+    if version > known:
+        where = f"{path} " if path else ""
+        raise SchemaTooNewError(
+            f"database {where}has schema v{version}, newer than this code supports (v{known}). "
+            "Upgrade before opening it: `git pull && uv sync --all-packages` locally, or rebuild "
+            "and redeploy the job image. Older code must never write a newer database."
+        )
+    return version
 
 
 def migrate(conn: sqlite3.Connection) -> int:
-    """Apply pending schema migrations; return the resulting user_version."""
-    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    """Apply pending schema migrations; return the resulting user_version.
+
+    Each step runs inside BEGIN IMMEDIATE (the write lock is taken before the version is
+    re-read, so two processes can never both apply the same step) and commits together
+    with its `PRAGMA user_version` bump; a failing step rolls back completely.
+    """
+    version = check_schema(conn)
     for target, step in enumerate(MIGRATIONS, start=1):
-        if version < target:
-            step(conn)
-            version = target
+        if version >= target:
+            continue
+        if conn.in_transaction:
+            conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            version = _user_version(conn)  # another writer may have migrated meanwhile
+            if version < target:
+                step(conn)
+                conn.execute(f"PRAGMA user_version = {target}")
+                version = target
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
     return version
 
 
@@ -286,6 +441,11 @@ def vacuum(path: Path) -> tuple[int, int]:
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
+    try:
+        check_schema(conn, DB_PATH)
+    except BaseException:
+        conn.close()
+        raise
     conn.execute("PRAGMA foreign_keys = ON")
     # WAL lets analysis read while an ingest is mid-write. Without it a long
     # backfill holds an exclusive lock and every reader gets "database is

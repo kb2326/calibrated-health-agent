@@ -1,121 +1,105 @@
-"""Ingestion loop — Phase 2, loop #1.
+"""Ingestion loop.
 
-For each tracked data type: fetch everything since the last cursor, upsert
-into raw_points (idempotent via UNIQUE constraint), roll up into
-daily_metrics, advance the cursor. Safe to re-run: a second run with no new
-data upserts zero rows and reports that explicitly.
+For each tracked data type: fetch the civil-day window from `civil.sync_days` (a trailing
+lookback of `civil.LOOKBACK_DAYS` days plus today, or further back after missed runs),
+upsert into raw_points, rebuild that type's daily_metrics, and record the cursor. Every
+value is attributed to an owner-zone civil day by the rule in `health_data.civil`.
+
+Idempotent: unique keys plus upserts mean a refetch of unchanged data writes nothing, and
+the `inserted` count reports new-or-changed rows only. Server-aggregated buckets (dailyRollUp
+and the heart-rate rollUp) are upserted, so a day fetched while still in progress is
+overwritten by the later, complete value instead of freezing at the first one.
 """
 from __future__ import annotations
 
+import json
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
 
 import yaml
 from health_core.settings import get_settings
 
-from health_data import auth, client, db, obs
+from health_data import auth, civil, client, db, obs
 
 log = obs.get_logger(__name__)
 
 CONFIG = yaml.safe_load((get_settings().config_dir / "health.yaml").read_text())
 
-
-def _window_for(data_type: str, conn) -> tuple[str, str]:
-    now = datetime.now(UTC)
-    row = conn.execute(
-        "SELECT cursor_time FROM sync_state WHERE data_type=?", (data_type,)
-    ).fetchone()
-    if row:
-        start = row[0]
-    else:
-        start = (now - timedelta(days=CONFIG["initial_backfill_days"])).isoformat()
-    return start, now.isoformat()
-
-
 INSERT_BATCH = 5000
 
-_INSERT_SQL = """INSERT OR IGNORE INTO raw_points
-   (data_type, start_time, end_time, value, unit, source, raw_json, inserted_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""
+# Insert, or update only when something actually changed: an UPDATE whose WHERE is false
+# changes no row, so `total_changes` counts exactly the new-or-changed rows.
+_UPSERT_SQL = """INSERT INTO raw_points
+   (data_type, start_time, end_time, value, unit, source, raw_json, inserted_at, civil_date)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+   ON CONFLICT(data_type, start_time, end_time, source) DO UPDATE SET
+     value=excluded.value, unit=excluded.unit, raw_json=excluded.raw_json,
+     civil_date=excluded.civil_date
+   WHERE raw_points.value IS NOT excluded.value
+      OR raw_points.unit IS NOT excluded.unit
+      OR raw_points.raw_json IS NOT excluded.raw_json
+      OR raw_points.civil_date IS NOT excluded.civil_date"""
+
+ROLLUP_SOURCE = "dailyRollUp"
 
 
 def _point_row(data_type: str, point: dict) -> tuple:
     """Flatten one API point into the raw_points column order."""
-    import json
-
     value, unit = client.extract_value(data_type, point)
     start_time, end_time = client.extract_time(data_type, point)
-    ds = point.get("dataSource") or {}
-    source = (ds.get("device") or {}).get("displayName") or ds.get("platform") or "unknown"
+    day = civil.day_of_point(data_type, point) or civil.day_of_instant(start_time)
     return (
         data_type, start_time, end_time, value, unit,
-        str(source), json.dumps(point), db.now_iso(),
+        db.point_source(point), json.dumps(point), db.now_iso(), day,
     )
 
 
 def _flush(conn, batch: list[tuple]) -> int:
-    """Insert a batch, returning how many rows were genuinely new."""
+    """Upsert a batch, returning how many rows were new or changed."""
     before = conn.total_changes
-    conn.executemany(_INSERT_SQL, batch)
+    conn.executemany(_UPSERT_SQL, batch)
     return conn.total_changes - before
 
 
-def _upsert_point(conn, data_type: str, point: dict) -> bool:
-    import json
+def rebuild_daily(conn, data_type: str) -> None:
+    """Rebuild a listed type's daily_metrics from raw_points, one row per civil day.
 
-    value, unit = client.extract_value(data_type, point)
-    start_time, end_time = client.extract_time(data_type, point)
-    ds = point.get("dataSource") or {}
-    source = (ds.get("device") or {}).get("displayName") or ds.get("platform") or "unknown"
-    cur = conn.execute(
-        """INSERT OR IGNORE INTO raw_points
-           (data_type, start_time, end_time, value, unit, source, raw_json, inserted_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            data_type,
-            start_time,
-            end_time,
-            value,
-            unit,
-            str(source),
-            json.dumps(point),
-            db.now_iso(),
-        ),
-    )
-    return cur.rowcount > 0
-
-
-def _rollup_daily(conn, data_type: str) -> None:
-    agg = CONFIG["data_types"][data_type]["agg"]
+    Delete-then-insert so a day that no longer has any supporting point (e.g. after the
+    civil-day rule moved its points) does not linger.
+    """
+    agg = CONFIG["data_types"].get(data_type, {}).get("agg", "mean")
     sql_agg = "SUM(value)" if agg == "sum" else "AVG(value)"
+    conn.execute("DELETE FROM daily_metrics WHERE data_type = ?", (data_type,))
     conn.execute(
         f"""
         INSERT INTO daily_metrics (date, data_type, agg_value, n_points)
-        SELECT substr(start_time, 1, 10) AS day, ?, {sql_agg}, COUNT(*)
-        FROM raw_points WHERE data_type = ? AND value IS NOT NULL
-        GROUP BY day
-        ON CONFLICT(date, data_type) DO UPDATE SET
-          agg_value=excluded.agg_value, n_points=excluded.n_points
+        SELECT civil_date, ?, {sql_agg}, COUNT(*)
+        FROM raw_points
+        WHERE data_type = ? AND value IS NOT NULL AND civil_date IS NOT NULL
+        GROUP BY civil_date
         """,
         (data_type, data_type),
     )
 
 
-def _upsert_rollup(conn, data_type: str, bucket: dict, day_of=None, value_of=None) -> bool:
-    """Store one server-aggregated daily bucket straight into daily_metrics.
+def _upsert_rollup(conn, data_type: str, bucket: dict, windowed: bool) -> bool:
+    """Store one server-aggregated daily bucket; True if it was new or changed.
 
-    These types never populate raw_points — the API only exposes them
-    pre-aggregated — so n_points records the bucket count (1), not a sample
-    count, and _rollup_daily is skipped for them.
+    The bucket lands in raw_points (as the receipt, source 'dailyRollUp') and in
+    daily_metrics (n_points = 1 bucket). Both are upserts: the value of a day still in
+    progress is replaced by later fetches.
     """
-    import json
-
-    day = (day_of or client.rollup_day)(bucket)
-    value, unit = (value_of or client.extract_rollup_value)(data_type, bucket)
+    day = (client.window_rollup_day if windowed else client.rollup_day)(bucket)
+    value, unit = (client.extract_window_value if windowed else client.extract_rollup_value)(
+        data_type, bucket)
     if day is None or value is None:
         return False
+    before = conn.total_changes
+    conn.execute(_UPSERT_SQL, (data_type, day, day, value, unit, ROLLUP_SOURCE,
+                               json.dumps(bucket), db.now_iso(), day))
+    changed = conn.total_changes > before
     conn.execute(
         """INSERT INTO daily_metrics (date, data_type, agg_value, n_points)
            VALUES (?, ?, ?, 1)
@@ -123,19 +107,11 @@ def _upsert_rollup(conn, data_type: str, bucket: dict, day_of=None, value_of=Non
              agg_value=excluded.agg_value, n_points=excluded.n_points""",
         (day, data_type, value),
     )
-    conn.execute(
-        """INSERT OR IGNORE INTO raw_points
-           (data_type, start_time, end_time, value, unit, source, raw_json, inserted_at)
-           VALUES (?, ?, ?, ?, ?, 'dailyRollUp', ?, ?)""",
-        (data_type, day, day, value, unit, json.dumps(bucket), db.now_iso()),
-    )
-    return True
+    return changed
 
 
 def sync_devices(conn) -> int:
     """Upsert the paired-device inventory; returns how many devices were seen."""
-    import json
-
     devices = client.list_paired_devices().get("pairedDevices", [])
     for dev in devices:
         conn.execute(
@@ -150,9 +126,23 @@ def sync_devices(conn) -> int:
     return len(devices)
 
 
+def failed_types(summary: dict) -> list[str]:
+    """Data types that failed; `_`-prefixed entries (devices) are informational only."""
+    return sorted(t for t, s in summary.items() if "error" in s and not t.startswith("_"))
+
+
 def exit_code(summary: dict) -> int:
-    """0 when every type synced, 1 when any failed (partial failure is a failure)."""
-    return 1 if any("error" in s for s in summary.values()) else 0
+    """0 when every data type synced, 1 when any failed (partial failure is a failure).
+
+    The device inventory needs a scope that may not be granted yet; its failure is
+    recorded in the summary but never fails the run.
+    """
+    return 1 if failed_types(summary) else 0
+
+
+def changed_rows(summary: dict) -> int:
+    """Total new-or-changed rows across data types (0 means the run wrote no data)."""
+    return sum(int(s.get("inserted", 0)) for t, s in summary.items() if not t.startswith("_"))
 
 
 # Types worth probing beyond whatever is already tracked.
@@ -165,11 +155,11 @@ PROBE_CANDIDATES = (
 
 
 def probe(days: int, candidates: tuple[str, ...] | None = None) -> dict[str, int]:
-    """Points (or rollup days with data) per readable type over the last `days`.
+    """Points (or rollup days with data) per readable type over the last `days` civil days.
 
     Types the API rejects are left out of the result, not reported as zero.
     """
-    end = datetime.now(UTC).date()
+    end = civil.today() + timedelta(days=1)
     start = end - timedelta(days=days)
     names = candidates if candidates is not None else tuple(
         dict.fromkeys([*CONFIG["data_types"], *PROBE_CANDIDATES])
@@ -189,7 +179,7 @@ def probe(days: int, candidates: tuple[str, ...] | None = None) -> dict[str, int
                 out[data_type] = sum(
                     1
                     for _ in client.iter_data_points(
-                        data_type, f"{start.isoformat()}T00:00:00Z", f"{end.isoformat()}T00:00:00Z"
+                        data_type, civil.midnight(start).isoformat(), civil.midnight(end).isoformat()
                     )
                 )
         except client.HealthApiError as e:
@@ -197,46 +187,48 @@ def probe(days: int, candidates: tuple[str, ...] | None = None) -> dict[str, int
     return out
 
 
-def ingest(
-    conn, data_type: str, start: str, end: str, counters: dict[str, Any],
-    inclusive_end_day: bool = True,
-) -> None:
-    """Fetch [start, end) for one type and store it; shared by sync and backfill.
+def path_of(data_type: str) -> str:
+    if data_type in client.ROLLUP_TYPES:
+        return "dailyRollUp"
+    if data_type in client.WINDOW_ROLLUP_TYPES:
+        return "rollUp"
+    return "list"
 
-    Summed types arrive as dailyRollUp buckets (never per-minute points). With
-    `inclusive_end_day` the civil day containing `end` is fetched too (sync,
-    which wants today); backfill passes False for strict [start, end) windows.
-    Raises HealthApiError; the caller owns rollback and cursor handling.
+
+def ingest(conn, data_type: str, lo: date, hi: date, counters: dict[str, Any],
+           rebuild: bool = True) -> None:
+    """Fetch owner-zone civil days [lo, hi) for one type and store them.
+
+    Shared by sync, backfill and repair. Summed types arrive as dailyRollUp buckets and
+    heart-rate as 24 h rollUp buckets aligned to owner-zone midnight (never per-minute
+    points); everything else is listed point by point. `counters["inserted"]` grows by
+    the number of new-or-changed raw rows. Raises HealthApiError; the caller owns
+    rollback and cursor handling.
     """
-    if data_type in client.ROLLUP_TYPES or data_type in client.WINDOW_ROLLUP_TYPES:
-        lo = datetime.fromisoformat(start).date()
-        hi = datetime.fromisoformat(end).date() + timedelta(days=1 if inclusive_end_day else 0)
-        windowed = data_type in client.WINDOW_ROLLUP_TYPES
+    kind = path_of(data_type)
+    if kind != "list":
+        windowed = kind == "rollUp"
         buckets = (client.iter_window_rollups if windowed else client.iter_daily_rollups)(
             data_type, lo, hi)
-        extra = (
-            {"day_of": client.window_rollup_day, "value_of": client.extract_window_value}
-            if windowed else {}
-        )
         for bucket in buckets:
             counters["fetched"] += 1
-            if _upsert_rollup(conn, data_type, bucket, **extra):
+            if _upsert_rollup(conn, data_type, bucket, windowed):
                 counters["inserted"] += 1
-    else:
-        # Batched: 740k individual execute() calls held a write lock for
-        # minutes. executemany amortises that, and the chunk boundary keeps
-        # peak memory bounded on a backfill.
-        batch: list[tuple] = []
-        for point in client.iter_data_points(data_type, start, end):
-            counters["fetched"] += 1
-            batch.append(_point_row(data_type, point))
-            if len(batch) >= INSERT_BATCH:
-                counters["inserted"] += _flush(conn, batch)
-                batch.clear()
-        if batch:
+        return
+    # Batched: 740k individual execute() calls held a write lock for minutes.
+    # executemany amortises that, and the chunk boundary bounds peak memory.
+    batch: list[tuple] = []
+    start, end = civil.midnight(lo).isoformat(), civil.midnight(hi).isoformat()
+    for point in client.iter_data_points(data_type, start, end):
+        counters["fetched"] += 1
+        batch.append(_point_row(data_type, point))
+        if len(batch) >= INSERT_BATCH:
             counters["inserted"] += _flush(conn, batch)
-    if data_type not in client.ROLLUP_TYPES:
-        _rollup_daily(conn, data_type)
+            batch.clear()
+    if batch:
+        counters["inserted"] += _flush(conn, batch)
+    if rebuild:
+        rebuild_daily(conn, data_type)
 
 
 def run() -> dict:
@@ -246,9 +238,13 @@ def run() -> dict:
     )
     with db.connect() as conn:
         for data_type in CONFIG["data_types"]:
-            start, end = _window_for(data_type, conn)
+            row = conn.execute(
+                "SELECT cursor_time FROM sync_state WHERE data_type=?", (data_type,)
+            ).fetchone()
+            lo, hi = civil.sync_days(row[0] if row else None, CONFIG["initial_backfill_days"])
+            started = civil.now()
             try:
-                ingest(conn, data_type, start, end, summary[data_type])
+                ingest(conn, data_type, lo, hi, summary[data_type])
             except client.HealthApiError as e:
                 summary[data_type]["error"] = str(e)
                 conn.rollback()  # discard this type's partial work, keep prior types
@@ -256,24 +252,23 @@ def run() -> dict:
                     f"ingest.{data_type} failed",
                     extra={"attrs": {
                         "span": "ingest.data_type", "status": "error",
-                        "data_type": data_type, "window_start": start, "window_end": end,
-                        "error": str(e)[:400],
+                        "data_type": data_type, "window_start": lo.isoformat(),
+                        "window_end": hi.isoformat(), "error": str(e)[:400],
                     }},
                 )
                 print(f"{data_type:30s} ERROR {e}", file=sys.stderr, flush=True)
                 continue  # bounded: skip this type this run, don't spin retrying
+            # The cursor records when this type last synced successfully; the next run
+            # re-fetches from the earlier of its civil day and the lookback start.
             conn.execute(
                 """INSERT INTO sync_state (data_type, cursor_time, last_synced_at)
                    VALUES (?, ?, ?)
                    ON CONFLICT(data_type) DO UPDATE SET
                      cursor_time=excluded.cursor_time, last_synced_at=excluded.last_synced_at""",
-                (data_type, end, db.now_iso()),
+                (data_type, started.isoformat(), db.now_iso()),
             )
-            # Commit per data type, not once at the end: a 30-day backfill of a
-            # high-frequency type takes minutes, and an interrupt partway
-            # through should keep everything already ingested. The cursor
-            # advances in the same transaction as the rows it covers, so a
-            # resumed run picks up exactly where this one stopped.
+            # Commit per data type: rows and cursor land together, and an interrupt
+            # keeps every type already finished.
             conn.commit()
             s = summary[data_type]
             log.info(
@@ -281,13 +276,12 @@ def run() -> dict:
                 extra={"attrs": {
                     "span": "ingest.data_type", "status": "ok", "data_type": data_type,
                     "fetched": s["fetched"], "inserted": s["inserted"],
-                    "path": ("dailyRollUp" if data_type in client.ROLLUP_TYPES
-                             else "rollUp" if data_type in client.WINDOW_ROLLUP_TYPES
-                             else "list"),
+                    "window_start": lo.isoformat(), "window_end": hi.isoformat(),
+                    "path": path_of(data_type),
                 }},
             )
             print(
-                f"{data_type:30s} fetched={s['fetched']:7d}  inserted={s['inserted']:7d}",
+                f"{data_type:30s} fetched={s['fetched']:7d}  changed={s['inserted']:7d}",
                 flush=True,
             )
         try:
@@ -298,7 +292,7 @@ def run() -> dict:
             summary["_devices"]["error"] = str(e)[:200]
             conn.rollback()
     result = dict(summary)
-    db.write_stage_output("ingest", datetime.now(UTC).date().isoformat(), result)
+    db.write_stage_output("ingest", civil.today().isoformat(), result)
     return result
 
 
@@ -308,6 +302,6 @@ if __name__ == "__main__":
     except auth.AuthError as e:
         print(f"Auth error: {e}", file=sys.stderr)
         sys.exit(1)
-    errs = [d for d, s in summary.items() if "error" in s]
+    errs = failed_types(summary)
     print(f"done: {len(summary) - len(errs)} ok, {len(errs)} failed")
     sys.exit(exit_code(summary))

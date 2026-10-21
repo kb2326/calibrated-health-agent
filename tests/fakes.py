@@ -54,6 +54,9 @@ class FakePoints:
     def dailyRollUp(self, **kw):  # noqa: N802 - mirrors the discovery client
         return self._req("dailyRollUp", kw)
 
+    def rollUp(self, **kw):  # noqa: N802 - mirrors the discovery client
+        return self._req("rollUp", kw)
+
 
 class FakeService:
     def __init__(self, responses: dict[str, list[dict]]):

@@ -3,6 +3,13 @@
 Answers are mapped to fields by question *title*, every submission is appended
 (never overwritten), and problems are recorded with a reason - never with the
 answer values.
+
+Lateness is graded on the response's lastSubmittedTime: a response edited after
+D+1 06:00 (owner zone) is late even if it was first created on time, so an edit
+can never turn into an on-time outcome just because it was imported late.
+
+Errors carry only the exception type and the response id (`JournalImportError`);
+the CLI and the job log exactly that, never a message that could echo an answer.
 """
 from __future__ import annotations
 
@@ -18,6 +25,22 @@ from pydantic import BaseModel, model_validator
 from health_data.db import utc_stamp
 
 SCORES = (("Mood", "mood"), ("Energy", "energy"), ("Soreness", "soreness"))
+
+
+class JournalImportError(RuntimeError):
+    """A journal response could not be processed. Carries no answer values."""
+
+    def __init__(self, error_type: str, response_id: str | None = None):
+        self.error_type = error_type
+        self.response_id = response_id
+        super().__init__(f"{error_type} (response_id={response_id})")
+
+
+def describe_error(exc: BaseException) -> dict[str, str | None]:
+    """The only details of a journal failure that may be printed or logged."""
+    if isinstance(exc, JournalImportError):
+        return {"error": exc.error_type, "response_id": exc.response_id}
+    return {"error": type(exc).__name__, "response_id": None}
 
 
 class JournalRow(BaseModel):
@@ -100,54 +123,65 @@ def parse_responses(
     rows: list[JournalRow] = []
     problems: list[str] = []
     for resp in responses:
-        rid = resp["responseId"]
-        created = _utc(resp["createTime"])
-        last = _utc(resp.get("lastSubmittedTime", resp["createTime"]))
-        reasons: list[str] = []
-
-        def one(title: str, resp: dict = resp) -> str | None:
-            vals = _answers(resp, question_ids.get(title))
-            return vals[0] if vals else None
-
-        day: date | None = None
-        raw_day = one("Date")
-        if raw_day is None:
-            reasons.append("missing required answer: date")
-        else:
-            try:
-                day = date.fromisoformat(raw_day)
-            except ValueError:
-                reasons.append("unparseable date")
-        scores: dict[str, int | None] = {}
-        for title, field in SCORES:
-            raw = one(title)
-            value = _int_or_none(raw)
-            if raw is None:
-                reasons.append(f"missing required answer: {field}")
-            elif value is None or not 1 <= value <= 10:
-                reasons.append(f"{field} out of range 1..10")
-            scores[field] = value
-        status: Literal["ok", "late", "invalid"] = "invalid" if reasons else "ok"
-        if day is None:
-            day = created.astimezone(zone).date()  # best guess; the row is invalid anyway
-        elif day > created.astimezone(zone).date():
-            status = "invalid"
-            reasons.append("date after submission")
-        elif status == "ok":
-            deadline = datetime.combine(day + timedelta(days=1), time(6), tzinfo=zone)
-            if created > deadline:
-                status = "late"
-                reasons.append("submitted after D+1 06:00 in the owner time zone")
-        rows.append(JournalRow(
-            response_id=rid, date=day, mood=scores["mood"], energy=scores["energy"],
-            soreness=scores["soreness"], note=one("Note") or None,
-            tags=_answers(resp, question_ids.get("Tags")), submitted_at=created,
-            last_submitted_at=last, status=status,
-            reason="; ".join(reasons) if reasons else None,
-        ))
-        if status == "invalid":
+        rid = resp.get("responseId")
+        try:
+            row, reasons = _parse_one(question_ids, resp, zone)
+        except Exception as exc:  # never re-raise with a message: it may quote an answer
+            raise JournalImportError(type(exc).__name__, rid) from None
+        rows.append(row)
+        if row.status == "invalid":
             problems.append(f"{rid}: {'; '.join(reasons)}")
     return rows, problems
+
+
+def _parse_one(question_ids: dict[str, str], resp: dict, zone: ZoneInfo) -> tuple[JournalRow, list[str]]:
+    rid = resp["responseId"]
+    created = _utc(resp["createTime"])
+    last = _utc(resp.get("lastSubmittedTime", resp["createTime"]))
+    reasons: list[str] = []
+
+    def one(title: str, resp: dict = resp) -> str | None:
+        vals = _answers(resp, question_ids.get(title))
+        return vals[0] if vals else None
+
+    day: date | None = None
+    raw_day = one("Date")
+    if raw_day is None:
+        reasons.append("missing required answer: date")
+    else:
+        try:
+            day = date.fromisoformat(raw_day)
+        except ValueError:
+            reasons.append("unparseable date")
+    scores: dict[str, int | None] = {}
+    for title, field in SCORES:
+        raw = one(title)
+        value = _int_or_none(raw)
+        if raw is None:
+            reasons.append(f"missing required answer: {field}")
+        elif value is None or not 1 <= value <= 10:
+            reasons.append(f"{field} out of range 1..10")
+        scores[field] = value
+    status: Literal["ok", "late", "invalid"] = "invalid" if reasons else "ok"
+    # Graded on the latest submission: that is when these answers were given.
+    if day is None:
+        day = last.astimezone(zone).date()  # best guess; the row is invalid anyway
+    elif day > last.astimezone(zone).date():
+        status = "invalid"
+        reasons.append("date after submission")
+    elif status == "ok":
+        deadline = datetime.combine(day + timedelta(days=1), time(6), tzinfo=zone)
+        if last > deadline:
+            status = "late"
+            reasons.append("last submitted after D+1 06:00 in the owner time zone")
+    row = JournalRow(
+        response_id=rid, date=day, mood=scores["mood"], energy=scores["energy"],
+        soreness=scores["soreness"], note=one("Note") or None,
+        tags=_answers(resp, question_ids.get("Tags")), submitted_at=created,
+        last_submitted_at=last, status=status,
+        reason="; ".join(reasons) if reasons else None,
+    )
+    return row, reasons
 
 
 def _row_hash(row: JournalRow) -> str:

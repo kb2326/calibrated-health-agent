@@ -8,7 +8,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
-from health_data import db, journal, journal_import
+from health_data import db, journal_import
 from health_data.journal_import import append_submissions, parse_responses
 
 TZ = "Asia/Kolkata"
@@ -140,20 +140,35 @@ def test_timestamps_are_normalised_utc(conn):
     assert sub == "2026-03-10T15:00:00.000000Z"
 
 
-def test_cli_and_form_rows_order_chronologically(tmp_path, monkeypatch):
-    path = tmp_path / "t.db"
-    monkeypatch.setattr(db, "DB_PATH", path)
-    stamps = iter(["2026-03-10T14:00:00.000000Z", "2026-03-11T14:00:00.000000Z"])
-    monkeypatch.setattr(journal, "utc_stamp", lambda: next(stamps))
-    journal.log("2026-03-10", 4, 4, 4, None)  # CLI at 14:00Z, before the form row
-    journal.log("2026-03-11", 5, 5, 5, None)  # CLI at 14:00Z next day, after the form row
-    c = sqlite3.connect(path)
-    run(c, resp("r1", day="2026-03-10", mood="9", create="2026-03-10T15:00:00Z"),
-        resp("r2", day="2026-03-11", mood="8", create="2026-03-11T13:00:00Z"))
-    got = dict(c.execute("SELECT date, mood FROM journal_outcome").fetchall())
-    assert got == {"2026-03-10": 4, "2026-03-11": 8}
-    stamp = c.execute("SELECT submitted_at FROM journal_submissions WHERE source='cli'").fetchone()
-    assert re.match(STAMP, stamp[0])
+def test_lateness_graded_on_last_submitted_time(conn):
+    # created on time (D 15:00Z), edited at D+1 07:00 IST (01:30Z), first imported after
+    # the edit: the answers stored were given late, so the row is late, not an outcome.
+    counts, _ = run(conn, resp(create="2026-03-10T15:00:00Z", last="2026-03-11T01:30:00Z"))
+    assert counts == {"late": 1}
+    assert conn.execute("SELECT count(*) FROM journal_outcome").fetchone()[0] == 0
+    assert "last submitted after" in conn.execute("SELECT reason FROM journal_submissions").fetchone()[0]
+
+
+def test_edit_inside_window_stays_on_time(conn):
+    # edited at D+1 05:59 IST (00:29Z): still inside the window
+    counts, _ = run(conn, resp(create="2026-03-10T15:00:00Z", last="2026-03-11T00:29:00Z"))
+    assert counts == {"ok": 1}
+
+
+def test_parse_error_carries_only_type_and_response_id():
+    secret = "SECRET-NOTE-VALUE"
+    broken = resp("rX", note=secret)
+    broken["createTime"] = "not-a-time " + secret
+    with pytest.raises(journal_import.JournalImportError) as err:
+        parse_responses(QIDS, [broken], TZ)
+    assert journal_import.describe_error(err.value) == {"error": "ValueError", "response_id": "rX"}
+    assert secret not in str(err.value) and err.value.__cause__ is None
+
+
+def test_cli_journal_writer_is_gone():
+    import importlib.util
+
+    assert importlib.util.find_spec("health_data.journal") is None
 
 
 def test_fetch_responses_maps_titles_and_paginates(monkeypatch):
@@ -207,8 +222,8 @@ def test_cli_failure_prints_no_answer_values(tmp_path, monkeypatch):
         raise RuntimeError(secret)
 
     monkeypatch.setattr(journal_import, "parse_responses", boom)
-    result = CliRunner().invoke(cli.app, ["journal", "import"])
+    result = CliRunner().invoke(cli.app, ["--local-only", "journal", "import"])
     get_settings.cache_clear()
     assert result.exit_code == 1
     assert secret not in result.output
-    assert "RuntimeError" in result.output
+    assert "RuntimeError (response_id=None)" in result.output
