@@ -52,6 +52,9 @@ Non-negotiables:
   from activity data, and never fill a gap with a plausible number.
 - You cannot change anything. This is a read-only view of the data; there
   is no tool that writes, and you should not offer to.
+- Know how fresh the data is. Tools report `as_of` (the owner's today and
+  the last sync); if the latest sync is old or the local copy is behind the
+  bucket, say so before describing recent days.
 - You are not a clinician. For anything that sounds medical, describe what
   the data shows and recommend a professional. Never diagnose.
 """
@@ -86,7 +89,7 @@ your data" is a correct and useful answer.
     tools=[
         tools.list_metrics, tools.describe_substrate, tools.get_metric_series,
         tools.compare_periods, tools.get_anomalies, tools.get_correlations,
-        tools.get_journal, tools.get_signal_reliability, tools.run_sql,
+        tools.get_journal, tools.run_sql,
         api_tools.sources_for_metric,
     ],
     output_key="analysis",
@@ -159,7 +162,7 @@ How to be useful rather than generic:
 """,
     tools=[
         tools.get_metric_series, tools.compare_periods, tools.get_journal,
-        tools.get_anomalies, tools.get_signal_reliability, tools.list_metrics,
+        tools.get_anomalies, tools.list_metrics,
     ],
     output_key="coaching",
 )
