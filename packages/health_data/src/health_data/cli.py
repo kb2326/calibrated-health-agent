@@ -213,15 +213,23 @@ def db_push_cmd() -> None:
 
 @auth_app.command("login")
 def auth_login_cmd() -> None:
-    """Authorize against Google (opens a browser for consent)."""
+    """Authorize the Health token (Health read-only scopes only; opens a browser)."""
     from health_data import auth
 
     _auth_guard(auth._cli_login)
 
 
+@auth_app.command("login-forms")
+def auth_login_forms_cmd() -> None:
+    """Authorize the separate Forms token (journal import; opens a browser)."""
+    from health_data import auth
+
+    _auth_guard(auth._cli_login_forms)
+
+
 @auth_app.command("push-secret")
 def auth_push_secret_cmd() -> None:
-    """Upload config/client_secret.json and config/token.json to Secret Manager."""
+    """Upload the OAuth client, Health token and Forms token to Secret Manager."""
     from health_data import auth
 
     _auth_guard(auth.push_secrets)
@@ -229,7 +237,7 @@ def auth_push_secret_cmd() -> None:
 
 @auth_app.command("status")
 def auth_status_cmd() -> None:
-    """Show token validity, granted scopes and any scope gap."""
+    """Show granted vs expected scopes for the Health and Forms tokens."""
     from health_data import auth
 
     _auth_guard(auth._cli_status)

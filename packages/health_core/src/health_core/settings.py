@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     db_object: str = "health.db"
     token_secret: str | None = None
     client_secret_secret: str | None = None
+    forms_token_secret: str | None = None
     journal_form_id: str | None = None
     forms_token_path: Path = Path("config/forms_token.json")
     timezone: str = "Asia/Kolkata"

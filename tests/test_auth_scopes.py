@@ -57,12 +57,14 @@ def test_scope_gap_lists_missing_configured_scopes():
     assert auth.scope_gap(auth.scopes()) == []
 
 
-def test_status_reports_gap(monkeypatch, capsys):
-    monkeypatch.setattr(auth, "get_credentials", lambda: type("C", (), {
-        "valid": True, "expiry": None, "scopes": auth.scopes()[:3]})())
+def test_status_reports_gap(token, monkeypatch, capsys):
+    import json
+
+    token.write_text(json.dumps({"scopes": auth.scopes()[:3]}))
+    monkeypatch.setattr(auth, "get_settings", lambda: type("S", (), {"forms_token_path": token.parent / "ft.json"})())
     auth._cli_status()
     out = capsys.readouterr().out
-    assert "missing (re-consent needed)" in out and "profile.readonly" in out
+    assert "missing: none" not in out.split("Forms token")[0] and "profile.readonly" in out
 
 
 @pytest.mark.parametrize(("data_type", "cap"), [("steps", 90), ("active-minutes", 14)])

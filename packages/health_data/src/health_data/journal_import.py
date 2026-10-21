@@ -17,7 +17,6 @@ from pydantic import BaseModel, model_validator
 
 from health_data.db import utc_stamp
 
-SCOPE = "https://www.googleapis.com/auth/forms.responses.readonly"
 SCORES = (("Mood", "mood"), ("Energy", "energy"), ("Soreness", "soreness"))
 
 

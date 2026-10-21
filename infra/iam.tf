@@ -16,11 +16,12 @@ resource "google_storage_bucket_iam_member" "sync_job_data" {
   member = "serviceAccount:${google_service_account.sync_job.email}"
 }
 
-# secretAccessor on exactly the two secrets, nothing project-wide.
+# secretAccessor on exactly the three secrets, nothing project-wide.
 resource "google_secret_manager_secret_iam_member" "sync_job_secrets" {
   for_each = {
     oauth_client = google_secret_manager_secret.oauth_client.id
     oauth_token  = google_secret_manager_secret.oauth_token.id
+    oauth_forms  = google_secret_manager_secret.oauth_forms_token.id
   }
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"

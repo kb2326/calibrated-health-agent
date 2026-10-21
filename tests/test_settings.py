@@ -35,3 +35,4 @@ def test_forms_settings_defaults(monkeypatch):
     s = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
     assert s.journal_form_id is None
     assert str(s.forms_token_path).replace("\\", "/") == "config/forms_token.json"
+    assert s.forms_token_secret is None

@@ -309,7 +309,7 @@ free-tier key; real-data runs are rare, owner-triggered, and costed before runni
   a process may open; the synthetic mode powers fixtures, the video and screenshots. A
   public synthetic variant is defined in Terraform but deployed only briefly, if at all,
   to learn the pattern, then destroyed. **[call]**
-- Secrets (OAuth client, refresh token) in Secret Manager; nothing secret in the repo.
+- Secrets (OAuth client, and two separate refresh tokens: Health-only and Forms-only, since the Health API rejects tokens carrying non-Health scopes) in Secret Manager; nothing secret in the repo.
 - **Synthetic twin:** generated from the real data with simple seasonal/AR/copula
   models (no SDV — source-available licence), published with a fidelity report
   (marginals, autocorrelation, cross-correlations) and a privacy check (no real day
