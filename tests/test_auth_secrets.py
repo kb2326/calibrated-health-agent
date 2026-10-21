@@ -39,18 +39,20 @@ class FakeSecretManager:
         self.calls.append(("destroy", request["name"]))
 
 
-def test_write_secret_destroys_all_but_newest():
+def test_write_secret_keeps_previous_disabled_and_destroys_older():
     p = "projects/p/secrets/tok"
     fake = FakeSecretManager(versions=[
-        _version(f"{p}/versions/7", "ENABLED"),
-        _version(f"{p}/versions/8", "DISABLED"),
+        _version(f"{p}/versions/7", "DISABLED"),
+        _version(f"{p}/versions/8", "ENABLED"),
+        _version(f"{p}/versions/5", "ENABLED"),
         _version(f"{p}/versions/6", "DESTROYED"),
     ])
     secrets.write_secret("p", "tok", "v", client=fake)
     assert fake.calls == [
         ("add", p),
-        ("disable", f"{p}/versions/7"), ("destroy", f"{p}/versions/7"),
-        ("destroy", f"{p}/versions/8"),
+        ("disable", f"{p}/versions/8"),  # N-1: disabled, kept for rollback
+        ("destroy", f"{p}/versions/7"),
+        ("disable", f"{p}/versions/5"), ("destroy", f"{p}/versions/5"),
     ]
 
 
