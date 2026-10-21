@@ -64,6 +64,8 @@ flowchart LR
 External dependencies: the Google Health API (data), Gemini (reasoning), Google Forms API
 (journal until the owner UI exists), GitHub (code, CI, public hash log).
 
+The Phase 1 cloud slice is described in detail in [cloud-design.md](cloud-design.md).
+
 ---
 
 ## 3. Containers (deployed shape)

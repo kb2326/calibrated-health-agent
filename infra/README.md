@@ -13,10 +13,12 @@ access tokens that carry non-Health scopes) (containers only), Artifact Registry
 `sync-scheduler`, Cloud Run job `sync` (2Gi, 1 vCPU, 15 min, 1 retry), Cloud
 Scheduler `sync-hourly` (`0 5-12 * * *`) and `sync-evening` (`30 22 * * *`),
 `Asia/Kolkata`, calling the Run Admin API with an OAuth token, a $5 budget
-(alerts at $2 and $4), an email channel and a log-based alert on
-`severity>=ERROR` from the `sync` job or from the two scheduler jobs, and a
-metric alert on `run.googleapis.com/job/completed_task_attempt_count` with
-`result="failed"`.
+(alerts at $2 and $4), an email channel and three alert policies: a log
+alert on `severity>=ERROR` from the `sync` job, a log alert on `severity>=ERROR`
+from the two scheduler jobs, and a metric alert on
+`run.googleapis.com/job/completed_task_attempt_count` with `result="failed"`.
+
+Design rationale: [docs/cloud-design.md](../docs/cloud-design.md).
 
 | Resource | Monthly cost |
 |---|---|
@@ -53,7 +55,7 @@ Local `infra/terraform.tfvars` (gitignored, never commit) holds
 4. Build and push (no Cloud Build):
    `gcloud auth configure-docker us-central1-docker.pkg.dev`, then
    `docker build -f apps/jobs/Dockerfile -t us-central1-docker.pkg.dev/artful-timing-506108-n8/cha/sync-job:<git-sha> .`
-   and `docker push` the same tag. Set `job_image` in terraform.tfvars.
+   and `docker push` the same tag. Set `job_image` in the gitignored `infra/terraform.tfvars`.
 5. Full `terraform plan -out tfplan` then `terraform apply tfplan`.
 6. Put secret values (owner, locally; never print tokens). Add `forms.responses.readonly`
    and `forms.body.readonly` to the OAuth consent screen scopes first, then:
@@ -61,7 +63,11 @@ Local `infra/terraform.tfvars` (gitignored, never commit) holds
    `uv run cha-data auth login-forms` (Forms scopes only), and
    `CHA_TOKEN_SECRET=oauth-token CHA_CLIENT_SECRET_SECRET=oauth-client CHA_FORMS_TOKEN_SECRET=oauth-forms-token uv run cha-data auth push-secret`
    (pushes `oauth-client`, `oauth-token`, `oauth-forms-token`; prunes old versions).
-7. Alert test (no drift): the job's secret names are env vars, so override
+7. Seed the bucket and run once (owner, locally):
+   `CHA_DB_BUCKET=artful-timing-506108-n8-health-db uv run cha-data db push`, then
+   `gcloud run jobs execute sync --region us-central1 --wait`. A green first run
+   logs pull, migrate, sync, journal import and push in that order.
+8. Alert test (no drift): the job's secret names are env vars, so override
    them for one execution only; this does not touch the job template or
    Terraform state:
    `gcloud run jobs execute sync --region us-central1 --args=--dry-run --update-env-vars CHA_TOKEN_SECRET=does-not-exist`
