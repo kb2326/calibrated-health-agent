@@ -1,271 +1,292 @@
 # Calibrated Health Agent
 
-**A personal health agent that keeps score.** It forecasts how I'll feel tomorrow, grades
-itself against simple baselines on my real wearable data, shows a code receipt for every
-number, and publishes its evals — including where it loses.
+**A personal health agent that keeps score: it forecasts, shows its work, and publishes where it loses.**
 
-![status](https://img.shields.io/badge/status-phase%201%20of%208%20·%20foundation%20done-blue)
-![budget](https://img.shields.io/badge/run%20cost-under%20%245%2Fmonth-brightgreen)
-![data](https://img.shields.io/badge/Google%20Health%20API-read--only-informational)
+[![ci](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml)
 ![license](https://img.shields.io/badge/license-Apache--2.0-lightgrey)
+![python](https://img.shields.io/badge/python-3.13-blue)
+![terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC)
+![cost](https://img.shields.io/badge/run%20cost-~%240.03%2Fmonth-brightgreen)
+![status](https://img.shields.io/badge/status-phase%201%20of%208%20done-blue)
 
-> Not medical advice and not a medical device. This project describes one person's data;
-> it does not diagnose. Built with AI assistance; the agent's outputs can be wrong — which
-> is exactly why it keeps score.
+## What it is
 
----
+Every morning this agent predicts how I will feel that day (mood, energy, soreness) from my
+wearable data, then grades itself against my own journal and against dumb baselines such as
+"same as yesterday". Every number it states comes from executed code with a re-runnable
+receipt, not from an LLM's memory.
 
-## Why this exists
+**Today (Phase 1)** the data foundation is live on Google Cloud: a scale-to-zero job syncs my
+Google Health API data and my daily journal into a versioned database for about $0.03 a month.
+The forecasting, agent and web layers are **designed but not built yet**; this README marks
+every planned component as such.
 
-- **Plain LLMs are bad at personal health numbers.** In Google's PHIA study
-  (*Nature Communications*, 2026) an LLM answered personal-health data questions correctly
-  ~22% of the time; an agent that writes and runs code reached 84%. So this agent
-  **computes** — every number comes from executed code, with a receipt you can re-run.
-- **Nobody publishes a track record.** Health coaches and papers make predictions about
-  you, but none shows its own per-person forecasts scored against a naive baseline. This
-  project does, daily, on real data — and publishes the scoreboard even when the baseline wins.
-- **Multi-agent is a hypothesis, not a feature.** The agent runs as a single agent and as
-  an orchestrator with specialists; both face the same evals, and the winner is the default.
+## Why it matters
+
+- **Computed, not narrated.** In Google's PHIA study (*Nature Communications*, 2026) a plain LLM
+  answered personal-health data questions correctly about 22% of the time; an agent that writes
+  and runs code reached 84%. This agent computes, and shows the code.
+- **It keeps score.** Health coaches make predictions about you but never publish a per-person
+  track record. Here, forecasts are locked before the outcome exists and scored against
+  baselines with proper scoring rules, even when the baseline wins.
+- **An honest multi-agent test.** Single agent and orchestrator-with-specialists face the same
+  evals; the better one is the default. Multi-agent is treated as a hypothesis, not a feature.
 
 ## Status
 
 | Phase | What | State |
 |---|---|---|
-| 0 | Research, live API verification, design | ✅ done |
-| 1 | Foundation: repo, pure + complete ingestion, journal capture, free-tier GCP sync | ✅ done ([cloud design](docs/cloud-design.md)) |
-| 2 | Honest statistics + forecast ledger | planned |
-| 3 | Agent core: code receipts, guarded tools, memory | planned |
-| 4 | Evals, red-team, CI gate, tracing | planned |
-| 5 | MCP server | planned |
-| 6 | Full GCP deployment as code (scale-to-zero) | planned |
-| 7 | Web experience (Next.js + AG-UI) | planned |
-| 8 | Publish: README scorecard, Medium, LinkedIn, video | planned |
+| 0 | Research, live API verification, design | Done |
+| 1 | Foundation: ingestion, journal capture, scale-to-zero cloud sync, Terraform, CI | **Done and live** |
+| 2 | Honest statistics + forecast ledger (7 forecasters, investigator loop) | Planned |
+| 3 | Agent core: code receipts, guarded tools, memory | Planned |
+| 4 | Evals, red-team, CI gate, tracing | Planned |
+| 5 | Read-only MCP server | Planned |
+| 6 | GCP expansion as code (Workflows, IAP services, forecast lock) | Planned |
+| 7 | Web views (forecast ledger, receipts) | Planned |
+| 8 | Publish: scorecard, write-ups, demo | Planned |
 
----
+Nothing in phases 2-8 exists in the code yet. Phase 1 has 222 passing tests and CI on every push.
 
-## How it works
+## System context
+
+Who and what talks to whom. Dashed items are planned.
+
+```mermaid
+flowchart LR
+  watch["Fitbit / Pixel Watch"] -->|"sleep, HRV, heart rate"| health["Google Health API<br/>(read-only)"]
+  phone(["Me, on my phone<br/>30-second daily journal"]) --> form["Google Form"]
+  form --> forms["Google Forms API<br/>(read-only)"]
+  health -->|"Health-only token"| sync["Sync job<br/>(Cloud Run)"]
+  forms -->|"separate Forms token"| sync
+  sync --> db[("SQLite database<br/>private GCS bucket")]
+  sync -->|"failure alerts"| mail(["Owner email"])
+  gh["GitHub<br/>code, CI, Pages"] -.->|"image built locally, pushed by owner"| sync
+  db -.-> gemini["Gemini via ADK<br/>forecaster + agent (planned)"]
+  gemini -.-> out["Scoreboard and receipts<br/>(planned)"]
+
+  classDef planned stroke-dasharray: 5 5,color:#666
+  class gemini,out planned
+```
+
+## Cloud architecture
+
+What is deployed in project `artful-timing-506108-n8` (us-central1), plus the planned additions.
 
 ```mermaid
 flowchart TB
-  watch["Fitbit / Pixel Watch"] --> api[("Google Health API<br/>read-only")]
-  me(["Me: 30-second<br/>daily journal"]) --> form["Journal form"]
-  api --> sync["Sync + data quality<br/>reconciled, wear-aware"]
-  form --> sync
-  sync --> db[("SQLite<br/>system of record")]
-  db --> lock["Forecast lock<br/>7 forecasters"]
-  lock --> ledger[("Ledger<br/>append-only + hash chain")]
-  db --> score["Score vs journal<br/>RPS · log score · skill"]
-  ledger --> score
-  score --> board["Scoreboard<br/>calibration · real n"]
-  score --> inv["Investigator agent<br/>studies misses"]
-  inv --> notes[("Hypotheses<br/>memory")]
-  notes --> lock
-  db --> agent["ADK agent<br/>code sandbox · receipts"]
-  board --> agent
-  agent --> ui["Chat · ledger · receipts"]
-  agent --> mcp["MCP server<br/>read-only tools"]
+  subgraph trigger["Trigger"]
+    sched["Cloud Scheduler<br/>hourly 05-12 IST + 22:30 IST"]
+  end
+  subgraph compute["Compute (scale to zero)"]
+    job["Cloud Run job: sync<br/>2 GiB, 900 s, 1 retry"]
+    api["Agent API (planned)"]
+    mcp["MCP server (planned)"]
+    web["Web views (planned)"]
+  end
+  subgraph data["Data and secrets"]
+    bucket[("GCS bucket<br/>health.db, versioned, private")]
+    sm[("Secret Manager<br/>3 secrets")]
+    ar[("Artifact Registry<br/>keep last 3 images")]
+    bq[("BigQuery + forecast lock (planned)")]
+  end
+  subgraph ops["Observability and cost"]
+    logs["Cloud Logging"]
+    mon["Cloud Monitoring<br/>3 alert policies"]
+    budget["Billing budget<br/>alerts at 2 and 4 USD of 5"]
+  end
+  subgraph iac["Infrastructure as code"]
+    tf["Terraform<br/>29 resources"]
+    tfstate[("State bucket<br/>versioned")]
+  end
+  mail(["Owner email"])
+
+  sched -->|"run.invoker"| job
+  ar -->|image| job
+  job <-->|"pull / push, generation guard"| bucket
+  job -->|secretAccessor| sm
+  job --> logs
+  logs --> mon
+  mon --> mail
+  budget --> mail
+  tf --> tfstate
+  tf -.->|provisions| trigger
+  api -.-> bucket
+  mcp -.-> api
+  web -.-> api
+  api -.-> bq
+
+  classDef planned stroke-dasharray: 5 5,color:#666
+  class api,mcp,web,bq planned
 ```
 
-### A day in the life
+## How a sync run works
 
 ```mermaid
 sequenceDiagram
   autonumber
-  participant W as Watch
-  participant S as Sync job
-  participant L as Forecast lock
-  participant M as Me
-  participant C as Scoring
-  W->>S: overnight sleep, HRV, resting HR reach the API
-  S->>S: ingest, reconcile, check wear, aggregate
-  S->>L: last night's sleep is in (or noon deadline)
-  L->>L: seven forecasters predict today's mood, energy, soreness
-  L->>L: lock: append-only record + public hash
-  Note over M: today's forecasts stay hidden from me (blinding)
-  M->>C: evening journal entry
-  C->>C: score today's forecasts against what I reported
-  Note over C: scoreboard updates, forecasts revealed
-  C->>C: investigator studies the worst misses, writes hypotheses for tomorrow
+  participant S as Cloud Scheduler
+  participant J as Cloud Run job
+  participant SM as Secret Manager
+  participant G as GCS bucket
+  participant H as Google Health API
+  participant F as Google Forms API
+  participant L as Cloud Logging
+  S->>J: start execution (run.invoker)
+  J->>SM: read Health and Forms tokens
+  J->>G: pull health.db, record generation N
+  J->>J: migrate schema (refuse a newer schema)
+  J->>H: fetch today + 3-day lookback per type
+  H-->>J: data points (upserted, so re-fetch is idempotent)
+  J->>F: read new journal responses
+  F-->>J: responses (appended, never edited)
+  J->>G: push only if generation is still N and data changed
+  J->>L: one JSON line per step, counts only
+  Note over J,G: Push rules - skip on pull, migrate or auth failure and when nothing changed. Otherwise push completed work. Any failure exits non-zero and alerts.
 ```
 
-### The agent that learns from its misses
+## Target system design (Phases 2-4, not built)
 
-Every night after scoring, an **investigator agent** looks at the forecasts that missed
-worst, plans an inquiry, runs code over my data and journal, and writes hypotheses — each
-with receipts and evidence counts — into memory. A second Gemini forecaster reads those
-notes before betting. The scoreboard compares the two: **does the agent's self-reflection
-actually make it better at predicting one human?**
-
-### The forecast ledger — the centrepiece
-
-Seven forecasters compete on one scoreboard, each predicting a full probability
-distribution over 1–10 for mood, energy and soreness:
-
-| Forecaster | What it is |
-|---|---|
-| Climatology | My historical distribution — the outside view |
-| Persistence | "Same as yesterday" |
-| Seasonal-naive | Same weekday last week |
-| Statistical model | Wearable features → ordinal forecast, incl. an open readiness score (HRV, resting HR, sleep vs my baseline) |
-| TimesFM | Google's time-series foundation model via BigQuery `AI.FORECAST` |
-| Gemini agent | The LLM, given exactly the same inputs |
-| Gemini agent + its own notes | The same LLM, also reading hypotheses its investigator wrote about past misses |
-
-Scored with proper scoring rules (ranked probability score, log score), skill against
-climatology and persistence, and calibration plots. The analysis plan is pre-registered
-(primary endpoint: energy, skill vs persistence). Forecasts are locked before the outcome
-exists; forecasts and outcomes are hash-chained to a public log
-(`kb2326/cha-ledger-log`), and a public scoreboard on GitHub Pages updates daily. Only
-live-locked forecasts count.
-
-Full design: **[docs/architecture.md](docs/architecture.md)** · requirements:
-**[the spec](docs/superpowers/specs/2026-10-20-calibrated-health-agent-design.md)**.
-
----
-
-## The plan
+The daily keep-score loop the foundation exists to feed.
 
 ```mermaid
 flowchart LR
-  P0["0 · Research<br/>✅"] --> P1["1 · Foundation<br/>✅"]
-  P1 --> P2["2 · Stats + ledger"]
-  P1 --> P3["3 · Agent core"]
-  P3 --> P4["4 · Evals + tracing"]
-  P3 --> P5["5 · MCP server"]
-  P2 --> P6["6 · GCP as code"]
-  P3 --> P6
-  P6 --> P7["7 · Web"]
-  P4 --> P8["8 · Publish"]
-  P5 --> P8
-  P7 --> P8
+  ingest["Ingest<br/>(live today)"] --> lock["Morning forecast lock<br/>7 forecasters, append-only,<br/>hash-chained"]
+  lock --> blind["Blinded journal<br/>forecasts hidden until I log"]
+  blind --> score["Scoring<br/>proper scoring rules,<br/>skill vs baselines"]
+  score --> board["Public scoreboard<br/>calibration, real n"]
+  score --> inv["Investigator agent<br/>studies the worst misses"]
+  inv --> notes[("Hypotheses memory<br/>with receipts")]
+  notes -->|"read by one forecaster"| lock
+
+  classDef planned stroke-dasharray: 5 5,color:#666
+  class lock,blind,score,board,inv,notes planned
 ```
 
-| # | Phase | Delivers | Done when |
-|---|---|---|---|
-| 1 | Foundation | uv monorepo · reconciled sync with extra data types and scopes · full backfill · journal via Google Form · ADK 2.12 with explicit delegation · Terraform free-tier slice (bucket, secrets, Cloud Run job, Scheduler, budget, three alert policies) | I journal from my phone; the cloud sync runs daily without my laptop; a fresh clone passes tests |
-| 2 | Stats + ledger | Wear rules · robust baselines · corrected associations (detrended, CIs, FDR) · six forecasters · pre-registered analysis plan · event-triggered lock · blinding · hash chain to a public log · **public scoreboard on GitHub Pages** | Locked, hash-chained forecasts every day; scoreboard live and updating |
-| 3 | Agent core | ADK graph workflow · single vs multi topologies · sandboxed code + receipts · hardened `run_sql` · untrusted-text wrapping · memory · **investigator loop + "with own notes" forecaster** | Every numeric answer has a re-runnable receipt; the investigator writes hypotheses nightly |
-| 4 | Evals + tracing | ~200 cases across core, ablation, medical boundary, security, multi-turn · calibrated judge · CI gate · OpenTelemetry | A deliberately regressed prompt fails the gate |
-| 5 | Protocols | Read-only MCP server | Claude Desktop calls a tool from a copy-paste config |
-| 6 | GCP as code | All jobs on Workflows + Scheduler · IAP owner services at min-instances 0 · synthetic twin · keyless CI deploys · destroy/redeploy drill | Owner mode works behind IAP; a month costs under $5 |
-| 7 | Web | Next.js 16 + AG-UI, two views: the forecast ledger and receipts | I can ask a question and open its receipt |
-| 8 | Publish | README scorecard · ADRs · Medium article · LinkedIn post · motion video | Clone-and-follow passes on a clean machine |
+The seven forecasters: climatology, persistence, seasonal-naive, a statistical model,
+TimesFM, a Gemini agent, and the same Gemini agent reading its investigator's notes. The open
+question the scoreboard answers: does self-reflection make an agent better at predicting
+one human? Details in the [architecture](docs/architecture.md).
 
-Each phase gets its own detailed plan when it starts: [Phase 1 plan](docs/superpowers/plans/2026-10-20-phase-1-foundation.md).
+## Key engineering decisions
 
-## How the work is executed
+| Decision | Why |
+|---|---|
+| One SQLite file in a private versioned bucket, not a database server | Cheapest durable store for one small, single-writer dataset; versioning gives restore for free. Upgrade path: BigQuery or Cloud SQL. |
+| Optimistic concurrency (generation-guarded push) | Two overlapping runs cannot overwrite each other; the loser fails loudly and the next run re-syncs. |
+| Scale-to-zero Cloud Run job, not a service | Runs to completion, bills only while running, exposes no endpoint. |
+| Append-only journal with one writer (the Google Form) | Forecasts are only trustworthy if outcomes cannot be edited after the fact. |
+| Two OAuth tokens (Health and Forms) | Real lesson: the Google Health API rejects any token that also carries non-Health scopes. |
+| Idempotent upserts with a 3-day lookback | Late watch uploads are picked up automatically; retries are safe. |
+| Civil-day rule in the owner's timezone (Asia/Kolkata) | Daily values must align with the day I actually lived, not UTC. |
+| Everything in Terraform, state in a versioned bucket | Reproducible, reviewable, recoverable. |
+| Synthetic data in tests and CI | No real health data in the repo or in CI; a fresh clone passes tests. |
 
-```mermaid
-flowchart TB
-  spec["Spec<br/>what + why"] --> plan["Phase plan<br/>tasks, interfaces, tests"]
-  plan --> task["Task"]
-  task --> red["Write failing test"]
-  red --> green["Implement until green"]
-  green --> review["Fresh reviewer<br/>checks the task"]
-  review -->|changes| green
-  review -->|approved| commit["Commit"]
-  commit --> ci{"CI gate<br/>lint · types · tests · evals"}
-  ci -->|red| green
-  ci -->|green| next["Next task"]
-  next --> task
-  next -->|phase done| exit["Exit check + docs<br/>+ project doc update"]
+## Security and privacy
+
+- **Real data never leaves my cloud project.** Public material will be synthetic or aggregate.
+- **Read-only toward the source:** read-only OAuth scopes, and the API client implements no write methods.
+- **Least privilege:** the job's identity can use one bucket and three secrets; the scheduler's
+  identity can only invoke the job. No public endpoints, no load balancer, public access prevention on the bucket.
+- **Secrets stay out of the image, env vars and Terraform state** (Terraform creates empty containers only).
+- **Logs carry counts only**, never health values or journal answers.
+
+## Reliability
+
+- A crashed run leaves the old good file untouched until the final push; Cloud Run retries once.
+- Overlapping runs are rejected by the generation precondition.
+- Bucket versions are kept 14 days for rollback; the Terraform state bucket is versioned.
+- Three email alert policies: job ERROR logs, scheduler ERROR logs, failed task attempts. The alert path was tested with a deliberately wrong secret name.
+- An older image refuses to write a newer-schema database.
+
+## Cost
+
+| Item | Monthly |
+|---|---|
+| Cloud Run job, Scheduler (2 jobs), Secret Manager, GCS, monitoring | $0 (free tiers) |
+| Artifact Registry (3 images) | about $0.03 |
+| **Total** | **about $0.03** |
+
+A $5 budget alerts at $2 and $4. Alerts only notify, so the real guard is the design: nothing scales up on its own.
+
+## Tech stack
+
+| Layer | In use (Phase 1) | Planned |
+|---|---|---|
+| Language and tooling | Python 3.13, uv workspace, ruff, pyright, pytest, pre-commit | |
+| Data | Google Health API, Google Forms API, SQLite, pandas | DuckDB, Parquet, BigQuery |
+| Cloud | Cloud Run jobs, Cloud Scheduler, GCS, Secret Manager, Artifact Registry, Logging and Monitoring | Workflows, IAP services, Model Armor |
+| Infrastructure | Terraform, Docker, GitHub Actions (lint, types, tests, `terraform validate`) | Keyless deploys with Workload Identity Federation |
+| Agents | Google ADK scaffold in `packages/health_agents` | Gemini forecasters, investigator, code sandbox with receipts |
+| Protocols and web | | MCP server, Next.js with AG-UI |
+| Evals | One starter evalset in `evals/` | ~200-case suite, calibrated judge, red-team, CI gate |
+
+## Repository layout
+
+```text
+packages/
+  health_core/     settings and shared config
+  health_data/     Health API client, auth, reconcile, SQLite store, journal import, GCS sync (cha-data CLI)
+  health_agents/   ADK agent and tools (early scaffold)
+apps/jobs/         Cloud Run sync job and Dockerfile
+infra/             Terraform for the whole cloud slice, plus runbook (infra/README.md)
+config/            tracked-types configuration
+evals/             starter evalset
+tests/             222 tests on synthetic fixtures
+docs/              architecture, cloud design, spec, plan, research
+.github/workflows/ CI: lint, types, tests, terraform validate
 ```
 
-Rules: test-first, small commits, a fresh review per task, nothing merges red, and every
-cost-bearing or outward-facing step (Terraform apply, publishing) waits for explicit approval.
-
----
-
-## Stack
-
-| Layer | Choice |
-|---|---|
-| Agents | Google ADK 2.12 (graph workflow, explicit delegation, human approval) · Gemini 3.5 Flash-Lite by default |
-| Computation | Sandboxed Python/pandas executor · receipts for every number |
-| Data | Google Health API (read-only, reconciled) · SQLite · DuckDB · Parquet · pandera |
-| Forecasting | Proper scoring rules · baselines · statistical model · TimesFM via BigQuery |
-| Evals | ADK eval via pytest · binary rubrics · calibrated judge · Wilson CIs + McNemar · promptfoo red-team |
-| Observability | OpenTelemetry → Phoenix (local) / Cloud Trace |
-| Protocols | MCP (spec 2026-07-28) · AG-UI 1.0 |
-| Cloud | Cloud Run jobs + services (scale to zero) · Workflows · Scheduler · GCS · BigQuery · Secret Manager · IAP · Model Armor |
-| Delivery | Terraform · GitHub Actions with Workload Identity Federation · Docker · uv · ruff · pyright |
-| Web | Next.js 16 · AG-UI |
-
-Deliberately not used — LangGraph rewrite, fine-tuning, Kubernetes, Temporal, vector
-database servers — with reasons in the [architecture](docs/architecture.md).
-
-## Evidence this repo will publish
-
-Nothing below is measured yet; the table fills in as phases land.
-
-| Evidence | Phase |
-|---|---|
-| Forecast scoreboard with skill vs baselines, calibration, real n — public on GitHub Pages | 2 → ongoing |
-| PHIA-style ablation on my own data: no tools / tools / code / single vs multi-agent, with 95% intervals | 4 |
-| Judge calibration (true/false positive rates vs my labels) | 4 |
-| Red-team attack-success before/after, mapped to OWASP Agentic IDs | 4 |
-| Cost and latency per answer | 4 |
-| One trace-based failure retro | 4 |
-
-## Privacy, safety and cost
-
-- **Real data never goes public.** It lives in my GCP project behind IAP or on my machine.
-  Public material is synthetic (a statistical twin of my data) or aggregate (skill scores,
-  n, reliability plots).
-- **Read-only by construction**: read-only OAuth scopes, a 12-method allowlist in the API
-  client, read-only SQLite for the agent, no network in the code sandbox.
-- **Wellness only**: no diagnosis, no disease names, no clinical instructions — enforced
-  by an eval suite.
-- **Under $5/month**: free tiers, scale-to-zero, Flash-Lite, budget alerts at $2/$4, quota
-  limits. Breakdown in the [architecture](docs/architecture.md#12a-cost-architecture-budget-under-5month).
-
-## Develop
+## Quickstart
 
 ```bash
-uv sync --all-packages          # install the workspace
-uv run pytest -q                # tests run on synthetic fixtures; no real data or config needed
+uv sync --all-packages     # install the workspace (Python 3.13)
+uv run pytest -q           # 222 tests on synthetic fixtures; no real data or credentials needed
+uv run cha-data --help     # the data CLI
 ```
 
-Owner-only commands (need my own Google account and GCP project; not required to run the tests):
+Owner-only commands (need my own Google account and GCP project; not needed for the tests):
 
 ```bash
-uv run cha-data auth login          # Health consent (read-only Health scopes only)
-uv run cha-data auth login-forms    # separate Forms token for the journal (Health rejects mixed scopes)
-CHA_TOKEN_SECRET=oauth-token CHA_CLIENT_SECRET_SECRET=oauth-client CHA_FORMS_TOKEN_SECRET=oauth-forms-token uv run cha-data auth push-secret   # tokens -> Secret Manager
-export CHA_DB_BUCKET=<bucket>       # GCS is the source of truth: every write command needs it
-uv run cha-data db pull             # fetch the database (refuses to overwrite unpushed local changes; --force to discard them)
-uv run cha-data backfill --since <YYYY-MM-DD>   # write commands check freshness first and push after
-uv run cha-data sync
-uv run cha-data journal import
-uv run cha-data db repair           # re-fetch history under the owner-zone civil-day rule
-uv run cha-data probe               # what each readable type returns
-uv run cha-data parity              # rollup vs reconcile agreement
+uv run cha-data auth login          # Health token (read-only Health scopes only)
+uv run cha-data auth login-forms    # separate Forms token for the journal
+uv run cha-data auth push-secret    # upload tokens to Secret Manager
+export CHA_DB_BUCKET=<bucket>       # GCS is the source of truth for write commands
+uv run cha-data db pull             # fetch the database (refuses to overwrite unpushed local changes)
+uv run cha-data sync                # sync every tracked type
+uv run cha-data journal import      # import Form responses
+uv run cha-data backfill --since <YYYY-MM-DD>
+uv run cha-data db repair           # re-fetch history under the civil-day rule
 ```
 
-Without `CHA_DB_BUCKET`, write commands refuse to run in real mode. `cha-data --local-only <command>`
-writes a local scratch copy that is never pushed (and that a later `db pull` will not silently
-overwrite). The journal has one writer: the Google Form, read by `journal import`.
+`cha-data --local-only <command>` writes a scratch copy that is never pushed. Cloud runbook:
+[infra/README.md](infra/README.md).
 
-Cloud runbook: [infra/README.md](infra/README.md).
-
-## Docs
+## Documentation
 
 | Read | For |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | How it works end to end, with diagrams |
-| [docs/cloud-design.md](docs/cloud-design.md) | The Phase 1 cloud design: components, security, reliability, cost |
-| [Spec](docs/superpowers/specs/2026-10-20-calibrated-health-agent-design.md) | Goals, non-goals, decisions and why |
+| [docs/architecture.md](docs/architecture.md) | The full system design, end to end |
+| [docs/cloud-design.md](docs/cloud-design.md) | The live cloud design: components, security, reliability, cost |
+| [Spec](docs/superpowers/specs/2026-10-20-calibrated-health-agent-design.md) | Vision, goals, non-goals, phases |
 | [Phase 1 plan](docs/superpowers/plans/2026-10-20-phase-1-foundation.md) | The executable task list |
-| [docs/research/](docs/research/) | The research behind every decision, with sources |
+| [Research](docs/research/00-synthesis.md) | The research behind each decision, with sources |
 
-## Standing on
+## Roadmap
 
-Google Research's PHIA and Personal Health Agent work · Anthropic's *Building effective
-agents* · Hamel Husain & Shreya Shankar on evals · Gneiting & Raftery on proper scoring
-rules · Hyndman & Athanasopoulos, *Forecasting: Principles and Practice* · the AHRQ
-N-of-1 trials guide · Quantified Self · Simon Willison's lethal trifecta.
-Full list with links: [docs/research/07-pioneers-and-references.md](docs/research/07-pioneers-and-references.md).
+2. **Stats + ledger:** robust baselines, seven forecasters, locked and hash-chained forecasts, investigator loop, public scoreboard.
+3. **Agent core:** ADK workflow, single vs multi-agent topologies, sandboxed code with receipts, memory.
+4. **Evals:** ~200 cases, calibrated judge, red-team, CI gate, OpenTelemetry tracing.
+5. **MCP server:** read-only tools callable from Claude Desktop.
+6. **GCP as code:** Workflows, IAP-protected services, BigQuery and the forecast lock, keyless CI deploys.
+7. **Web:** forecast ledger and receipts views.
+8. **Publish:** scorecard, write-ups and demo.
+
+## Disclaimer
+
+Not medical advice and not a medical device. This project describes one person's data and
+does not diagnose. Built with AI assistance; the agent's outputs can be wrong, which is why it keeps score.
 
 ## License
 
-Code: Apache-2.0. Synthetic dataset (when published): CC-BY-4.0.
+Code: Apache-2.0 (see [LICENSE](LICENSE)). A synthetic dataset, when published: CC-BY-4.0.
