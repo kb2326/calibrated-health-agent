@@ -20,13 +20,21 @@ method allowlist.
 """
 from __future__ import annotations
 
-import os
-
 from google.adk.agents import LlmAgent
+from health_core.settings import get_settings
 
 from . import api_tools, tools
 
-MODEL = os.environ.get("HEALTH_AGENT_MODEL", "gemini-2.5-flash")
+MODEL = get_settings().model_default
+
+# Delegation mode of each specialist, set explicitly rather than left to ADK's
+# default. `LlmAgent(mode=...)` accepts "chat" | "task" | "single_turn"
+# (google-adk 2.12.0; https://adk.dev/agents/llm-agents/ and the field
+# docstring in google.adk.agents.llm_agent.LlmAgent). Phase 1 uses
+# "single_turn" for all three: they complete a job without chatting with the
+# user, and "task" mode is unavailable inside graph workflows. Final modes are
+# decided with the Phase 3 workflow design.
+SUB_AGENT_MODE = "single_turn"
 
 # Grounding rules every specialist inherits. Stated once so the three
 # instructions differ only in the job they do.
@@ -51,6 +59,7 @@ Non-negotiables:
 data_scientist = LlmAgent(
     name="data_scientist",
     model=MODEL,
+    mode=SUB_AGENT_MODE,
     description=(
         "Statistical analysis of the health time series. Handles trends, "
         "comparisons between periods, outliers, correlations, and any "
@@ -86,6 +95,7 @@ your data" is a correct and useful answer.
 domain_expert = LlmAgent(
     name="domain_expert",
     model=MODEL,
+    mode=SUB_AGENT_MODE,
     description=(
         "Physiological and metric interpretation. Explains what a metric "
         "means, what ranges are typical, and how measurements are derived "
@@ -124,6 +134,7 @@ Never diagnose, and never speculate about a condition.
 health_coach = LlmAgent(
     name="health_coach",
     model=MODEL,
+    mode=SUB_AGENT_MODE,
     description=(
         "Behavioural support: goals, habits, and what to do next, grounded "
         "in the person's own trends and their subjective journal."
