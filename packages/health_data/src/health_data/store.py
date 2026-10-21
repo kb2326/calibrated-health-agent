@@ -7,10 +7,15 @@ can never silently overwrite each other.
 Pull and push also record the content hash of the local file (`data/.db_content_sha256`).
 A later `db pull` compares the local file with it and refuses to overwrite a database that
 changed since (unpushed local work) unless forced.
+
+The sync job also writes a small heartbeat object beside the database
+(`<object>.heartbeat.json`) on every run, pushed or not, so "when was the data last
+checked" stays current even when a run changed nothing and skipped the push.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -191,3 +196,19 @@ def push_recorded(bucket: str, obj: str, src: Path, *, client: Any | None = None
     """Push using the recorded generation; no recorded generation means create (precondition 0)."""
     local = recorded_generation(gen_path)
     return push_db(bucket, obj, src, 0 if local is None else local, client=client, gen_path=gen_path)
+
+
+def heartbeat_object(obj: str) -> str:
+    return f"{obj}.heartbeat.json"
+
+
+def read_heartbeat(bucket: str, obj: str, *, client: Any | None = None) -> dict[str, Any] | None:
+    """The sync job's last heartbeat (None if it has never written one)."""
+    blob = _client(client).bucket(bucket).get_blob(heartbeat_object(obj))
+    return None if blob is None else json.loads(blob.download_as_text())
+
+
+def write_heartbeat(bucket: str, obj: str, beat: dict[str, Any], *, client: Any | None = None) -> None:
+    """Overwrite the heartbeat (no generation guard: the latest run wins, the database is untouched)."""
+    blob = _client(client).bucket(bucket).blob(heartbeat_object(obj))
+    blob.upload_from_string(json.dumps(beat), content_type="application/json")

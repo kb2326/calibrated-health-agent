@@ -78,6 +78,32 @@ Local `infra/terraform.tfvars` (gitignored, never commit) holds
    `terraform apply` to restore the template. Confirm the alert email arrives
    (log policy is rate limited to one per hour).
 
+## Rollback (needs owner approval)
+
+**Image only, same schema.** Artifact Registry keeps the 3 most recent images. Set
+`job_image` in `infra/terraform.tfvars` to the previous tag, then `terraform plan -out
+tfplan` and `terraform apply tfplan`.
+
+**Across a schema change.** An older image refuses a database with a newer schema
+(`SchemaTooNewError`, logged as an ERROR, so the alert fires) and never writes to it.
+To go back to an older image after a migration, restore the database too, from a
+noncurrent bucket version (kept 14 days):
+
+1. Pause both schedulers so no run writes mid-restore:
+   `gcloud scheduler jobs pause sync-hourly --location us-central1` (same for `sync-evening`).
+2. List versions and pick the last generation written by the older schema:
+   `gcloud storage ls -a gs://artful-timing-506108-n8-health-db/health.db`.
+3. Make that version current again (a copy creates a new generation; nothing is deleted):
+   `gcloud storage cp gs://artful-timing-506108-n8-health-db/health.db#<generation> gs://artful-timing-506108-n8-health-db/health.db`.
+4. Roll the image back as above, then run once and check the logs:
+   `gcloud run jobs execute sync --region us-central1 --wait`.
+5. Resume both schedulers (`gcloud scheduler jobs resume ...`).
+
+Nothing is lost by the restore. Each type's restored cursor is older, so the next sync
+re-fetches from that day, and the journal import re-reads every Form response and skips
+the ones already stored. The heartbeat object (`health.db.heartbeat.json`) needs no
+restore; the next run overwrites it.
+
 ## Plan-only review without the real backend
 
 Add a temporary `infra/backend_override.tf` containing
