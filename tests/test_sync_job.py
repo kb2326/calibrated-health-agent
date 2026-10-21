@@ -41,9 +41,10 @@ def test_job_exit_nonzero_on_reauth(calls, monkeypatch, capsys):
 
     monkeypatch.setattr(sync, "run", reauth)
     assert sync_job.main([]) == 1
-    assert "push" not in calls and "import" not in calls
-    last = _lines(capsys)[-1]
-    assert last["severity"] == "ERROR" and last["step"] == "sync"
+    assert "push" not in calls and "import" in calls  # journal still runs; nothing pushed
+    lines = _lines(capsys)
+    assert any(x["severity"] == "ERROR" and x["step"] == "sync" for x in lines)
+    assert lines[-1]["step"] == "push" and "skipped" in lines[-1]["result"]
 
 
 def test_job_nonzero_on_concurrent_update(calls, monkeypatch, capsys):
@@ -57,7 +58,8 @@ def test_job_nonzero_on_concurrent_update(calls, monkeypatch, capsys):
 
 
 def test_partial_sync_pushes_then_fails(calls, monkeypatch, capsys):
-    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"error": "boom"}})
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {
+        "steps": {"error": "boom"}, "sleep": {"fetched": 2, "inserted": 1}})
     assert sync_job.main([]) == 1
     assert calls[-1] == "push"
     assert any(line["severity"] == "ERROR" for line in _lines(capsys))
@@ -65,12 +67,13 @@ def test_partial_sync_pushes_then_fails(calls, monkeypatch, capsys):
 
 def test_journal_failure_still_pushes_sync_work(calls, monkeypatch, capsys):
     def boom(_s):
-        raise RuntimeError("x")
+        raise RuntimeError("answer 7 leaked?")
 
     monkeypatch.setattr(sync_job, "_journal_import", boom)
     assert sync_job.main([]) == 1
     assert calls[-1] == "push"
-    assert any(x["severity"] == "ERROR" and x["step"] == "journal" for x in _lines(capsys))
+    line = next(x for x in _lines(capsys) if x["step"] == "journal")
+    assert line == {"severity": "ERROR", "step": "journal", "error": "RuntimeError", "response_id": None}
 
 
 def test_failed_pull_runs_nothing_downstream(calls, monkeypatch, capsys):
@@ -87,8 +90,60 @@ def test_failed_pull_runs_nothing_downstream(calls, monkeypatch, capsys):
 def test_empty_sync_summary_is_an_error(calls, monkeypatch, capsys):
     monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {})
     assert sync_job.main([]) == 1
-    assert "push" not in calls
     assert any(x["severity"] == "ERROR" and x["step"] == "sync" for x in _lines(capsys))
+
+
+def test_sync_exception_still_imports_journal_and_pushes(calls, monkeypatch, capsys):
+    def crash():
+        calls.append("sync")
+        raise RuntimeError("bug in sync")
+
+    monkeypatch.setattr(sync, "run", crash)
+    assert sync_job.main([]) == 1
+    assert calls == ["pull", "migrate", "sync", "import", "push"]
+
+
+def test_failed_migrate_runs_nothing_downstream(calls, monkeypatch, capsys):
+    def boom():
+        raise RuntimeError("bad schema")
+
+    monkeypatch.setattr(sync_job, "_migrate", boom)
+    assert sync_job.main([]) == 1
+    assert calls == ["pull"]
+
+
+def test_push_skipped_when_no_data_changed(calls, monkeypatch, capsys):
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {
+        "steps": {"fetched": 9, "inserted": 0}, "_devices": {"error": "403"}})
+    monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 0})
+    assert sync_job.main([]) == 0  # the device failure is not a failure
+    assert "push" not in calls
+    assert _lines(capsys)[-1] == {"severity": "INFO", "step": "push", "result": "skipped (no data changed)"}
+
+
+def test_new_journal_submission_alone_is_pushed(calls, monkeypatch):
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"fetched": 9, "inserted": 0}})
+    monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 1})
+    assert sync_job.main([]) == 0
+    assert calls[-1] == "push"
+
+
+def test_journal_error_log_has_type_and_response_id_only(calls, monkeypatch, capsys):
+    from health_data.journal_import import JournalImportError
+
+    def boom(_s):
+        raise JournalImportError("ValueError", "resp-42")
+
+    monkeypatch.setattr(sync_job, "_journal_import", boom)
+    assert sync_job.main([]) == 1
+    line = next(x for x in _lines(capsys) if x["step"] == "journal")
+    assert line == {"severity": "ERROR", "step": "journal", "error": "ValueError", "response_id": "resp-42"}
+
+
+def test_db_path_restored_after_dry_run(calls):
+    before = db.DB_PATH
+    sync_job.main(["--dry-run"])
+    assert db.DB_PATH == before
 
 
 def test_dry_run_never_pushes(calls):
