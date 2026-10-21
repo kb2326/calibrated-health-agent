@@ -5,6 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,11 +21,22 @@ class Settings(BaseSettings):
     db_object: str = "health.db"
     token_secret: str | None = None
     client_secret_secret: str | None = None
+    forms_token_secret: str | None = None
     journal_form_id: str | None = None
+    # Defaults to <config_dir>/forms_token.json (see _forms_token_follows_config_dir).
     forms_token_path: Path = Path("config/forms_token.json")
     timezone: str = "Asia/Kolkata"
     # Verified against https://ai.google.dev/gemini-api/docs/models (stable).
     model_default: str = "gemini-3.5-flash-lite"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _forms_token_follows_config_dir(cls, data: object) -> object:
+        """Unless set explicitly, the Forms token lives next to the other config files."""
+        if isinstance(data, dict) and not data.get("forms_token_path"):
+            config_dir = data.get("config_dir") or "config"
+            return {**data, "forms_token_path": Path(str(config_dir)) / "forms_token.json"}
+        return data
 
     @property
     def db_path(self) -> Path:

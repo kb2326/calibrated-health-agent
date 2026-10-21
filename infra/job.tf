@@ -34,6 +34,10 @@ resource "google_cloud_run_v2_job" "sync" {
           value = google_secret_manager_secret.oauth_token.secret_id
         }
         env {
+          name  = "CHA_FORMS_TOKEN_SECRET"
+          value = google_secret_manager_secret.oauth_forms_token.secret_id
+        }
+        env {
           name  = "CHA_CLIENT_SECRET_SECRET"
           value = google_secret_manager_secret.oauth_client.secret_id
         }

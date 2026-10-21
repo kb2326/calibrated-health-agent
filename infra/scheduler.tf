@@ -18,10 +18,6 @@ resource "google_cloud_scheduler_job" "sync" {
 
   attempt_deadline = "180s"
 
-  retry_config {
-    retry_count = 0
-  }
-
   http_target {
     http_method = "POST"
     uri         = local.run_uri

@@ -20,13 +20,21 @@ method allowlist.
 """
 from __future__ import annotations
 
-import os
-
 from google.adk.agents import LlmAgent
+from health_core.settings import get_settings
 
 from . import api_tools, tools
 
-MODEL = os.environ.get("HEALTH_AGENT_MODEL", "gemini-2.5-flash")
+MODEL = get_settings().model_default
+
+# Delegation mode of each specialist, set explicitly rather than left to ADK's
+# default. `LlmAgent(mode=...)` accepts "chat" | "task" | "single_turn"
+# (google-adk 2.12.0; https://adk.dev/agents/llm-agents/ and the field
+# docstring in google.adk.agents.llm_agent.LlmAgent). Phase 1 uses
+# "single_turn" for all three: they complete a job without chatting with the
+# user, and "task" mode is unavailable inside graph workflows. Final modes are
+# decided with the Phase 3 workflow design.
+SUB_AGENT_MODE = "single_turn"
 
 # Grounding rules every specialist inherits. Stated once so the three
 # instructions differ only in the job they do.
@@ -44,6 +52,9 @@ Non-negotiables:
   from activity data, and never fill a gap with a plausible number.
 - You cannot change anything. This is a read-only view of the data; there
   is no tool that writes, and you should not offer to.
+- Know how fresh the data is. Tools report `as_of` (the owner's today and
+  the last sync); if the latest sync is old or the local copy is behind the
+  bucket, say so before describing recent days.
 - You are not a clinician. For anything that sounds medical, describe what
   the data shows and recommend a professional. Never diagnose.
 """
@@ -51,6 +62,7 @@ Non-negotiables:
 data_scientist = LlmAgent(
     name="data_scientist",
     model=MODEL,
+    mode=SUB_AGENT_MODE,
     description=(
         "Statistical analysis of the health time series. Handles trends, "
         "comparisons between periods, outliers, correlations, and any "
@@ -77,7 +89,7 @@ your data" is a correct and useful answer.
     tools=[
         tools.list_metrics, tools.describe_substrate, tools.get_metric_series,
         tools.compare_periods, tools.get_anomalies, tools.get_correlations,
-        tools.get_journal, tools.get_signal_reliability, tools.run_sql,
+        tools.get_journal, tools.run_sql,
         api_tools.sources_for_metric,
     ],
     output_key="analysis",
@@ -86,6 +98,7 @@ your data" is a correct and useful answer.
 domain_expert = LlmAgent(
     name="domain_expert",
     model=MODEL,
+    mode=SUB_AGENT_MODE,
     description=(
         "Physiological and metric interpretation. Explains what a metric "
         "means, what ranges are typical, and how measurements are derived "
@@ -124,6 +137,7 @@ Never diagnose, and never speculate about a condition.
 health_coach = LlmAgent(
     name="health_coach",
     model=MODEL,
+    mode=SUB_AGENT_MODE,
     description=(
         "Behavioural support: goals, habits, and what to do next, grounded "
         "in the person's own trends and their subjective journal."
@@ -148,7 +162,7 @@ How to be useful rather than generic:
 """,
     tools=[
         tools.get_metric_series, tools.compare_periods, tools.get_journal,
-        tools.get_anomalies, tools.get_signal_reliability, tools.list_metrics,
+        tools.get_anomalies, tools.list_metrics,
     ],
     output_key="coaching",
 )

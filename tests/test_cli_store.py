@@ -30,8 +30,9 @@ def calls(monkeypatch, tmp_path):
     return log
 
 
-def _settings(monkeypatch, bucket):
-    monkeypatch.setattr(cli, "get_settings", lambda: Settings.model_validate({"db_bucket": bucket}))
+def _settings(monkeypatch, bucket, mode="real"):
+    monkeypatch.setattr(
+        cli, "get_settings", lambda: Settings.model_validate({"db_bucket": bucket, "data_mode": mode}))
 
 
 def _write(calls):
@@ -50,11 +51,76 @@ def test_guard_wraps_write_with_fresh_and_push(monkeypatch, calls):
     assert calls == ["fresh", "write", "push"]
 
 
-def test_guard_is_noop_without_bucket(monkeypatch, calls):
+@pytest.mark.parametrize("cmd", [["db", "migrate"], ["db", "vacuum"], ["sync"], ["journal", "import"],
+                                 ["backfill", "--since", "2026-10-01"], ["db", "repair"]])
+def test_real_mode_write_without_bucket_is_refused(monkeypatch, calls, cmd):
     _settings(monkeypatch, None)
+    monkeypatch.setattr(cli.db, "init_db", _write(calls))
+    result = runner.invoke(cli.app, cmd)
+    assert result.exit_code == 1
+    assert "CHA_DB_BUCKET is not set" in result.output and "db pull" in result.output
+    assert "--local-only" in result.output
+    assert calls == []
+
+
+def test_local_only_writes_without_push(monkeypatch, calls):
+    _settings(monkeypatch, None)
+    monkeypatch.setattr(cli.db, "init_db", _write(calls))
+    assert runner.invoke(cli.app, ["--local-only", "db", "migrate"]).exit_code == 0
+    assert calls == ["write"]
+
+
+def test_synthetic_mode_needs_no_bucket(monkeypatch, calls):
+    _settings(monkeypatch, None, mode="synthetic")
     monkeypatch.setattr(cli.db, "init_db", _write(calls))
     assert runner.invoke(cli.app, ["db", "migrate"]).exit_code == 0
     assert calls == ["write"]
+
+
+def test_db_pull_refuses_to_discard_local_changes(monkeypatch, tmp_path):
+    client = FakeClient()
+    client.b.objects["health.db"] = (b"remote-v1", 7)
+    monkeypatch.setattr(store, "_client", lambda c: client)
+    local = tmp_path / "health.db"
+    monkeypatch.setattr(cli.db, "DB_PATH", local)
+    monkeypatch.setattr(store, "_gen_path", lambda p: tmp_path / ".db_generation")
+    _settings(monkeypatch, "bkt")
+    assert runner.invoke(cli.app, ["db", "pull"]).exit_code == 0  # nothing local yet
+    assert runner.invoke(cli.app, ["db", "pull"]).exit_code == 0  # unchanged since pull
+    local.write_bytes(b"local unpushed work")
+    client.b.objects["health.db"] = (b"remote-v2", 8)
+    refused = runner.invoke(cli.app, ["db", "pull"])
+    assert refused.exit_code == 1 and "--force" in refused.output and "db push" in refused.output
+    assert local.read_bytes() == b"local unpushed work"
+    forced = runner.invoke(cli.app, ["db", "pull", "--force"])
+    assert forced.exit_code == 0 and local.read_bytes() == b"remote-v2"
+    assert runner.invoke(cli.app, ["db", "pull"]).exit_code == 0
+
+
+def test_db_pull_refuses_unknown_local_file(monkeypatch, tmp_path):
+    client = FakeClient()
+    client.b.objects["health.db"] = (b"remote", 7)
+    monkeypatch.setattr(store, "_client", lambda c: client)
+    (tmp_path / "health.db").write_bytes(b"never pulled")
+    monkeypatch.setattr(cli.db, "DB_PATH", tmp_path / "health.db")
+    monkeypatch.setattr(store, "_gen_path", lambda p: tmp_path / ".db_generation")
+    _settings(monkeypatch, "bkt")
+    result = runner.invoke(cli.app, ["db", "pull"])
+    assert result.exit_code == 1 and "never pulled or pushed" in result.output
+
+
+def test_push_records_hash_so_a_later_pull_is_allowed(monkeypatch, tmp_path):
+    client = FakeClient()
+    client.b.objects["health.db"] = (b"remote", 7)
+    monkeypatch.setattr(store, "_client", lambda c: client)
+    monkeypatch.setattr(store, "_gen_path", lambda p: tmp_path / ".db_generation")
+    monkeypatch.setattr(cli.db, "DB_PATH", tmp_path / "health.db")
+    _settings(monkeypatch, "bkt")
+    assert runner.invoke(cli.app, ["db", "pull"]).exit_code == 0
+    (tmp_path / "health.db").unlink()
+    _db(tmp_path / "health.db")  # local work...
+    assert runner.invoke(cli.app, ["db", "push"]).exit_code == 0  # ...pushed
+    assert runner.invoke(cli.app, ["db", "pull"]).exit_code == 0
 
 
 def test_stale_blocks_write_with_one_line(monkeypatch, calls):

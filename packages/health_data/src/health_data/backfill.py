@@ -4,6 +4,7 @@ History is walked oldest-first in windows no longer than the type's API range
 cap. Rows and the type's backfill cursor commit together after every window,
 so a failure keeps everything already fetched and a rerun carries on from the
 first incomplete window. Re-ingesting a window is idempotent (unique keys).
+Windows are owner-zone civil days (see health_data.civil).
 
 The cursor lives in `sync_state` under `backfill:<type>`, separate from the
 live-sync cursor (which sits near "now" and would otherwise make every
@@ -12,12 +13,9 @@ Backfill covers [since, today); today itself belongs to `sync`.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date, timedelta
 
-from health_core.settings import get_settings
-
-from health_data import client, db, sync
+from health_data import civil, client, db, sync
 
 PREFIX = "backfill:"
 
@@ -39,7 +37,8 @@ def window_days(data_type: str) -> int:
 
 
 def _today() -> date:
-    return datetime.now(ZoneInfo(get_settings().timezone)).date()
+    """Today in the owner zone (`Settings.timezone`); backfill covers days before it."""
+    return civil.today()
 
 
 def _coverage(conn, data_type: str) -> tuple[date, date] | None:
@@ -56,12 +55,6 @@ def _coverage(conn, data_type: str) -> tuple[date, date] | None:
     return lo, hi
 
 
-def _count(conn, data_type: str) -> int:
-    return conn.execute(
-        "SELECT COUNT(*) FROM raw_points WHERE data_type=?", (data_type,)
-    ).fetchone()[0]
-
-
 def _save(conn, data_type: str, lo: date, hi: date) -> None:
     conn.execute(
         """INSERT INTO sync_state (data_type, cursor_time, last_synced_at)
@@ -75,18 +68,14 @@ def _save(conn, data_type: str, lo: date, hi: date) -> None:
 
 def _window(conn, data_type: str, lo: date, hi: date, inserted: dict, errors: dict) -> bool:
     """Ingest [lo, hi); False (with the window rolled back) on an API failure."""
-    before = _count(conn, data_type)
     counters = {"fetched": 0, "inserted": 0}
     try:
-        sync.ingest(
-            conn, data_type, f"{lo.isoformat()}T00:00:00+00:00",
-            f"{hi.isoformat()}T00:00:00+00:00", counters, inclusive_end_day=False,
-        )
+        sync.ingest(conn, data_type, lo, hi, counters)
     except client.HealthApiError as e:
         conn.rollback()  # drop the partial window, keep completed ones
         errors[data_type] = str(e)[:200]
         return False
-    inserted[data_type] += _count(conn, data_type) - before
+    inserted[data_type] += counters["inserted"]  # new-or-changed rows
     return True
 
 

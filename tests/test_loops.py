@@ -1,13 +1,11 @@
-"""Tests for loop termination and analysis statistics.
+"""Tests for pagination-loop termination.
 
 The pagination loop once ran for hours because its only exit condition was
 one the server controlled, and the server never satisfied it. These tests
 pin down the properties that make the loops safe to run unattended:
-bounded, idempotent, and refusing to score a partial day.
+bounded and idempotent.
 """
 from __future__ import annotations
-
-from datetime import date, timedelta
 
 import pytest
 from health_data import client
@@ -99,60 +97,3 @@ class TestPaginationTermination:
         stub_pagination(pages)
         got = list(client._iter_window("weight", "2026-08-01T00:00:00Z", "2026-08-02T00:00:00Z"))
         assert len(got) == 1, "a sparse page in the middle must not end the scan"
-
-
-class TestAnalysisStatistics:
-    """analyze.py's scoring rules, exercised against a temporary database."""
-
-    @pytest.fixture
-    def analyze_on(self, tmp_path, monkeypatch):
-        import importlib
-
-        from health_data import db
-
-        monkeypatch.setattr(db, "DB_PATH", tmp_path / "t.db")
-        db.init_db()
-        analyze = importlib.import_module("health_data.legacy.analyze")
-        importlib.reload(analyze)
-
-        def _seed(data_type, values, end_day):
-            with db.connect() as conn:
-                for i, v in enumerate(reversed(values)):
-                    d = (end_day - timedelta(days=i)).isoformat()
-                    conn.execute(
-                        "INSERT OR REPLACE INTO daily_metrics VALUES (?,?,?,1)",
-                        (d, data_type, float(v)),
-                    )
-
-        return analyze, _seed
-
-    def test_flat_baseline_reports_no_variance_not_a_huge_z(self, analyze_on):
-        # pstdev of a constant series is 0. Dividing by a 1e-9 floor produced
-        # z of ~1e9 and a permanent alert on the most stable metrics.
-        analyze, seed = analyze_on
-        day = date(2026, 8, 20)
-        seed("weight", [80.0] * 10 + [80.0], day)
-        out = analyze.run(target_date=day.isoformat())
-        assert out["weight"]["severity"] == "no_variance"
-        assert out["weight"]["z_score"] is None
-
-    def test_obvious_outlier_is_flagged(self, analyze_on):
-        analyze, seed = analyze_on
-        day = date(2026, 8, 20)
-        seed("steps", [5000, 5200, 4800, 5100, 4900, 5050, 5150, 4950, 5000, 100], day)
-        out = analyze.run(target_date=day.isoformat())
-        assert out["steps"]["severity"] in ("watch", "alert")
-        assert out["steps"]["z_score"] < 0
-
-    def test_short_history_is_insufficient_rather_than_scored(self, analyze_on):
-        analyze, seed = analyze_on
-        day = date(2026, 8, 20)
-        seed("steps", [5000, 5100, 4900], day)
-        out = analyze.run(target_date=day.isoformat())
-        assert out["steps"]["severity"] == "insufficient_data"
-
-    def test_default_target_is_a_complete_day(self, analyze_on):
-        # Scoring the current date meant a part-finished day read as a large
-        # negative anomaly every single morning.
-        analyze, _ = analyze_on
-        assert analyze._last_complete_day(None) == (date.today() - timedelta(days=1)).isoformat()

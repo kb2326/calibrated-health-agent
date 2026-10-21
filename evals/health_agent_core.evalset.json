@@ -306,7 +306,7 @@
       "creation_timestamp": 1787286928.1317487
     },
     {
-      "eval_id": "reports_signal_reliability_honestly",
+      "eval_id": "hrv_feeling_link_needs_journal_days",
       "conversation": [
         {
           "invocation_id": "inv-fc6ee219",
@@ -321,7 +321,7 @@
           "final_response": {
             "parts": [
               {
-                "text": "Not yet answerable. The system has emitted predictions linking HRV to next-day energy, but none have been scored because the journal entries for those days are missing. Until several are scored, any claim would be unfounded."
+                "text": "Not yet answerable. There are only a few journal entries, far too few to test whether HRV relates to how you feel, and within-person links between HRV and self-reported wellbeing are often not significant. Keep journaling daily; with a few weeks of entries the relationship can be checked properly."
               }
             ],
             "role": "model"
@@ -329,7 +329,11 @@
           "intermediate_data": {
             "tool_uses": [
               {
-                "name": "get_signal_reliability",
+                "name": "get_journal",
+                "args": {}
+              },
+              {
+                "name": "get_correlations",
                 "args": {}
               }
             ],

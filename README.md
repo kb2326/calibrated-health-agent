@@ -4,7 +4,7 @@
 itself against simple baselines on my real wearable data, shows a code receipt for every
 number, and publishes its evals — including where it loses.
 
-![status](https://img.shields.io/badge/status-phase%200%20of%208%20·%20design%20approved-blue)
+![status](https://img.shields.io/badge/status-phase%201%20of%208%20·%20foundation%20done-blue)
 ![budget](https://img.shields.io/badge/run%20cost-under%20%245%2Fmonth-brightgreen)
 ![data](https://img.shields.io/badge/Google%20Health%20API-read--only-informational)
 ![license](https://img.shields.io/badge/license-Apache--2.0-lightgrey)
@@ -32,7 +32,7 @@ number, and publishes its evals — including where it loses.
 | Phase | What | State |
 |---|---|---|
 | 0 | Research, live API verification, design | ✅ done |
-| 1 | Foundation: repo, pure + complete ingestion, journal capture, free-tier GCP sync | ⏳ next |
+| 1 | Foundation: repo, pure + complete ingestion, journal capture, free-tier GCP sync | ✅ done ([cloud design](docs/cloud-design.md)) |
 | 2 | Honest statistics + forecast ledger | planned |
 | 3 | Agent core: code receipts, guarded tools, memory | planned |
 | 4 | Evals, red-team, CI gate, tracing | planned |
@@ -127,7 +127,7 @@ Full design: **[docs/architecture.md](docs/architecture.md)** · requirements:
 
 ```mermaid
 flowchart LR
-  P0["0 · Research<br/>✅"] --> P1["1 · Foundation"]
+  P0["0 · Research<br/>✅"] --> P1["1 · Foundation<br/>✅"]
   P1 --> P2["2 · Stats + ledger"]
   P1 --> P3["3 · Agent core"]
   P3 --> P4["4 · Evals + tracing"]
@@ -142,7 +142,7 @@ flowchart LR
 
 | # | Phase | Delivers | Done when |
 |---|---|---|---|
-| 1 | Foundation | uv monorepo · reconciled sync with extra data types and scopes · full backfill · journal via Google Form · ADK 2.12 with explicit delegation · Terraform free-tier slice (bucket, secrets, Cloud Run job, Scheduler, budget) | I journal from my phone; the cloud sync runs daily without my laptop; a fresh clone passes tests |
+| 1 | Foundation | uv monorepo · reconciled sync with extra data types and scopes · full backfill · journal via Google Form · ADK 2.12 with explicit delegation · Terraform free-tier slice (bucket, secrets, Cloud Run job, Scheduler, budget, three alert policies) | I journal from my phone; the cloud sync runs daily without my laptop; a fresh clone passes tests |
 | 2 | Stats + ledger | Wear rules · robust baselines · corrected associations (detrended, CIs, FDR) · six forecasters · pre-registered analysis plan · event-triggered lock · blinding · hash chain to a public log · **public scoreboard on GitHub Pages** | Locked, hash-chained forecasts every day; scoreboard live and updating |
 | 3 | Agent core | ADK graph workflow · single vs multi topologies · sandboxed code + receipts · hardened `run_sql` · untrusted-text wrapping · memory · **investigator loop + "with own notes" forecaster** | Every numeric answer has a re-runnable receipt; the investigator writes hypotheses nightly |
 | 4 | Evals + tracing | ~200 cases across core, ablation, medical boundary, security, multi-turn · calibrated judge · CI gate · OpenTelemetry | A deliberately regressed prompt fails the gate |
@@ -221,21 +221,39 @@ Nothing below is measured yet; the table fills in as phases land.
 
 ## Develop
 
-> Available after Phase 1. Planned commands:
-
 ```bash
 uv sync --all-packages          # install the workspace
-uv run pytest -q                # tests run on synthetic fixtures — no real data needed
-uv run cha-data auth login      # owner only: Google Health consent (read-only)
-uv run cha-data backfill --since <YYYY-MM-DD>
-uv run cha-data sync
+uv run pytest -q                # tests run on synthetic fixtures; no real data or config needed
 ```
+
+Owner-only commands (need my own Google account and GCP project; not required to run the tests):
+
+```bash
+uv run cha-data auth login          # Health consent (read-only Health scopes only)
+uv run cha-data auth login-forms    # separate Forms token for the journal (Health rejects mixed scopes)
+CHA_TOKEN_SECRET=oauth-token CHA_CLIENT_SECRET_SECRET=oauth-client CHA_FORMS_TOKEN_SECRET=oauth-forms-token uv run cha-data auth push-secret   # tokens -> Secret Manager
+export CHA_DB_BUCKET=<bucket>       # GCS is the source of truth: every write command needs it
+uv run cha-data db pull             # fetch the database (refuses to overwrite unpushed local changes; --force to discard them)
+uv run cha-data backfill --since <YYYY-MM-DD>   # write commands check freshness first and push after
+uv run cha-data sync
+uv run cha-data journal import
+uv run cha-data db repair           # re-fetch history under the owner-zone civil-day rule
+uv run cha-data probe               # what each readable type returns
+uv run cha-data parity              # rollup vs reconcile agreement
+```
+
+Without `CHA_DB_BUCKET`, write commands refuse to run in real mode. `cha-data --local-only <command>`
+writes a local scratch copy that is never pushed (and that a later `db pull` will not silently
+overwrite). The journal has one writer: the Google Form, read by `journal import`.
+
+Cloud runbook: [infra/README.md](infra/README.md).
 
 ## Docs
 
 | Read | For |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | How it works end to end, with diagrams |
+| [docs/cloud-design.md](docs/cloud-design.md) | The Phase 1 cloud design: components, security, reliability, cost |
 | [Spec](docs/superpowers/specs/2026-10-20-calibrated-health-agent-design.md) | Goals, non-goals, decisions and why |
 | [Phase 1 plan](docs/superpowers/plans/2026-10-20-phase-1-foundation.md) | The executable task list |
 | [docs/research/](docs/research/) | The research behind every decision, with sources |

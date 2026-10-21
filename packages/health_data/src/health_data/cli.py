@@ -1,16 +1,25 @@
-"""`cha-data`: data-layer commands. Never prints answer values."""
+"""`cha-data`: data-layer commands. Never prints answer values.
+
+Write guard (GCS is the source of truth). With `CHA_DATA_MODE=real` every command that
+writes the database (sync, backfill, journal import, db migrate/vacuum/repair) needs
+`CHA_DB_BUCKET`: it refuses on a stale local copy and pushes after a run that wrote. Without
+the bucket it refuses, unless the global `--local-only` flag is given: then it writes the
+local file only and never pushes (a scratch copy for development; a later `db pull` will
+refuse to overwrite it without `--force`). Synthetic mode never needs the bucket.
+"""
 from __future__ import annotations
 
 import functools
 import hashlib
-from datetime import UTC, date, datetime, timedelta
+from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from health_core.settings import get_settings
 
-from health_data import db, store
+from health_data import civil, db, store
 
 app = typer.Typer(pretty_exceptions_show_locals=False, no_args_is_help=True, help="Calibrated Health Agent data commands.")
 journal_app = typer.Typer(pretty_exceptions_show_locals=False, no_args_is_help=True, help="Daily journal (Google Form).")
@@ -19,6 +28,25 @@ auth_app = typer.Typer(pretty_exceptions_show_locals=False, no_args_is_help=True
 app.add_typer(journal_app, name="journal")
 app.add_typer(db_app, name="db")
 app.add_typer(auth_app, name="auth")
+
+_STATE = {"local_only": False}
+
+NEEDS_BUCKET = (
+    "CHA_DB_BUCKET is not set. With CHA_DATA_MODE=real, commands that write the database need "
+    "the bucket (GCS is the source of truth): set CHA_DB_BUCKET and run `cha-data db pull` "
+    "first. To write a local scratch copy that is never pushed, pass --local-only "
+    "(`cha-data --local-only <command>`)."
+)
+
+
+@app.callback()
+def _main(
+    local_only: Annotated[bool, typer.Option(
+        "--local-only",
+        help="Write the local database only, without CHA_DB_BUCKET; never pushes (dev/scratch).",
+    )] = False,
+) -> None:
+    _STATE["local_only"] = local_only
 
 
 def _auth_guard(fn):
@@ -52,8 +80,8 @@ def _db_fingerprint() -> tuple[str | None, ...]:
     return tuple(out)
 
 
-def _persisted(fn):
-    """Writing commands: with CHA_DB_BUCKET set, refuse on a stale local db, push after a run.
+def _run_persisted(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Run a writing command under the write guard (module docstring).
 
     A run that completes and wrote to the db is pushed even when it ends in a nonzero
     typer.Exit (e.g. a partial sync), so successful work is never lost to a later pull;
@@ -61,12 +89,13 @@ def _persisted(fn):
     file unchanged (e.g. auth error before writing), does not push. "Wrote" is detected
     by a content-hash change of the db file or its -wal.
     """
-
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        settings = get_settings()
-        bucket = settings.db_bucket
+    settings = get_settings()
+    bucket = settings.db_bucket
+    try:
         if not bucket:
+            if settings.data_mode == "real" and not _STATE["local_only"]:
+                typer.echo(NEEDS_BUCKET, err=True)
+                raise typer.Exit(1)
             return fn(*args, **kwargs)
         pending: typer.Exit | None = None
         result = None
@@ -91,6 +120,17 @@ def _persisted(fn):
         if pending is not None:
             raise pending
         return result
+    except db.SchemaTooNewError as exc:
+        typer.echo(f"db error: {exc}", err=True)
+        raise typer.Exit(1) from None
+
+
+def _persisted(fn):
+    """Decorator form of `_run_persisted` for writing commands."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        return _run_persisted(fn, *args, **kwargs)
 
     return wrapper
 
@@ -98,11 +138,11 @@ def _persisted(fn):
 @app.command("sync")
 @_persisted
 def sync_cmd() -> None:
-    """Incremental sync of every tracked type; prints counts only. Exit 1 on any failure."""
+    """Sync every tracked type (lookback + today, owner zone); prints counts only. Exit 1 on any failure."""
     from health_data import sync
 
     summary = _auth_guard(sync.run)
-    failed = [t for t, v in summary.items() if "error" in v]
+    failed = sync.failed_types(summary)
     typer.echo(f"done: {len(summary) - len(failed)} ok, {len(failed)} failed")
     raise typer.Exit(sync.exit_code(summary))
 
@@ -110,15 +150,15 @@ def sync_cmd() -> None:
 @app.command("backfill")
 @_persisted
 def backfill_cmd(
-    since: Annotated[datetime, typer.Option("--since", formats=["%Y-%m-%d"], help="First day to cover, YYYY-MM-DD.")],
+    since: Annotated[datetime, typer.Option("--since", formats=["%Y-%m-%d"], help="First owner-zone day to cover, YYYY-MM-DD.")],
     types: Annotated[list[str] | None, typer.Option("--type", help="Restrict to these data types (repeatable).")] = None,
 ) -> None:
-    """Resumable history backfill over [since, today); prints inserted counts per type."""
+    """Resumable history backfill over [since, today) in owner-zone days; prints changed counts per type."""
     from health_data import backfill as bf
 
     start = since.date()
-    if start > datetime.now(UTC).date() + timedelta(days=1):
-        typer.echo("--since is in the future", err=True)
+    if start > civil.today():
+        typer.echo("--since is in the future (owner time zone)", err=True)
         raise typer.Exit(2)
     failed = False
     try:
@@ -138,7 +178,7 @@ def backfill_cmd(
 
 @app.command("probe")
 def probe_cmd(days: Annotated[int, typer.Option("--days", min=1)] = 30) -> None:
-    """Count what each readable type returns over the last N days."""
+    """Count what each readable type returns over the last N owner-zone days."""
     from health_data import sync
 
     counts = _auth_guard(lambda: sync.probe(days))
@@ -148,11 +188,11 @@ def probe_cmd(days: Annotated[int, typer.Option("--days", min=1)] = 30) -> None:
 
 @app.command("parity")
 def parity_cmd(days: Annotated[int, typer.Option("--days", min=1)] = 30) -> None:
-    """Rollup-vs-reconcile agreement per summed type over the last N days (counts only)."""
+    """Rollup-vs-reconcile agreement per summed type over the last N owner-zone days (counts only)."""
     from health_data import reconcile
 
-    end = datetime.now(UTC).date()
-    start: date = end - timedelta(days=days)
+    end = civil.today()
+    start = end - timedelta(days=days)
     for data_type in sorted(reconcile.SUMMED_TYPES):
         if data_type in reconcile.RECONCILE_UNSUPPORTED:
             typer.echo(f"{data_type:30s} reconcile unsupported")
@@ -180,6 +220,57 @@ def db_migrate_cmd() -> None:
     typer.echo(f"schema version: {version}")
 
 
+def _print_repair(report: dict[str, dict[str, Any]]) -> bool:
+    """Counts and day ranges only. Returns True if any type failed."""
+    failed = False
+    for data_type, r in report.items():
+        b = r["before"]
+        if "error" in r:
+            failed = True
+            typer.echo(f"{data_type:36s} FAILED {r['error']}", err=True)
+            continue
+        a = r["after"]
+        typer.echo(
+            f"{data_type:36s} days {b['days']:4d} [{b['first']}..{b['last']}] -> "
+            f"{a['days']:4d} [{a['first']}..{a['last']}]  raw {b['raw_rows']} -> {a['raw_rows']}  "
+            f"fetched={r['fetched']} changed={r['changed']}"
+        )
+    return failed
+
+
+@db_app.command("repair")
+def db_repair_cmd(
+    days: Annotated[int | None, typer.Option("--days", min=1, help="Only the last N owner-zone days (default: full history).")] = None,
+    types: Annotated[list[str] | None, typer.Option("--type", help="Restrict to these data types (repeatable).")] = None,
+    db_file: Annotated[Path | None, typer.Option("--db", help="Repair this file instead; local only, never pushed.")] = None,
+) -> None:
+    """Re-fetch history and recompute daily values under the owner-zone civil-day rule."""
+    from health_data import repair
+
+    def run() -> None:
+        try:
+            report = _auth_guard(lambda: repair.repair(days, types or None))
+        except db.SchemaTooNewError as exc:
+            typer.echo(f"db error: {exc}", err=True)
+            raise typer.Exit(1) from None
+        if _print_repair(report):
+            typer.echo("incomplete: rerun to retry the failed types", err=True)
+            raise typer.Exit(1)
+
+    if db_file is None:
+        _run_persisted(run)
+        return
+    if not db_file.exists():
+        typer.echo(f"{db_file} does not exist", err=True)
+        raise typer.Exit(2)
+    saved = db.DB_PATH
+    db.DB_PATH = db_file
+    try:
+        run()
+    finally:
+        db.DB_PATH = saved
+
+
 def _require_bucket() -> tuple[str, str]:
     settings = get_settings()
     if not settings.db_bucket:
@@ -189,9 +280,21 @@ def _require_bucket() -> tuple[str, str]:
 
 
 @db_app.command("pull")
-def db_pull_cmd() -> None:
-    """Download the bucket database (source of truth) and record its generation."""
+def db_pull_cmd(
+    force: Annotated[bool, typer.Option("--force", help="Overwrite a local database with unpushed changes.")] = False,
+) -> None:
+    """Download the bucket database (source of truth) and record its generation.
+
+    Refuses when the local file changed since it was last pulled or pushed (unpushed work),
+    unless --force.
+    """
     bucket, obj = _require_bucket()
+    if not force:
+        try:
+            store.check_pull_safe(db.DB_PATH)
+        except store.LocalChangesError as exc:
+            typer.echo(f"db error: {exc}", err=True)
+            raise typer.Exit(1) from None
     generation = store.pull_db(bucket, obj, db.DB_PATH)
     typer.echo("no remote database yet" if generation is None else f"pulled generation {generation}")
 
@@ -213,15 +316,23 @@ def db_push_cmd() -> None:
 
 @auth_app.command("login")
 def auth_login_cmd() -> None:
-    """Authorize against Google (opens a browser for consent)."""
+    """Authorize the Health token (Health read-only scopes only; opens a browser)."""
     from health_data import auth
 
     _auth_guard(auth._cli_login)
 
 
+@auth_app.command("login-forms")
+def auth_login_forms_cmd() -> None:
+    """Authorize the separate Forms token (journal import; opens a browser)."""
+    from health_data import auth
+
+    _auth_guard(auth._cli_login_forms)
+
+
 @auth_app.command("push-secret")
 def auth_push_secret_cmd() -> None:
-    """Upload config/client_secret.json and config/token.json to Secret Manager."""
+    """Upload the OAuth client, Health token and Forms token to Secret Manager."""
     from health_data import auth
 
     _auth_guard(auth.push_secrets)
@@ -229,7 +340,7 @@ def auth_push_secret_cmd() -> None:
 
 @auth_app.command("status")
 def auth_status_cmd() -> None:
-    """Show token validity, granted scopes and any scope gap."""
+    """Show granted vs expected scopes for the Health and Forms tokens."""
     from health_data import auth
 
     _auth_guard(auth._cli_status)
@@ -239,7 +350,12 @@ def auth_status_cmd() -> None:
 @_persisted
 def journal_import_cmd() -> None:
     """Import Form responses into the append-only journal; prints status counts only."""
-    from health_data.journal_import import append_submissions, fetch_responses, parse_responses
+    from health_data.journal_import import (
+        append_submissions,
+        describe_error,
+        fetch_responses,
+        parse_responses,
+    )
 
     try:
         settings = get_settings()
@@ -266,7 +382,8 @@ def journal_import_cmd() -> None:
     except typer.Exit:
         raise
     except Exception as exc:  # never let a traceback (with locals) carry answer values
-        typer.echo(f"journal import failed: {type(exc).__name__}", err=True)
+        info = describe_error(exc)
+        typer.echo(f"journal import failed: {info['error']} (response_id={info['response_id']})", err=True)
         raise typer.Exit(1) from None
 
 

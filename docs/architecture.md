@@ -64,6 +64,8 @@ flowchart LR
 External dependencies: the Google Health API (data), Gemini (reasoning), Google Forms API
 (journal until the owner UI exists), GitHub (code, CI, public hash log).
 
+The Phase 1 cloud slice is described in detail in [cloud-design.md](cloud-design.md).
+
 ---
 
 ## 3. Containers (deployed shape)
@@ -214,6 +216,32 @@ SQLite is the system of record, held in GCS as the single source of truth (local
 pull first). It holds daily values and point/session raw data only, capped at 50 MB;
 minute-level reconciled streams are used for parity and wear checks, never stored in it.
 DuckDB attaches it for analytics; Parquet exports feed BigQuery and the synthetic-twin builder.
+
+### 5.1a Which day a value belongs to (the civil-day rule)
+
+Every daily value belongs to one **civil day in the owner's time zone** (`Settings.timezone`,
+Asia/Kolkata), never to a UTC date. The rule is defined once, in
+`packages/health_data/src/health_data/civil.py`; `raw_points.civil_date` stores the result.
+
+| Data | Belongs to |
+|---|---|
+| dailyRollUp totals (steps, distance, calories, active minutes, floors, zone minutes, sedentary time) | the bucket's civil day; requested as owner-zone dates |
+| heart-rate (24 h `rollUp` buckets) | the owner-zone day of the bucket start; windows start at owner-zone midnight |
+| daily summaries (`*.date`: resting HR, daily HRV, SpO2, respiratory rate, skin temperature, VO2 max) | the API's `date` |
+| sleep | the owner-zone day the session **ends** (last night's sleep is the morning of D) |
+| other intervals (exercise) | the owner-zone day the interval starts |
+| samples (HRV, SpO2, weight, nightly respiratory summary) | the owner-zone day of the sample time |
+| journal | the date the owner enters (the evening of D) |
+
+Request windows are computed in the owner zone and converted per filter: physical-time
+filters get the UTC instant of owner-zone midnight, civil-time filters the owner-zone wall
+clock, date filters the owner-zone date. Every sync covers **today** plus a trailing
+**3-day lookback** (`civil.LOOKBACK_DAYS`), or further back to the last successful sync after
+missed runs, so late uploads land and the 12:00 lock sees last night's sleep, HRV and resting
+HR. Storage is idempotent: server buckets are upserted (a day still in progress is replaced by
+its later value), points are upserted on their unique key, and `inserted` counts only
+new-or-changed rows. `cha-data db repair` re-fetches history and recomputes daily values
+under this rule.
 
 ### 5.2 A day in the life (owner time zone)
 

@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 from health_core.settings import Settings
@@ -35,3 +36,15 @@ def test_forms_settings_defaults(monkeypatch):
     s = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
     assert s.journal_form_id is None
     assert str(s.forms_token_path).replace("\\", "/") == "config/forms_token.json"
+    assert s.forms_token_secret is None
+
+
+def test_forms_token_path_follows_config_dir(monkeypatch, tmp_path):
+    for key in [k for k in os.environ if k.startswith("CHA_")]:
+        monkeypatch.delenv(key)
+    monkeypatch.setenv("CHA_CONFIG_DIR", str(tmp_path))
+    assert Settings(_env_file=None).forms_token_path == tmp_path / "forms_token.json"  # pyright: ignore[reportCallIssue]
+    monkeypatch.setenv("CHA_FORMS_TOKEN_PATH", str(tmp_path / "elsewhere.json"))
+    assert Settings(_env_file=None).forms_token_path == tmp_path / "elsewhere.json"  # pyright: ignore[reportCallIssue]
+    monkeypatch.delenv("CHA_FORMS_TOKEN_PATH")
+    assert Settings.model_validate({"config_dir": "cfg"}).forms_token_path == Path("cfg") / "forms_token.json"

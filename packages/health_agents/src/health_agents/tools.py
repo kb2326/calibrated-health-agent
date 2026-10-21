@@ -13,6 +13,11 @@ here rather than requested in a prompt:
    already has and asks about metrics already logged. Tools that always
    report `n` make that failure visible instead of plausible.
 
+3. **Fresh about its freshness.** The tools read a local copy of the database,
+   so they say how old it is: `describe_substrate` reports the last successful
+   sync per type and the recorded vs bucket generation, and the series tools
+   carry an `as_of` block. "Today" is the owner's civil day (`Settings.timezone`).
+
 Each returns a plain dict so ADK can serialise it and the model can read it
 without a schema round-trip.
 """
@@ -20,18 +25,68 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from datetime import date, timedelta
+from datetime import timedelta
 
-from health_data import db
+from health_core.settings import get_settings
+from health_data import civil, db, store
 
 MAX_ROWS = 500
+
+# anomalies and correlations were written by the retired Phase 0 analysis loop and are
+# no longer refreshed; Phase 2 replaces them.
+HISTORICAL_NOTE = (
+    "historical: computed by the retired Phase 0 analysis loop and no longer refreshed; "
+    "say so if you use it"
+)
 
 
 def _ro_connect() -> sqlite3.Connection:
     """A connection that cannot write, enforced by SQLite itself."""
     conn = sqlite3.connect(f"file:{db.DB_PATH}?mode=ro", uri=True)
+    try:
+        db.check_schema(conn, db.DB_PATH)
+    except BaseException:
+        conn.close()
+        raise
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _since(days: int) -> str:
+    return (civil.today() - timedelta(days=max(1, days))).isoformat()
+
+
+def _last_sync(conn: sqlite3.Connection, metric: str) -> str | None:
+    row = conn.execute(
+        "SELECT last_synced_at FROM sync_state WHERE data_type = ?", (metric,)
+    ).fetchone()
+    return row["last_synced_at"] if row else None
+
+
+def _as_of(conn: sqlite3.Connection, metric: str | None = None) -> dict:
+    """When the local data was last refreshed, and what "today" means."""
+    out: dict = {"today": civil.today().isoformat(), "timezone": get_settings().timezone}
+    if metric is not None:
+        out["last_synced_at"] = _last_sync(conn, metric)
+    return out
+
+
+def _generations() -> dict:
+    """Recorded (local) vs bucket generation of the database, when knowable."""
+    settings = get_settings()
+    out: dict = {"recorded_generation": store.recorded_generation()}
+    if not settings.db_bucket:
+        out["bucket_generation"] = None
+        out["note"] = "CHA_DB_BUCKET not set; cannot compare with the bucket"
+        return out
+    try:
+        out["bucket_generation"] = store.remote_generation(settings.db_bucket, settings.db_object)
+    except Exception as exc:  # network or auth: report, don't fail the tool
+        out["bucket_generation"] = None
+        out["note"] = f"bucket unreachable ({type(exc).__name__})"
+        return out
+    out["local_is_current"] = out["bucket_generation"] == out["recorded_generation"]
+    return out
 
 
 def _rows(cur) -> list[dict]:
@@ -51,16 +106,20 @@ def list_metrics() -> dict:
 
     Returns:
         dict: `metrics` is a list of {metric, days, first_date, last_date,
-        latest_value}. `total` is how many metrics have data.
+        mean_value, last_synced_at}. `total` is how many metrics have data;
+        `as_of` says what "today" is.
     """
     with _ro_connect() as conn:
         rows = _rows(conn.execute("""
-            SELECT data_type AS metric, COUNT(*) AS days,
-                   MIN(date) AS first_date, MAX(date) AS last_date,
-                   ROUND(AVG(agg_value), 2) AS mean_value
-            FROM daily_metrics GROUP BY data_type ORDER BY data_type
+            SELECT d.data_type AS metric, COUNT(*) AS days,
+                   MIN(d.date) AS first_date, MAX(d.date) AS last_date,
+                   ROUND(AVG(d.agg_value), 2) AS mean_value,
+                   s.last_synced_at AS last_synced_at
+            FROM daily_metrics d LEFT JOIN sync_state s ON s.data_type = d.data_type
+            GROUP BY d.data_type ORDER BY d.data_type
         """))
-    return {"metrics": rows, "total": len(rows)}
+        as_of = _as_of(conn)
+    return {"metrics": rows, "total": len(rows), "as_of": as_of}
 
 
 def describe_substrate() -> dict:
@@ -69,20 +128,33 @@ def describe_substrate() -> dict:
     Use this to answer "what do you know about me?" without guessing.
 
     Returns:
-        dict: row counts per table, and the last sync time per metric.
+        dict: row counts per table; `freshness` with the last successful sync
+        per metric (UTC), the newest of those, the last journal import, and the
+        recorded vs bucket generation of the database (a mismatch means this
+        local copy is stale — say so before answering about recent days).
     """
     with _ro_connect() as conn:
         counts = {}
-        for t in ("raw_points", "daily_metrics", "anomalies",
-                  "correlations", "journal", "predictions"):
+        for t in ("raw_points", "daily_metrics", "journal_submissions", "journal_outcome",
+                  "anomalies", "correlations"):
             try:
                 counts[t] = conn.execute(f"SELECT COUNT(*) c FROM {t}").fetchone()["c"]
             except sqlite3.OperationalError:
                 counts[t] = None
         cursors = _rows(conn.execute(
-            "SELECT data_type AS metric, last_synced_at FROM sync_state WHERE data_type NOT LIKE 'backfill:%' ORDER BY data_type"
+            "SELECT data_type AS metric, last_synced_at FROM sync_state "
+            "WHERE data_type NOT LIKE 'backfill:%' ORDER BY data_type"
         ))
-    return {"row_counts": counts, "sync_state": cursors}
+        journal = conn.execute("SELECT MAX(imported_at) m FROM journal_submissions").fetchone()["m"]
+        as_of = _as_of(conn)
+    freshness = {
+        **as_of,
+        "last_sync_by_metric": {c["metric"]: c["last_synced_at"] for c in cursors},
+        "newest_sync": max((c["last_synced_at"] for c in cursors), default=None),
+        "last_journal_import": journal,
+        **_generations(),
+    }
+    return {"row_counts": counts, "sync_state": cursors, "freshness": freshness}
 
 
 # --------------------------------------------------------------------------
@@ -102,18 +174,18 @@ def get_metric_series(metric: str, days: int = 30) -> dict:
         `stats` carries min/max/mean. `n` is 0 when nothing is stored — say
         so rather than inventing a trend.
     """
-    since = (date.today() - timedelta(days=max(1, days))).isoformat()
     with _ro_connect() as conn:
         rows = _rows(conn.execute("""
             SELECT date, ROUND(agg_value, 3) AS value FROM daily_metrics
             WHERE data_type = ? AND date >= ? ORDER BY date
-        """, (metric, since)))
+        """, (metric, _since(days))))
+        as_of = _as_of(conn, metric)
     values = [r["value"] for r in rows]
     stats = {
         "min": min(values), "max": max(values),
         "mean": round(sum(values) / len(values), 3),
     } if values else {}
-    return {"metric": metric, "series": rows, "n": len(rows), "stats": stats}
+    return {"metric": metric, "series": rows, "n": len(rows), "stats": stats, "as_of": as_of}
 
 
 def compare_periods(metric: str, window_days: int = 7) -> dict:
@@ -128,7 +200,7 @@ def compare_periods(metric: str, window_days: int = 7) -> dict:
         sample count in each. A change computed from very few days is weak
         evidence — report `n_recent` and `n_prior` alongside any claim.
     """
-    today = date.today()
+    today = civil.today()  # excluded: a part-finished day is not comparable
     r_start = (today - timedelta(days=window_days)).isoformat()
     p_start = (today - timedelta(days=window_days * 2)).isoformat()
     with _ro_connect() as conn:
@@ -136,6 +208,7 @@ def compare_periods(metric: str, window_days: int = 7) -> dict:
                WHERE data_type=? AND date >= ? AND date < ?"""
         recent = conn.execute(q, (metric, r_start, today.isoformat())).fetchone()
         prior = conn.execute(q, (metric, p_start, r_start)).fetchone()
+        as_of = _as_of(conn, metric)
     rm, pm = recent["m"], prior["m"]
     pct = round((rm - pm) / pm * 100, 1) if (rm is not None and pm) else None
     return {
@@ -144,6 +217,7 @@ def compare_periods(metric: str, window_days: int = 7) -> dict:
         "prior_mean": round(pm, 3) if pm is not None else None,
         "change_pct": pct,
         "n_recent": recent["n"], "n_prior": prior["n"],
+        "as_of": as_of,
     }
 
 
@@ -163,9 +237,10 @@ def get_anomalies(days: int = 30) -> dict:
 
     Returns:
         dict: `anomalies` is [{date, metric, value, baseline_mean, z_score,
-        severity}] newest first, where severity is "watch" or "alert".
+        severity}] newest first, where severity is "watch" or "alert", and
+        `note`: these rows are historical and no longer refreshed.
     """
-    since = (date.today() - timedelta(days=max(1, days))).isoformat()
+    since = _since(days)
     with _ro_connect() as conn:
         rows = _rows(conn.execute("""
             SELECT date, data_type AS metric, ROUND(value,3) AS value,
@@ -173,7 +248,7 @@ def get_anomalies(days: int = 30) -> dict:
                    ROUND(z_score,2) AS z_score, severity
             FROM anomalies WHERE date >= ? ORDER BY date DESC
         """, (since,)))
-    return {"anomalies": rows, "n": len(rows)}
+    return {"anomalies": rows, "n": len(rows), "note": HISTORICAL_NOTE}
 
 
 def get_correlations(min_abs_r: float = 0.3) -> dict:
@@ -188,7 +263,8 @@ def get_correlations(min_abs_r: float = 0.3) -> dict:
 
     Returns:
         dict: `correlations` is [{metric_a, metric_b, lag_days, r, n,
-        definitional}] sorted by strength.
+        definitional}] sorted by strength, and `note`: these rows are
+        historical and no longer refreshed.
     """
     obvious = {("distance", "steps"), ("steps", "distance"),
                ("active-minutes", "total-calories"), ("total-calories", "active-minutes")}
@@ -199,7 +275,7 @@ def get_correlations(min_abs_r: float = 0.3) -> dict:
         """, (abs(min_abs_r),)))
     for row in rows:
         row["definitional"] = (row["metric_a"], row["metric_b"]) in obvious
-    return {"correlations": rows, "n": len(rows)}
+    return {"correlations": rows, "n": len(rows), "note": HISTORICAL_NOTE}
 
 
 def get_journal(days: int = 30) -> dict:
@@ -212,40 +288,23 @@ def get_journal(days: int = 30) -> dict:
     Args:
         days: How far back to read. Defaults to 30.
 
+    Each date's entry is its outcome: the earliest valid submission inside
+    its window (later edits and resubmissions are kept but not shown here).
+
     Returns:
-        dict: `entries` is [{date, mood, energy, soreness, note}] newest first.
+        dict: `entries` is [{date, mood, energy, soreness, note}] newest first;
+        `as_of` carries the owner's today and the last journal import time.
     """
-    since = (date.today() - timedelta(days=max(1, days))).isoformat()
     with _ro_connect() as conn:
         rows = _rows(conn.execute(
-            "SELECT date, mood, energy, soreness, note FROM journal "
-            "WHERE date >= ? ORDER BY date DESC", (since,)
+            "SELECT o.date, o.mood, o.energy, o.soreness, s.note "
+            "FROM journal_outcome o JOIN journal_submissions s ON s.id = o.submission_id "
+            "WHERE o.date >= ? ORDER BY o.date DESC", (_since(days),)
         ))
-    return {"entries": rows, "n": len(rows)}
-
-
-def get_signal_reliability() -> dict:
-    """How often each signal's predictions have actually come true.
-
-    The learning loop scores past predictions against later journal entries.
-    A signal with a low hit rate has not worked for this person and should
-    be reported with that caveat, or not reported at all.
-
-    Returns:
-        dict: `signals` is [{signal, target, lag_days, hit_rate, n_scored,
-        weight}]. An empty list means nothing has matured yet.
-    """
-    with _ro_connect() as conn:
-        try:
-            rows = _rows(conn.execute("""
-                SELECT signal, target, lag_days, ROUND(hit_rate,3) AS hit_rate,
-                       n_scored, ROUND(weight,3) AS weight
-                FROM signal_weights WHERE n_scored > 0
-                ORDER BY hit_rate DESC
-            """))
-        except sqlite3.OperationalError:
-            return {"signals": [], "n": 0, "note": "learning loop has not run yet"}
-    return {"signals": rows, "n": len(rows)}
+        as_of = _as_of(conn)
+        as_of["last_journal_import"] = conn.execute(
+            "SELECT MAX(imported_at) m FROM journal_submissions").fetchone()["m"]
+    return {"entries": rows, "n": len(rows), "as_of": as_of}
 
 
 # --------------------------------------------------------------------------
@@ -272,11 +331,13 @@ def run_sql(query: str) -> dict:
     Numerical questions about wearable data need real computation, not
     estimation from a partial read; this is how you compute exactly.
 
-    Schema: daily_metrics(date, data_type, agg_value, n_points),
-    raw_points(data_type, start_time, end_time, value, unit, source),
-    journal(date, mood, energy, soreness, note),
-    anomalies(date, data_type, value, baseline_mean, z_score, severity),
-    correlations(metric_a, metric_b, lag_days, r, n),
+    Schema: daily_metrics(date, data_type, agg_value, n_points) — `date` is
+    the owner's civil day; raw_points(data_type, start_time, end_time, value,
+    unit, source, civil_date); journal_outcome(date, mood, energy, soreness,
+    submission_id); journal_submissions(date, mood, energy, soreness, note,
+    submitted_at, status, reason); anomalies(date, data_type, value,
+    baseline_mean, z_score, severity) and correlations(metric_a, metric_b,
+    lag_days, r, n) — both historical, no longer refreshed;
     sync_state(data_type, cursor_time, last_synced_at).
 
     Args:

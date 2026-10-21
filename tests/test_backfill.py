@@ -139,10 +139,10 @@ def test_backfill_earlier_since_starts_over_without_duplicates(env):
 def test_cli_backfill_reports_counts_and_exit_codes(env):
     _, state, _ = env
     runner = CliRunner()
-    ok = runner.invoke(app, ["backfill", "--since", "2026-10-01", "--type", "steps"])
+    ok = runner.invoke(app, ["--local-only", "backfill", "--since", "2026-10-01", "--type", "steps"])
     assert ok.exit_code == 0 and "inserted=" in ok.output and "total inserted: 19" in ok.output
     state["fail_on"] = ("heart-rate", 1)
-    bad = runner.invoke(app, ["backfill", "--since", "2026-10-01", "--type", "heart-rate"])
+    bad = runner.invoke(app, ["--local-only", "backfill", "--since", "2026-10-01", "--type", "heart-rate"])
     assert bad.exit_code == 1 and "FAILED" in bad.output
 
 
@@ -153,14 +153,14 @@ def test_cli_wires_expected_commands_only():
         assert name in top
     assert "push-secret" in runner.invoke(app, ["auth", "--help"]).output  # wired by the Secret Manager task
     dbhelp = runner.invoke(app, ["db", "--help"]).output
-    assert "vacuum" in dbhelp and "migrate" in dbhelp
+    assert "vacuum" in dbhelp and "migrate" in dbhelp and "repair" in dbhelp
     assert "pull" in dbhelp and "push" in dbhelp  # wired by the GCS persistence task
 
 
 def test_cli_db_migrate_and_vacuum(env):
     runner = CliRunner()
-    assert "schema version" in runner.invoke(app, ["db", "migrate"]).output
-    out = runner.invoke(app, ["db", "vacuum"])
+    assert "schema version" in runner.invoke(app, ["--local-only", "db", "migrate"]).output
+    out = runner.invoke(app, ["--local-only", "db", "vacuum"])
     assert out.exit_code == 0 and "MB" in out.output
 
 
