@@ -232,13 +232,19 @@ Owner-only commands (need my own Google account and GCP project; not required to
 uv run cha-data auth login          # Health consent (read-only Health scopes only)
 uv run cha-data auth login-forms    # separate Forms token for the journal (Health rejects mixed scopes)
 CHA_TOKEN_SECRET=oauth-token CHA_CLIENT_SECRET_SECRET=oauth-client CHA_FORMS_TOKEN_SECRET=oauth-forms-token uv run cha-data auth push-secret   # tokens -> Secret Manager
-CHA_DB_BUCKET=<bucket> uv run cha-data db pull    # fetch the database; `db push` uploads it
-uv run cha-data backfill --since <YYYY-MM-DD>
+export CHA_DB_BUCKET=<bucket>       # GCS is the source of truth: every write command needs it
+uv run cha-data db pull             # fetch the database (refuses to overwrite unpushed local changes; --force to discard them)
+uv run cha-data backfill --since <YYYY-MM-DD>   # write commands check freshness first and push after
 uv run cha-data sync
 uv run cha-data journal import
+uv run cha-data db repair           # re-fetch history under the owner-zone civil-day rule
 uv run cha-data probe               # what each readable type returns
 uv run cha-data parity              # rollup vs reconcile agreement
 ```
+
+Without `CHA_DB_BUCKET`, write commands refuse to run in real mode. `cha-data --local-only <command>`
+writes a local scratch copy that is never pushed (and that a later `db pull` will not silently
+overwrite). The journal has one writer: the Google Form, read by `journal import`.
 
 Cloud runbook: [infra/README.md](infra/README.md).
 

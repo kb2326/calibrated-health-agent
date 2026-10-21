@@ -47,7 +47,7 @@ flowchart LR
 |---|---|---|
 | Cloud Scheduler (`sync-hourly` `0 5-12 * * *`, `sync-evening` `30 22 * * *`, Asia/Kolkata) | Triggers the job | Managed cron; 2 jobs fit the free allowance. Hourly in the morning catches last night's sleep as soon as the watch uploads it. |
 | Cloud Run job `sync` (2 GiB, 900 s, 1 retry) | Runs one batch: pull, migrate, sync, journal, push | A job, not a service: runs to completion, bills only while running, no endpoint to attack. |
-| GCS bucket `...-health-db` | Holds `health.db`, the system of record | Cheapest durable store for one small file. Private, public access prevention enforced, versioned. |
+| GCS bucket `...-health-db` | Holds `health.db`, the system of record | Cheapest durable store for one small file. Private, public access prevention enforced, versioned; superseded versions are kept 14 days. |
 | Secret Manager | `oauth-client`, `oauth-token` (Health), `oauth-forms-token` (Forms) | Tokens never live in the image, env vars or Terraform state (Terraform creates empty containers only). |
 | Artifact Registry `cha` | Stores the job image | Keep-3 cleanup policy holds the repo near the free 0.5 GB. |
 | Service accounts `sync-job`, `sync-scheduler` | Identities for the job and the trigger | One identity per duty, each with the minimum roles (see section 4). |
@@ -59,12 +59,30 @@ flowchart LR
 
 1. Scheduler calls the Cloud Run Admin API as `sync-scheduler`; a new execution starts.
 2. **pull**: download `health.db` and record the object's generation number.
-3. **migrate**: apply any pending schema migrations.
-4. **sync**: fetch new Health data since the last watermark, reconcile, store.
-5. **journal**: read new Form responses with the Forms token and append them.
+3. **migrate**: apply any pending schema migrations (each inside `BEGIN IMMEDIATE`). A
+   database with a newer schema than the image knows is refused, never written.
+4. **sync**: fetch today plus a 3-day lookback per data type (further back after missed
+   runs), with every window and every daily value in the owner's civil day (Asia/Kolkata;
+   rule in [architecture.md §5.1a](architecture.md)). Storage is upsert-based, so refetching
+   is idempotent and late uploads land.
+5. **journal**: read Form responses with the Forms token and append new ones (lateness is
+   graded on each response's last submit time).
 6. **push**: upload `health.db` only if the bucket generation still equals the one recorded at pull.
-7. Each step logs a JSON line with counts only (no health values). Any failure logs `ERROR`
-   and exits non-zero.
+7. Each step logs a JSON line with counts only (no health values; a journal failure logs the
+   error type and response id only). Any failure logs `ERROR` and exits non-zero.
+
+**Push rules.**
+
+| Outcome of the run | Journal step runs? | Pushed? |
+|---|---|---|
+| pull or migrate fails | no | no |
+| sync fails with an auth error (re-login needed) | yes (reports a broken Forms token too) | no |
+| sync raises any other exception | yes | yes: each data type that finished before the exception committed atomically with its cursor |
+| sync completes with some failed data types | yes | yes |
+| journal step fails after sync completed | (it ran) | yes: the completed sync is never lost |
+| nothing changed (no migration, no new or changed rows, no new journal submissions) | yes | no: logged "skipped (no data changed)"; cursors alone are not worth a bucket version, and the next run re-fetches the lookback anyway |
+
+Any failure in the table still exits non-zero and alerts.
 
 ## 4. Security model
 
@@ -77,7 +95,7 @@ flowchart LR
 - **No public endpoints.** There is no service, load balancer or VPC. The bucket enforces
   public access prevention.
 - **Secrets handling.** Values are written by `cha-data auth push-secret` from the owner's
-  machine; old versions are pruned. Terraform never sees a token. Logs carry counts only.
+  machine; the previous version is kept disabled for rollback and older ones are destroyed. Terraform never sees a token. Logs carry counts only.
 - **Read-only toward the source.** OAuth scopes are Health read-only scopes, and the API
   client implements no write methods.
 - **Lesson: two tokens.** The Google Health API rejects an access token that also carries
@@ -95,8 +113,10 @@ flowchart LR
 | Job crashes mid-run | Cloud Run retries once; the bucket file is untouched until the final push, so a crash leaves the old good file | Alert emails if the retry also fails; next scheduled run starts clean |
 | Scheduler cannot invoke the job | Scheduler logs `ERROR`; the scheduler alert policy emails | Fix IAM or the job; the next tick (hourly in the morning) retries |
 | Two runs overlap | The second push fails its generation precondition instead of overwriting | The loser logs `ERROR`; the next run pulls the newer file and re-syncs (sync is idempotent) |
+| Old image opens a newer-schema database | `migrate` refuses (`SchemaTooNewError`), nothing is written or pushed, alert emails | Rebuild and redeploy the image |
+| Watch uploads data late | The next run's 3-day lookback picks it up | None needed; `cha-data db repair` re-fetches older history |
 | Token expired or revoked | Auth step fails, job logs `ERROR`, alert emails | Owner runs `auth login` / `login-forms` and `auth push-secret` |
-| Bad data written | Bucket versioning keeps prior generations | Restore an earlier generation of `health.db` from the bucket |
+| Bad data written | Bucket versioning keeps every superseded generation for 14 days | Restore an earlier generation of `health.db` from the bucket |
 | Terraform state lost | State bucket is versioned | Restore the previous state object |
 
 ## 6. Observability
