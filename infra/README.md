@@ -62,11 +62,13 @@ Local `infra/terraform.tfvars` (gitignored, never commit) holds
    `uv run cha-data auth login` (Health scopes only),
    `uv run cha-data auth login-forms` (Forms scopes only), and
    `CHA_TOKEN_SECRET=oauth-token CHA_CLIENT_SECRET_SECRET=oauth-client CHA_FORMS_TOKEN_SECRET=oauth-forms-token uv run cha-data auth push-secret`
-   (pushes `oauth-client`, `oauth-token`, `oauth-forms-token`; prunes old versions).
+   (pushes `oauth-client`, `oauth-token`, `oauth-forms-token`; keeps the previous version
+   disabled for rollback and destroys older ones).
 7. Seed the bucket and run once (owner, locally):
    `CHA_DB_BUCKET=artful-timing-506108-n8-health-db uv run cha-data db push`, then
    `gcloud run jobs execute sync --region us-central1 --wait`. A green first run
-   logs pull, migrate, sync, journal import and push in that order.
+   logs pull, migrate, sync, journal import and push in that order (push may log
+   "skipped (no data changed)" when nothing new arrived).
 8. Alert test (no drift): the job's secret names are env vars, so override
    them for one execution only; this does not touch the job template or
    Terraform state:
