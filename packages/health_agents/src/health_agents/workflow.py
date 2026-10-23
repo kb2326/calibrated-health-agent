@@ -20,12 +20,13 @@ from typing import Any, Literal
 from google.adk.agents import LlmAgent
 from google.adk.agents.context import Context
 from google.adk.models.base_llm import BaseLlm
+from google.adk.tools import load_memory
 from google.adk.workflow import Workflow
 from google.genai import types
 from health_core.settings import get_settings
 from pydantic import BaseModel
 
-from . import api_tools, instructions, tools
+from . import api_tools, instructions, memory, tools
 from .verify import numbers_without_receipts
 
 Topology = Literal["single", "multi"]
@@ -54,7 +55,7 @@ ALL_TOOLS = [
     tools.list_metrics, tools.describe_substrate, tools.get_metric_series, tools.compare_periods,
     tools.get_anomalies, tools.get_correlations, tools.get_journal, tools.run_sql,
     tools.run_python, tools.get_scoreboard, api_tools.sources_for_metric, api_tools.list_devices,
-    api_tools.get_health_profile,
+    api_tools.get_health_profile, memory.save_fact_tool, load_memory,
 ]
 
 
@@ -84,7 +85,8 @@ def specialists(model: Model, models: dict[str, Model] | None = None) -> dict[st
             "health_coach", models.get("health_coach", model),
             instructions.SHARED + instructions.COACH + instructions.RECEIPTS,
             [tools.get_metric_series, tools.compare_periods, tools.get_journal,
-             tools.get_anomalies, tools.list_metrics], mode="single_turn"),
+             tools.get_anomalies, tools.list_metrics, memory.save_fact_tool, load_memory],
+            mode="single_turn"),
     }
 
 
