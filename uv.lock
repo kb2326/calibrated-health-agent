@@ -807,6 +807,7 @@ dependencies = [
     { name = "health-core" },
     { name = "health-data" },
     { name = "health-ledger" },
+    { name = "typer" },
 ]
 
 [package.metadata]
@@ -815,6 +816,7 @@ requires-dist = [
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
     { name = "health-ledger", editable = "packages/health_ledger" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [[package]]
