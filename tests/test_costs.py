@@ -7,8 +7,8 @@ from ledger_fixtures import make_db
 
 
 def test_usd_uses_settings_prices():
-    assert costs.usd(1_000_000, 0) == pytest.approx(0.10)
-    assert costs.usd(0, 1_000_000) == pytest.approx(0.40)
+    assert costs.usd(1_000_000, 0) == pytest.approx(0.30)
+    assert costs.usd(0, 1_000_000) == pytest.approx(2.50)
 
 
 def test_chat_spend_sums_this_month_only():
@@ -16,7 +16,7 @@ def test_chat_spend_sums_this_month_only():
     with agent_db.connect() as conn:
         conn.execute("INSERT INTO chat_usage (month, input_tokens, output_tokens, usd, created_at)"
                      " VALUES ('1999-01', 0, 0, 5.0, 't')")
-    assert costs.chat_month_spend() == pytest.approx(0.10)
+    assert costs.chat_month_spend() == pytest.approx(0.30)
 
 
 def test_cloud_spend_reads_agent_runs(tmp_path):
@@ -29,3 +29,10 @@ def test_cloud_spend_reads_agent_runs(tmp_path):
                  " output_tokens, usd, outcome, created_at) VALUES ('1999-01-05', 'forecast7',"
                  " '[]', 1, 1, 1, 9.0, 'done', 't')")
     assert costs.cloud_month_spend(conn) == pytest.approx(0.12)
+
+
+def test_default_prices_match_verified_vertex_list_prices():
+    from health_core.settings import Settings
+    s = Settings.model_validate({})
+    assert (s.price_in_per_m, s.price_out_per_m) == (0.30, 2.50)
+    assert s.embedding_model == "gemini-embedding-2"

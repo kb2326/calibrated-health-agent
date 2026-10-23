@@ -40,10 +40,12 @@ from health_ledger.forecasters import gemini
 from . import bundle, costs, hypotheses, instructions, receipts, tools
 from .untrusted import UNTRUSTED_RULE, wrap
 
-MAX_CALLS = 8
+MAX_CALLS = 6
 MAX_TOOL_CALLS = 6
-MAX_INPUT_TOKENS = 30_000
-MAX_OUTPUT_TOKENS = 4_000
+# At $0.30 / $2.50 per million tokens a capped night costs at most ~$0.0095, so even a
+# run every night stays inside the $0.30 monthly cloud cap.
+MAX_INPUT_TOKENS = 15_000
+MAX_OUTPUT_TOKENS = 2_000
 WALL_SECONDS = 180
 MAX_STORED = 2
 CONTEXT_DAYS = 14
@@ -153,7 +155,7 @@ def _agent(conn: sqlite3.Connection, as_of: date, model: str | BaseLlm, usage: d
         meta = llm_response.usage_metadata
         if meta is not None:
             usage["in"] += meta.prompt_token_count or 0
-            usage["out"] += meta.candidates_token_count or 0
+            usage["out"] += (meta.candidates_token_count or 0) + (meta.thoughts_token_count or 0)
         return None
 
     def before_tool(tool: Any, args: dict, tool_context: Any) -> dict | None:

@@ -112,7 +112,8 @@ def bet(text: str, *, client: Any = None, label: str = "gemini") -> tuple[Foreca
         meta = getattr(response, "usage_metadata", None)
         if meta is not None:
             usage = {"input_tokens": int(getattr(meta, "prompt_token_count", 0) or 0),
-                     "output_tokens": int(getattr(meta, "candidates_token_count", 0) or 0)}
+                     "output_tokens": int(getattr(meta, "candidates_token_count", 0) or 0)
+                     + int(getattr(meta, "thoughts_token_count", 0) or 0)}  # billed as output
         return Forecast(probs=_parse(response.text)), usage
     except _Invalid as exc:
         return Forecast.abstain_all(f"{label}: {exc}"), usage

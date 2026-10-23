@@ -148,3 +148,14 @@ def test_forecaster7_abstains_on_budget(conn):
 def test_forecaster7_bad_output_abstains(conn):
     f = gemini_notes.forecast(conn, D, SNAP, client=_client("not json"))
     assert f.abstain["energy"].startswith("gemini_notes:")
+
+
+def test_usage_counts_thinking_tokens_as_output(conn):
+    class Thinking(FakeModels):
+        def generate_content(self, *, model, contents, config):
+            usage = SimpleNamespace(prompt_token_count=500, candidates_token_count=200,
+                                    thoughts_token_count=300)
+            return SimpleNamespace(text=self.text, usage_metadata=usage)
+
+    f = gemini_notes.forecast(conn, D, SNAP, client=SimpleNamespace(models=Thinking(GOOD)))
+    assert f.inputs is not None and f.inputs["usage"] == {"input_tokens": 500, "output_tokens": 500}

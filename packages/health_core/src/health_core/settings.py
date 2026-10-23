@@ -38,12 +38,13 @@ class Settings(BaseSettings):
     ledger_bucket: str | None = None
     ledger_repo: str | None = None
     ledger_key_secret: str | None = None
-    # Agent layer (Phase 3). Prices are Vertex list prices per million tokens for
-    # model_default, used only for the spend caps below; verified at deploy time.
+    # Agent layer (Phase 3). Prices are list prices per million tokens for model_default
+    # (gemini-3.5-flash-lite, standard paid tier; output includes thinking tokens), checked
+    # 2026-10-23 at ai.google.dev/gemini-api/docs/pricing. Used only for the spend caps.
     topology: Literal["single", "multi"] = "single"
-    embedding_model: str = "gemini-embedding-001"
-    price_in_per_m: float = 0.10
-    price_out_per_m: float = 0.40
+    embedding_model: str = "gemini-embedding-2"
+    price_in_per_m: float = 0.30
+    price_out_per_m: float = 2.50
     agent_cloud_monthly_usd_cap: float = 0.30  # investigator + forecaster 7 (cloud job)
     chat_monthly_usd_cap: float = 0.30  # laptop chat
 

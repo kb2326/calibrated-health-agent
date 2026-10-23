@@ -112,7 +112,8 @@ class Session:
                                                   new_message=message):
                 if ev.usage_metadata is not None:
                     result.input_tokens += ev.usage_metadata.prompt_token_count or 0
-                    result.output_tokens += ev.usage_metadata.candidates_token_count or 0
+                    result.output_tokens += ((ev.usage_metadata.candidates_token_count or 0)
+                                             + (ev.usage_metadata.thoughts_token_count or 0))
                 if isinstance(ev.output, str):
                     result.answer = ev.output
                 pending += [fc for fc in ev.get_function_calls() if fc.name == CONFIRM]
