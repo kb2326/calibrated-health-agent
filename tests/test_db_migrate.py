@@ -1,4 +1,4 @@
-"""Schema migrations (v1, v2), the newer-schema guard and VACUUM, on throwaway databases."""
+"""Schema migrations (v1-v3), the newer-schema guard and VACUUM, on throwaway databases."""
 from __future__ import annotations
 
 import json
@@ -34,7 +34,7 @@ LATEST = len(db.MIGRATIONS)
 
 def test_migrate_from_v0_moves_journal_rows(tmp_path):
     conn = _v0(tmp_path)
-    assert db.migrate(conn) == LATEST == 2
+    assert db.migrate(conn) == LATEST == 3
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
     rows = conn.execute(
         "SELECT date, mood, source, status FROM journal_submissions ORDER BY date"

@@ -27,9 +27,11 @@ data_types:
   daily-resting-heart-rate:
     scope: health_metrics_and_measurements
     agg: mean
+    sources: [FITBIT, HEALTH_KIT]   # one source per day; never mix RMSSD with SDNN
   heart-rate-variability:
     scope: health_metrics_and_measurements
     agg: mean
+    sources: [FITBIT]   # one source per day; never mix RMSSD with SDNN
   oxygen-saturation:
     scope: health_metrics_and_measurements
     agg: mean
@@ -42,6 +44,7 @@ data_types:
   daily-heart-rate-variability:
     scope: health_metrics_and_measurements
     agg: mean
+    sources: [FITBIT]   # one source per day; never mix RMSSD with SDNN
   daily-oxygen-saturation:
     scope: health_metrics_and_measurements
     agg: mean

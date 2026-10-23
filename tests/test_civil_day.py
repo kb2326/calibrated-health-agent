@@ -232,7 +232,7 @@ def test_rebuild_drops_days_without_support(env, monkeypatch):
     monkeypatch.setattr(client, "iter_data_points", lambda *a: iter([]))
     db.init_db()
     with db.connect() as conn:
-        conn.execute("INSERT INTO daily_metrics VALUES ('2026-10-19', 'weight', 70, 1)")  # stale UTC-day row
+        conn.execute("INSERT INTO daily_metrics (date, data_type, agg_value, n_points) VALUES ('2026-10-19', 'weight', 70, 1)")  # stale UTC-day row
     sync.run()
     assert _q(path, "SELECT COUNT(*) FROM daily_metrics WHERE data_type='weight'") == [(0,)]
 

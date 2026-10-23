@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS daily_metrics (
     data_type TEXT NOT NULL,
     agg_value REAL NOT NULL,
     n_points INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (date, data_type)
 );
 
@@ -372,7 +373,28 @@ def _split(script: str) -> list[str]:
     return out
 
 
-MIGRATIONS = [_migrate_v1, _migrate_v2]
+# v3: daily_metrics records which source its value came from, and types with a source
+# preference (config/health.yaml `sources`) are rebuilt so no day mixes sources (Fitbit
+# RMSSD with Apple SDNN). Ledger tables join this step in a later task.
+# (Fresh databases already get the column from SCHEMA; older ones gain it here.)
+_V3_DDL = """
+ALTER TABLE daily_metrics ADD COLUMN source TEXT NOT NULL DEFAULT '';
+"""
+
+
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    from health_data import sync  # lazy: sync imports this module
+
+    if _is_table(conn, "daily_metrics") and "source" not in _columns(conn, "daily_metrics"):
+        for stmt in _split(_V3_DDL):
+            conn.execute(stmt)
+    if _is_table(conn, "raw_points") and _is_table(conn, "daily_metrics"):
+        for data_type in sync.CONFIG["data_types"]:
+            if sync.source_preference(data_type):
+                sync.rebuild_daily(conn, data_type)
+
+
+MIGRATIONS = [_migrate_v1, _migrate_v2, _migrate_v3]
 
 
 class SchemaTooNewError(RuntimeError):
