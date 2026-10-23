@@ -33,6 +33,10 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(store, "push_recorded", lambda *a, **k: log.append("push") or 6)
     monkeypatch.setattr(sync_job, "_lock", lambda s: log.append("lock") or {"written": False})
     monkeypatch.setattr(sync_job, "_settle", lambda: log.append("settle") or {"written": False})
+    monkeypatch.setattr(sync_job, "_retest", lambda: log.append("retest") or {"tested": 0})
+    monkeypatch.setattr(sync_job, "_investigate",
+                        lambda: log.append("investigate") or {"result": "skipped (nothing new)"})
+    monkeypatch.setattr(sync_job, "_agent_seq", lambda: (0, 0))
     monkeypatch.setattr(sync_job, "_publish", lambda s: log.append("publish") or {})
     monkeypatch.setattr(store, "read_heartbeat", lambda *a, **k: None)
     monkeypatch.setattr(store, "write_heartbeat", lambda b, o, beat, **k: log.append("heartbeat") or log.beats.append(beat))
@@ -55,11 +59,12 @@ def _interrupted(committed: dict, cause: Exception):
 
 def test_job_happy_path_order(calls, capsys):
     assert sync_job.main([]) == 0
-    assert calls == ["pull", "migrate", "sync", "import", "lock", "settle", "push", "publish",
-                     "heartbeat"]
+    assert calls == ["pull", "migrate", "sync", "import", "lock", "settle", "retest",
+                     "investigate", "push", "publish", "heartbeat"]
     lines = _lines(capsys)
     assert [line["step"] for line in lines] == [
-        "pull", "migrate", "sync", "journal", "lock", "settle", "push", "publish", "heartbeat"]
+        "pull", "migrate", "sync", "journal", "lock", "settle", "retest", "investigate", "push",
+        "publish", "heartbeat"]
     assert {line["severity"] for line in lines} == {"INFO"}
 
 
@@ -124,7 +129,8 @@ def test_empty_sync_summary_is_an_error(calls, monkeypatch, capsys):
 def test_sync_exception_still_imports_journal_and_pushes_committed_rows(calls, monkeypatch, capsys):
     monkeypatch.setattr(sync, "run", _interrupted({"steps": {"fetched": 3, "inserted": 2}}, RuntimeError("bug")))
     assert sync_job.main([]) == 1
-    assert calls == ["pull", "migrate", "import", "lock", "settle", "push", "publish", "heartbeat"]
+    assert calls == ["pull", "migrate", "import", "lock", "settle", "retest", "investigate",
+                     "push", "publish", "heartbeat"]
     line = _step(_lines(capsys), "sync")
     assert (line["severity"], line["error"], line["changed_rows"]) == ("ERROR", "RuntimeError", 2)
 
@@ -268,7 +274,8 @@ def test_auth_failure_still_locks_and_keeps_the_lock(calls, monkeypatch):
     seqs = iter([1, 2])  # the lock appended a chain entry
     monkeypatch.setattr(sync_job, "_ledger_seq", lambda: next(seqs))
     assert sync_job.main([]) == 1
-    assert calls[calls.index("lock") + 1:calls.index("lock") + 4] == ["settle", "push", "publish"]
+    assert calls[calls.index("lock") + 1:calls.index("lock") + 6] == [
+        "settle", "retest", "investigate", "push", "publish"]
 
 
 def test_database_error_skips_ledger(calls, monkeypatch, capsys):
@@ -299,7 +306,7 @@ def test_lock_failure_fails_run_but_keeps_other_work(calls, monkeypatch, capsys)
 
 def test_dry_run_skips_ledger(calls):
     sync_job.main(["--dry-run"])
-    assert not {"lock", "settle", "publish"} & set(calls)
+    assert not {"lock", "settle", "retest", "investigate", "publish"} & set(calls)
 
 
 def test_publish_skipped_without_ledger_settings(calls, monkeypatch, capsys):
@@ -330,3 +337,36 @@ def test_partial_settle_is_still_pushed(calls, monkeypatch):
     monkeypatch.setattr(sync_job, "_settle", half)
     assert sync_job.main([]) == 1
     assert calls.index("push") < calls.index("publish")
+
+
+def test_investigator_failure_does_not_fail_the_job(calls, monkeypatch, capsys):
+    monkeypatch.setattr(sync_job, "_investigate", lambda: calls.append("investigate") or {
+        "result": "failed", "error": "RuntimeError"})
+    assert sync_job.main([]) == 0
+    lines = _lines(capsys)
+    warning = [x for x in lines if x["step"] == "investigate" and x["severity"] == "WARNING"]
+    assert warning and warning[0]["error"] == "RuntimeError"
+    assert "push" in calls
+
+
+def test_retest_exception_fails_the_run_but_keeps_other_work(calls, monkeypatch):
+    def boom():
+        raise RuntimeError("bug")
+    monkeypatch.setattr(sync_job, "_retest", boom)
+    assert sync_job.main([]) == 1
+    assert "investigate" in calls and "push" in calls
+
+
+def test_dry_run_skips_retest_and_investigate(calls):
+    sync_job.main(["--dry-run"])
+    assert not {"retest", "investigate"} & set(calls)
+
+
+def test_agent_rows_count_as_changes_for_push(calls, monkeypatch):
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"fetched": 0}})
+    monkeypatch.setattr(sync_job, "_journal_import",
+                        lambda s: calls.append("import") or {"new_submissions": 0})
+    seqs = iter([(0, 0), (1, 2)])
+    monkeypatch.setattr(sync_job, "_agent_seq", lambda: next(seqs))
+    sync_job.main([])
+    assert "push" in calls

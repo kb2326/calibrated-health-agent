@@ -29,6 +29,12 @@ Step and push rules:
    skipped because nothing changed (then it retries whatever the destinations lack).
    Never after a failed push or a database error, so nothing public can describe a
    database state the bucket does not have.
+9. **retest** and **investigate** (the agent layer, Phase 3) run after settle under the same
+   gating as rule 7. Re-test re-judges live hypotheses on newly settled days (no model);
+   the investigator studies the night's biggest miss within hard caps. An investigator that
+   fails is logged as a WARNING and the job carries on (it records its own failed run);
+   only an exception escaping either step, a code bug, fails the run. Rows they write
+   (status rows, agent runs, receipts, hypotheses) count as changed data.
 
 Every real run that got past migrate (not dry-run, synthetic or bucketless) then writes the
 heartbeat beside the database: when it checked, whether it succeeded, whether it pushed,
@@ -145,6 +151,34 @@ def _settle() -> dict[str, Any]:
     with db.connect() as conn:
         counts = outcomes.settle(conn, civil.now())
     return {"written": any(counts.values()), **counts}
+
+
+def _retest() -> dict[str, Any]:
+    from health_agents import hypotheses
+    from health_data import civil
+
+    with db.connect() as conn:
+        counts = hypotheses.retest(conn, civil.today())
+    return counts
+
+
+def _investigate() -> dict[str, Any]:
+    from health_agents import investigator
+    from health_data import civil
+
+    with db.connect() as conn:
+        out = investigator.run_investigation(conn, civil.now())
+    return {k: v for k, v in out.items() if k != "covered"} | {"covered_days": len(out["covered"])}
+
+
+def _agent_seq() -> tuple[int, int] | None:
+    """Last rowids of the agent tables written by retest/investigate (None before v4)."""
+    try:
+        with db.connect() as conn:
+            return (conn.execute("SELECT COALESCE(MAX(id), 0) FROM hypothesis_status").fetchone()[0],
+                    conn.execute("SELECT COALESCE(MAX(id), 0) FROM agent_runs").fetchone()[0])
+    except sqlite3.Error:
+        return None
 
 
 def _publish(settings: Settings) -> dict[str, Any]:
@@ -264,8 +298,24 @@ def _run(settings: Settings, dry_run: bool) -> int:
                     failed = True
         ledger_written = not (db_error or dry_run) and _ledger_seq() != seq_before
 
+        # rule 9
+        agent_before = None if db_error or dry_run else _agent_seq()
+        for name, fn in (("retest", _retest), ("investigate", _investigate)):
+            if db_error:
+                log(name, result="skipped (database error)")
+            elif dry_run:
+                log(name, result="skipped (dry-run)")
+            else:
+                try:
+                    out = _step(name, fn)
+                    if out.get("result") == "failed":
+                        log(name, "WARNING", result="failed", error=out.get("error"))
+                except _Abort:
+                    failed = True
+        agent_written = not (db_error or dry_run) and _agent_seq() != agent_before
+
         changed = (bool(migrated.get("migrated")) or bool(sync_rows) or bool(new_submissions)
-                   or ledger_written)
+                   or ledger_written or agent_written)
         generation = store.recorded_generation(generation_path)
         pushed = publishable = False
         if db_error:

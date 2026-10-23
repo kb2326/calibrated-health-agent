@@ -1,9 +1,9 @@
 [project]
 name = "jobs"
 version = "0.1.0"
-description = "Cloud Run job entrypoints (no ADK)"
+description = "Cloud Run job entrypoints (sync, ledger, investigator)"
 requires-python = ">=3.13"
-dependencies = ["health-core", "health-data", "health-ledger"]
+dependencies = ["health-core", "health-data", "health-ledger", "health-agents"]
 
 [build-system]
 requires = ["hatchling"]
@@ -16,3 +16,4 @@ packages = ["src/jobs"]
 health-core = { workspace = true }
 health-data = { workspace = true }
 health-ledger = { workspace = true }
+health-agents = { workspace = true }
