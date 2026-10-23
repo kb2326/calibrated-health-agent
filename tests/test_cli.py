@@ -78,3 +78,36 @@ def test_memory_list_and_forget():
     assert fid in out.output and "likes morning runs" in out.output
     out = runner.invoke(cli.app, ["memory", "forget", fid])
     assert out.exit_code == 0 and "forgotten" in out.output
+
+
+def _hyp(hid, status, created_at, statement="Association (n=6): energy tends to be lower when x"):
+    with db.connect() as conn:
+        conn.execute("INSERT INTO hypotheses VALUES (?, '2026-10-01', ?, 'energy', 'lower', 'c',"
+                     " '{}', '[\"r-0000000001\"]', ?)", (hid, statement, created_at))
+        conn.execute("INSERT INTO hypothesis_status (hypothesis_id, day, status, n_cond, n_other,"
+                     " effect, p_value, created_at) VALUES (?, '2026-10-02', ?, 6, 20, -1.5, 0.04,"
+                     " ?)", (hid, status, created_at))
+
+
+def test_notes_lists_only_new_since_last_view():
+    _hyp("h-old", "open", "2026-10-01T00:00:00Z")
+    out = runner.invoke(cli.app, ["notes"])
+    assert out.exit_code == 0 and "h-old" in out.output and "r-0000000001" in out.output
+    again = runner.invoke(cli.app, ["notes"])
+    assert "h-old" not in again.output and "nothing new" in again.output
+    assert "h-old" in runner.invoke(cli.app, ["notes", "--all"]).output
+
+
+def test_notes_warns_when_journal_is_stale():
+    out = runner.invoke(cli.app, ["notes"])
+    assert "No journal" in out.output or "no journal" in out.output.lower()
+
+
+def test_notes_retire(monkeypatch):
+    _hyp("h-ret", "open", "2026-10-01T00:00:00Z")
+    monkeypatch.setattr(cli, "_persist", lambda fn: fn())
+    out = runner.invoke(cli.app, ["notes", "retire", "h-ret"])
+    assert out.exit_code == 0 and "retired" in out.output
+    with db.connect() as conn:
+        assert conn.execute("SELECT status FROM hypothesis_status WHERE hypothesis_id = 'h-ret' "
+                            "ORDER BY id DESC LIMIT 1").fetchone()[0] == "retired"

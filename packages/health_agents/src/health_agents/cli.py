@@ -18,6 +18,9 @@ import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
+from typing import Annotated
 
 import typer
 from google.adk.models.base_llm import BaseLlm
@@ -25,7 +28,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from health_core.settings import get_settings
-from health_data import store
+from health_data import civil, db, store
 
 from . import agent_db, costs, memory, receipts, tools
 from .workflow import build_workflow
@@ -33,6 +36,10 @@ from .workflow import build_workflow
 app = typer.Typer(add_completion=False, help="Ask the Calibrated Health Agent.")
 memory_app = typer.Typer(invoke_without_command=True, help="What the agent remembers.")
 app.add_typer(memory_app, name="memory")
+notes_app = typer.Typer(invoke_without_command=True, help="What the investigator found.")
+app.add_typer(notes_app, name="notes")
+STALE_JOURNAL_DAYS = 2
+SMOKE_QUESTIONS = Path("evals/smoke/questions.yaml")
 
 APP_NAME = "cha"
 CONFIRM = "adk_request_confirmation"
@@ -84,7 +91,8 @@ def _stale_note() -> str | None:
 class Session:
     """One ADK runner + session, reused across the turns of `cha chat`."""
 
-    def __init__(self, model: str | BaseLlm | None = None):
+    def __init__(self, model: str | BaseLlm | None = None, *, refresh_memory: bool = True):
+        self.refresh_memory = refresh_memory
         self.service = InMemorySessionService()
         self.memory = memory.HealthMemoryService()
         self.runner = Runner(app_name=APP_NAME, node=build_workflow(model=model or _model()),
@@ -125,11 +133,12 @@ class Session:
         if costs.chat_month_spend() >= get_settings().chat_monthly_usd_cap:
             raise BudgetReached(f"Monthly chat budget (${get_settings().chat_monthly_usd_cap:.2f}) "
                                 "reached; resets on the 1st.")
-        try:
-            with tools._ro_connect() as conn:
-                self.memory.refresh_episodes(conn)
-        except Exception:
-            pass  # offline or no embeddings yet: memory search falls back to recent episodes
+        if self.refresh_memory:
+            try:
+                with tools._ro_connect() as conn:
+                    self.memory.refresh_episodes(conn)
+            except Exception:
+                pass  # offline or no embeddings yet: memory search falls back to recent episodes
         result = asyncio.run(self._ask(question, confirm))
         result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
         return result
@@ -220,4 +229,93 @@ def memory_forget(item_id: str) -> None:
         typer.echo(f"{item_id} forgotten")
     else:
         typer.echo(f"nothing called {item_id}")
+        raise typer.Exit(1)
+
+
+def _persist(fn: Callable[[], object]) -> object:
+    """Write to the local health.db and push it, under health_data's write guard."""
+    from health_data.cli import _run_persisted
+
+    return _run_persisted(fn)
+
+
+def _pull_quietly() -> None:
+    settings = get_settings()
+    if not settings.db_bucket:
+        return
+    try:
+        store.check_pull_safe(db.DB_PATH)
+        store.pull_db(settings.db_bucket, settings.db_object, db.DB_PATH)
+    except Exception as exc:  # offline, or unpushed local work: show what is here
+        typer.echo(f"note: showing the local copy ({type(exc).__name__} while pulling)")
+
+
+@notes_app.callback()
+def notes_list(ctx: typer.Context, all_: bool = typer.Option(False, "--all")) -> None:
+    """Hypotheses new or changed since you last looked."""
+    if ctx.invoked_subcommand:
+        return
+    _pull_quietly()
+    with agent_db.connect() as aconn:
+        row = aconn.execute("SELECT value FROM notes_seen WHERE key = 'last_viewed'").fetchone()
+    since = "" if all_ or row is None else row[0]
+    with tools._ro_connect() as conn:
+        shown = 0
+        for hid, statement, created_at, receipt_ids in conn.execute(
+                "SELECT id, statement, created_at, receipt_ids_json FROM hypotheses ORDER BY created_at"):
+            latest = conn.execute(
+                "SELECT status, n_cond, n_other, effect, p_value, created_at FROM hypothesis_status"
+                " WHERE hypothesis_id = ? ORDER BY id DESC LIMIT 1", (hid,)).fetchone()
+            changed = max(created_at, latest[5] if latest else "")
+            if changed <= since:
+                continue
+            status, n_cond, n_other, effect, p = latest[:5] if latest else ("open", 0, 0, None, None)
+            effect_txt = "" if effect is None else f", effect {effect:+.2f}, p {p:.3f}"
+            typer.echo(f"{hid}  [{status}]  {statement}")
+            typer.echo(f"    n = {n_cond} vs {n_other}{effect_txt} · receipts {', '.join(json.loads(receipt_ids))}")
+            shown += 1
+        last = conn.execute("SELECT MAX(date) FROM journal_outcome").fetchone()[0]
+    if not shown:
+        typer.echo("nothing new from the investigator")
+    gap = None if last is None else (civil.today() - date.fromisoformat(last)).days
+    if gap is None or gap >= STALE_JOURNAL_DAYS:
+        typer.echo("No journal for " + ("any day yet" if gap is None else f"{gap} days")
+                   + " — nothing new to learn from.")
+    with agent_db.connect() as aconn:
+        aconn.execute("INSERT INTO notes_seen VALUES ('last_viewed', ?) ON CONFLICT(key) DO UPDATE"
+                      " SET value = excluded.value", (db.utc_stamp(),))
+
+
+@notes_app.command("retire")
+def notes_retire(hypothesis_id: str) -> None:
+    """Stop a hypothesis from being used (kept in the ledger, marked retired)."""
+    from . import hypotheses
+
+    def run() -> bool:
+        with db.connect() as conn:
+            return hypotheses.retire(conn, hypothesis_id, civil.today())
+
+    if _persist(run):
+        typer.echo(f"{hypothesis_id} retired")
+    else:
+        typer.echo(f"no hypothesis {hypothesis_id}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def smoke(topology: Annotated[str, typer.Option("--topology")] = "single",
+          questions: Annotated[Path, typer.Option("--questions")] = SMOKE_QUESTIONS) -> None:
+    """Phase 3 exit check on a synthetic database with the real model (costs cents)."""
+    import tempfile
+
+    from . import smoke as smoke_mod
+
+    with tempfile.TemporaryDirectory(prefix="cha-smoke-") as tmp:
+        report = smoke_mod.run_smoke(smoke_mod.load_questions(questions), topology=topology,
+                                     workdir=Path(tmp))
+    for r in report["results"]:
+        typer.echo(f"{'PASS' if r['ok'] else 'FAIL'}  {r['question']}  {r['reason']}")
+        typer.echo(f"      receipts: {', '.join(r['receipts']) or 'none'}")
+    typer.echo(f"{report['passed']}/{report['total']} passed · ${report['usd']:.4f}")
+    if report["passed"] != report["total"]:
         raise typer.Exit(1)
