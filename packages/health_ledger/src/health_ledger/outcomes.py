@@ -60,7 +60,7 @@ def settle(conn: sqlite3.Connection, now: datetime) -> dict[str, int]:
             conn.commit()
         try:
             if row is not None and row[3] > locked_at:
-                outcome = dict(zip(TARGETS, row[:3], strict=True))
+                outcome: dict[str, int] = dict(zip(TARGETS, row[:3], strict=True))
                 scores = _score(conn, day, outcome, stamp)
                 conn.executemany(
                     """INSERT INTO scores (day, forecaster, target, outcome, rps, log_score,
