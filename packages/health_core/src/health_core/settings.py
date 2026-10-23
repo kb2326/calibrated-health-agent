@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # a new forecaster on the scoreboard.
     forecast_model: str = "gemini-3.5-flash-lite"
     vertex_location: str = "us-central1"
+    # Pre-registered analysis plan; its hash is the ledger's genesis entry.
+    analysis_plan_path: Path = Path("docs/ledger/analysis-plan.md")
 
     @model_validator(mode="before")
     @classmethod
