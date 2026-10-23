@@ -362,6 +362,17 @@ def run_sql(query: str, tool_context: ToolContext | None = None) -> dict:
         explaining the refusal. SQLite itself enforces read-only access, the
         allowed tables and functions, and a time limit.
     """
+    out = guarded_query(query)
+    if "error" in out:
+        return out
+    rid = _record_sql(out["code"], out["rows"])
+    _remember(tool_context, rid, out["rows"])
+    return {"rows": out["rows"], "n": len(out["rows"]), "truncated": len(out["rows"]) == MAX_ROWS,
+            "receipt": rid}
+
+
+def guarded_query(query: str) -> dict:
+    """`{"rows", "code"}` from one guarded read-only statement, or `{"error", "rows", "n"}`."""
     cleaned = _strip_sql_comments(query).strip().rstrip(";").strip()
     if not cleaned:
         return {"error": "empty query", "rows": [], "n": 0}
@@ -375,9 +386,7 @@ def run_sql(query: str, tool_context: ToolContext | None = None) -> dict:
         return {"error": reason, "rows": [], "n": 0}
     finally:
         conn.close()
-    rid = _record_sql(cleaned, rows)
-    _remember(tool_context, rid, rows)
-    return {"rows": rows, "n": len(rows), "truncated": len(rows) == MAX_ROWS, "receipt": rid}
+    return {"rows": rows, "code": cleaned}
 
 
 def _strip_sql_comments(sql: str) -> str:

@@ -39,7 +39,7 @@ def record_chat(input_tokens: int, output_tokens: int) -> float:
     return cost
 
 
-def cloud_month_spend(conn: sqlite3.Connection) -> float:
+def cloud_month_spend(conn: sqlite3.Connection, month: str | None = None) -> float:
     row = conn.execute("SELECT COALESCE(SUM(usd), 0) FROM agent_runs WHERE substr(day, 1, 7) = ?",
-                       (this_month(),)).fetchone()
+                       (month or this_month(),)).fetchone()
     return float(row[0])
