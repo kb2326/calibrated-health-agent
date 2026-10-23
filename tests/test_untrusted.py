@@ -34,7 +34,7 @@ def test_wrap_escapes_a_fake_closing_tag():
 
 
 def test_wrap_escapes_a_fake_opening_tag_and_keeps_none():
-    assert "<untrusted source=\"x\">a&lt;untrusted" in wrap("x", "a<untrusted")
+    assert "<untrusted source=\"x\">a&lt;untrusted" in str(wrap("x", "a<untrusted"))
     assert wrap("x", None) is None
 
 
