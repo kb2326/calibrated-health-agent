@@ -10,6 +10,10 @@ For each locked day D without a settlement entry in the chain:
 - no outcome and it is past D+1 06:00 owner time: a `no_outcome` entry;
 - otherwise the day stays open for a later run.
 
+Void and no-outcome payloads carry the day's (private) snapshot hash, so their public entry
+hash cannot be recomputed by guessing the kind: the public log never reveals whether the
+owner journalled.
+
 One transaction per day; re-running settles nothing twice.
 """
 from __future__ import annotations
@@ -27,9 +31,9 @@ SETTLED = ("outcome", "void", "no_outcome")
 OUTCOME_DEADLINE = time(6, 0)  # on D+1, owner time
 
 
-def _open_days(conn: sqlite3.Connection) -> list[tuple[str, str]]:
+def _open_days(conn: sqlite3.Connection) -> list[tuple[str, str, str]]:
     return list(conn.execute(
-        f"""SELECT s.day, s.locked_at FROM snapshots s
+        f"""SELECT s.day, s.locked_at, s.snapshot_hash FROM snapshots s
             WHERE NOT EXISTS (SELECT 1 FROM ledger l WHERE l.day = s.day
                               AND l.kind IN ({",".join("?" * len(SETTLED))}))
             ORDER BY s.day""", SETTLED))
@@ -49,7 +53,7 @@ def _score(conn: sqlite3.Connection, day: str, outcome: dict[str, int], scored_a
 def settle(conn: sqlite3.Connection, now: datetime) -> dict[str, int]:
     counts = {"scored": 0, "voided": 0, "no_outcome": 0}
     stamp = db.utc_stamp(now)
-    for day, locked_at in _open_days(conn):
+    for day, locked_at, snapshot_hash in _open_days(conn):
         row = conn.execute(
             """SELECT o.mood, o.energy, o.soreness, s.submitted_at, s.row_hash
                FROM journal_outcome o JOIN journal_submissions s ON s.id = o.submission_id
@@ -71,10 +75,11 @@ def settle(conn: sqlite3.Connection, now: datetime) -> dict[str, int]:
                 })
                 counts["scored"] += 1
             elif row is not None:
-                chain.append(conn, day, "void", {"reason": "journal before lock"})
+                chain.append(conn, day, "void", {"reason": "journal before lock",
+                                                 "snapshot_hash": snapshot_hash})
                 counts["voided"] += 1
             elif now >= deadline:
-                chain.append(conn, day, "no_outcome", {})
+                chain.append(conn, day, "no_outcome", {"snapshot_hash": snapshot_hash})
                 counts["no_outcome"] += 1
             conn.commit()
         except BaseException:

@@ -112,7 +112,7 @@ def test_repo_publishes_date_and_hash_only(conn, board):
     assert [line.split(",")[0] for line in lines[1:]] == ["plan", "2026-10-30"]  # 10-31 unsettled
     outcome_hash = conn.execute("SELECT entry_hash FROM ledger WHERE kind='outcome'").fetchone()[0]
     assert lines[2].endswith(outcome_hash)
-    assert json.loads(git.committed["docs/scoreboard.json"]) == board
+    assert json.loads(git.committed["docs/scoreboard.json"]) == publish.public_board(board)
     assert "<html" in git.committed["docs/index.html"]
     assert ["push", "origin", "HEAD"] in git.calls
 
@@ -128,7 +128,7 @@ def test_repo_noop_when_nothing_new(conn, board):
     rows = conn.execute("SELECT entry_hash FROM ledger WHERE kind IN ('plan','outcome') ORDER BY seq").fetchall()
     csv = f"date,chain_hash\nplan,{rows[0][0]}\n2026-10-30,{rows[1][0]}\n"
     git = FakeGit({"docs/chain.csv": csv,
-                   "docs/scoreboard.json": json.dumps({**board, "generated_at": "earlier"})})
+                   "docs/scoreboard.json": json.dumps(publish.public_board(board))})
     assert publish.to_repo(conn, "u", "PRIVATE", board, git=git) == 0
     assert not any("commit" in c or "push" in c for c in git.calls)
 
@@ -137,3 +137,48 @@ def test_key_file_removed_after_push(conn, board):
     git = FakeGit()
     publish.to_repo(conn, "u", "PRIVATE", board, git=git)
     assert git.key_seen is not None and not git.key_seen.exists()
+
+
+def _settled(board: dict) -> int:
+    return board["days_scored"] + board["days_voided"] + board["days_no_outcome"]
+
+
+def test_board_not_republished_one_settlement_apart(conn, board):
+    # Differencing two public boards one settled day apart would reveal that day's score.
+    old = {**board, "days_scored": 0, "days_voided": 0, "days_no_outcome": 0}
+    assert publish.board_due(old, {**old, "days_scored": 1}) is False
+    assert publish.board_due(old, {**old, "days_scored": publish.BOARD_EVERY - 1}) is False
+    assert publish.board_due(old, {**old, "days_scored": publish.BOARD_EVERY}) is True
+    assert publish.board_due(None, old) is True
+
+
+def test_public_board_is_rounded(conn, board):
+    board = {**board, "forecasters": [{"id": "a", "target": "energy", "n": 3,
+                                       "mean_rps": 0.123456789,
+                                       "skill_vs_climatology": {"skill": 0.98765, "n": 3},
+                                       "skill_vs_persistence": None}]}
+    row = publish.public_board(board)["forecasters"][0]
+    assert row["mean_rps"] == 0.12 and row["skill_vs_climatology"]["skill"] == 0.99
+
+
+def test_repo_keeps_old_board_until_seven_more_days_settle(conn, board):
+    published = publish.public_board({**board, "days_scored": 0})
+    git = FakeGit({"docs/scoreboard.json": json.dumps(published)})
+    publish.to_repo(conn, "u", "PRIVATE", {**board, "days_scored": 1}, git=git)
+    assert json.loads(git.committed["docs/scoreboard.json"]) == published  # chain line only
+
+
+def test_repo_refuses_a_published_hash_that_differs(conn, board):
+    git = FakeGit({"docs/chain.csv": "date,chain_hash\nplan," + "f" * 64 + "\n"})
+    with pytest.raises(publish.LedgerMismatch, match="plan"):
+        publish.to_repo(conn, "u", "PRIVATE", board, git=git)
+
+
+def test_bucket_refuses_a_mirrored_hash_that_differs(conn):
+    class Tagged(FakeBucket):
+        def list_blobs(self, prefix=""):
+            return [type("B", (), {"name": "ledger/000001-0000-00-00-plan.json",
+                                   "metadata": {"entry_hash": "f" * 64}})()]
+
+    with pytest.raises(publish.LedgerMismatch, match="seq 1"):
+        publish.to_bucket(conn, "b", client=FakeStorage(Tagged()))

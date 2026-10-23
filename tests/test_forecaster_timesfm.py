@@ -15,12 +15,17 @@ D = date(2026, 10, 30)
 class FakeBQ:
     def __init__(self, rows=None, error: Exception | None = None):
         self.rows, self.error, self.calls = rows or [], error, []
+        self.timeout: float | None = None
 
     def query(self, sql, job_config=None):
         self.calls.append((sql, job_config))
         if self.error:
             raise self.error
-        return SimpleNamespace(result=lambda: self.rows)
+        def result(timeout=None):
+            self.timeout = timeout
+            return self.rows
+
+        return SimpleNamespace(result=result)
 
 
 def _row(day: date, value: float, lo: float, hi: float):
@@ -71,3 +76,9 @@ def test_timesfm_error_abstains_with_type_only(conn):
 def test_timesfm_missing_day_row_abstains(conn):
     f = timesfm.forecast(conn, D, {}, client=FakeBQ([_row(D - timedelta(days=3), 5, 4, 6)]))
     assert f.abstain["mood"] == "no forecast row for the day"
+
+
+def test_timesfm_query_has_a_timeout(conn):
+    fake = FakeBQ([_row(D, 7.0, 6.0, 8.0)])
+    timesfm.forecast(conn, D, {}, client=fake)
+    assert fake.timeout == timesfm.TIMEOUT_SECONDS == 60

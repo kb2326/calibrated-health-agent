@@ -30,6 +30,7 @@ from health_ledger import dist, features
 from health_ledger.forecasters.base import TARGETS, Forecast
 
 FORECASTER_ID = f"gemini:{get_settings().forecast_model}"
+TIMEOUT_MS = 60_000  # a hung call abstains instead of holding the job to its 15-min limit
 
 INSTRUCTIONS = """You forecast how one person will rate their own day this evening.
 They rate mood, energy and soreness on a 1-10 scale (10 = excellent mood, full of energy,
@@ -52,10 +53,12 @@ class _Invalid(ValueError):
 
 def _client() -> Any:
     from google import genai
+    from google.genai import types
 
     settings = get_settings()
     return genai.Client(vertexai=True, project=settings.gcp_project,
-                        location=settings.vertex_location)
+                        location=settings.vertex_location,
+                        http_options=types.HttpOptions(timeout=TIMEOUT_MS))
 
 
 def _config() -> Any:

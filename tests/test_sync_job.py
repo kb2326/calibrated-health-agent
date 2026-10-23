@@ -265,7 +265,8 @@ def test_auth_failure_still_locks_and_keeps_the_lock(calls, monkeypatch):
         raise auth.ReauthRequired("login")
 
     monkeypatch.setattr(sync, "run", reauth)
-    monkeypatch.setattr(sync_job, "_lock", lambda s: calls.append("lock") or {"written": True})
+    seqs = iter([1, 2])  # the lock appended a chain entry
+    monkeypatch.setattr(sync_job, "_ledger_seq", lambda: next(seqs))
     assert sync_job.main([]) == 1
     assert calls[calls.index("lock") + 1:calls.index("lock") + 4] == ["settle", "push", "publish"]
 
@@ -280,7 +281,8 @@ def test_database_error_skips_ledger(calls, monkeypatch, capsys):
 def test_ledger_rows_trigger_push(calls, monkeypatch):
     monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"inserted": 0}})
     monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 0})
-    monkeypatch.setattr(sync_job, "_settle", lambda: calls.append("settle") or {"written": True})
+    seqs = iter([3, 4])  # settle appended a chain entry
+    monkeypatch.setattr(sync_job, "_ledger_seq", lambda: next(seqs))
     assert sync_job.main([]) == 0
     assert "push" in calls
 
@@ -312,3 +314,19 @@ def test_heartbeat_reports_lock(calls, monkeypatch):
     monkeypatch.setattr(sync_job, "_locked_today", lambda: True)
     sync_job.main([])
     assert calls.beats[-1]["locked_today"] is True
+
+
+def test_partial_settle_is_still_pushed(calls, monkeypatch):
+    # settle committed one day, then raised: the bucket must get that day before publish
+    seqs = iter([5, 6])
+    monkeypatch.setattr(sync_job, "_ledger_seq", lambda: next(seqs))
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"inserted": 0}})
+    monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 0})
+
+    def half(_=None):
+        calls.append("settle")
+        raise RuntimeError("second day failed")
+
+    monkeypatch.setattr(sync_job, "_settle", half)
+    assert sync_job.main([]) == 1
+    assert calls.index("push") < calls.index("publish")

@@ -77,3 +77,12 @@ def test_gemini_prompt_contains_snapshot_only():
     assert '"sleep_minutes":420.0' in prompt and '"readiness":61.0' in prompt
     assert "private text" not in prompt and "note" not in prompt
     assert "climatology" not in prompt and "persistence" not in prompt  # no other bets
+
+
+def test_gemini_client_has_a_timeout(monkeypatch):
+    from google import genai
+
+    seen = {}
+    monkeypatch.setattr(genai, "Client", lambda **kw: seen.update(kw) or object())
+    gemini._client()
+    assert seen["vertexai"] is True and seen["http_options"].timeout == gemini.TIMEOUT_MS == 60_000

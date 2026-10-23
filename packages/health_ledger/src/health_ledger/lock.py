@@ -2,8 +2,9 @@
 
 A lock is due for today (owner-zone civil day) when it has not happened yet and either
 last night's sleep has arrived (a `sleep` daily value dated today) or it is 12:00 or
-later. Only today is ever locked: a missed day stays missed. The deadline lock records
-which inputs were missing.
+later, and it is before 13:00. Only today is ever locked, and never after 13:00: a later
+lock (say at the 22:30 run) would see the whole day's data, so a missed lock is a missed
+day. The deadline lock records which inputs were missing.
 
 Forecasters run first (Gemini and TimesFM call the network), then the snapshot, every
 (forecaster, target) row and the `lock` chain entry are written in one transaction. A
@@ -23,6 +24,7 @@ from health_ledger import chain, features
 from health_ledger.forecasters import FORECASTERS, TARGETS, Forecast, Forecaster
 
 DEADLINE = time(12, 0)
+CUTOFF = time(13, 0)  # no lock at or after this: later data would leak into the bet
 
 
 def _today(now: datetime):
@@ -33,9 +35,12 @@ def due(conn: sqlite3.Connection, now: datetime) -> bool:
     day = _today(now).isoformat()
     if conn.execute("SELECT 1 FROM snapshots WHERE day = ?", (day,)).fetchone():
         return False
+    local = now.astimezone(civil.zone()).time()
+    if local >= CUTOFF:
+        return False
     sleep = conn.execute("SELECT 1 FROM daily_metrics WHERE data_type = 'sleep' AND date = ?",
                          (day,)).fetchone()
-    return sleep is not None or now.astimezone(civil.zone()).time() >= DEADLINE
+    return sleep is not None or local >= DEADLINE
 
 
 def _rows(name: str, forecast: Forecast, day: str, locked_at: str) -> list[tuple]:

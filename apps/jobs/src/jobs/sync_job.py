@@ -159,6 +159,15 @@ def _publish(settings: Settings) -> dict[str, Any]:
     return {"bucket_objects": objects, "repo_lines": lines}
 
 
+def _ledger_seq() -> int | None:
+    """The chain's last sequence number (None before schema v3 or on a read error)."""
+    try:
+        with db.connect() as conn:
+            return conn.execute("SELECT MAX(seq) FROM ledger").fetchone()[0]
+    except sqlite3.Error:
+        return None
+
+
 def _locked_today() -> bool:
     from health_data import civil
 
@@ -240,7 +249,9 @@ def _run(settings: Settings, dry_run: bool) -> int:
         new_submissions = int(journal_result.get("new_submissions", 0)) if journal_result else 0
         db_error = isinstance(sync_cause, sqlite3.DatabaseError)
 
-        ledger_written = False  # rule 7
+        # rule 7. Whether the ledger changed is read from the database, not from step
+        # results: a step that commits some rows and then raises still changed it.
+        seq_before = None if db_error or dry_run else _ledger_seq()
         for name, fn in (("lock", lambda: _lock(settings)), ("settle", _settle)):
             if db_error:
                 log(name, result="skipped (database error)")
@@ -248,9 +259,10 @@ def _run(settings: Settings, dry_run: bool) -> int:
                 log(name, result="skipped (dry-run)")
             else:
                 try:
-                    ledger_written |= bool(_step(name, fn).get("written"))
+                    _step(name, fn)
                 except _Abort:
                     failed = True
+        ledger_written = not (db_error or dry_run) and _ledger_seq() != seq_before
 
         changed = (bool(migrated.get("migrated")) or bool(sync_rows) or bool(new_submissions)
                    or ledger_written)

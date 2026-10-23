@@ -101,3 +101,11 @@ def test_stored_probabilities_round_trip(conn):
     lock.lock_today(conn, ist(12), {"a": _uniform})
     stored = json.loads(conn.execute("SELECT probs_json FROM forecasts LIMIT 1").fetchone()[0])
     assert dist.normalize(stored) == pytest.approx(tuple([0.1] * 10))
+
+
+def test_no_lock_after_cutoff(conn):
+    # a lock at 22:30 would see the whole day's data; a missed lock is a missed day
+    assert lock.due(conn, ist(12, 59)) is True
+    assert lock.due(conn, ist(13, 0)) is False
+    metric(conn, D, "sleep", 400)
+    assert lock.due(conn, ist(22, 30)) is False

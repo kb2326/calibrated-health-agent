@@ -29,6 +29,7 @@ MIN_OUTCOMES = 14
 CONFIDENCE = 0.8
 Z80 = 1.2816  # half-width of a central 80% normal interval, in sds
 MAX_BYTES_BILLED = 100 * 1024 * 1024
+TIMEOUT_SECONDS = 60  # a hung query abstains instead of holding the job to its 15-min limit
 
 SQL = """
 SELECT forecast_timestamp, forecast_value,
@@ -60,7 +61,7 @@ def _query(client: Any, rows: list[tuple[date, int]], horizon: int) -> list[Any]
         maximum_bytes_billed=MAX_BYTES_BILLED,
     )
     sql = SQL.format(horizon=int(horizon), confidence=CONFIDENCE)
-    return list(client.query(sql, job_config=config).result())
+    return list(client.query(sql, job_config=config).result(timeout=TIMEOUT_SECONDS))
 
 
 def forecast(conn: sqlite3.Connection, day: date, snapshot: dict, *, client: Any = None) -> Forecast:

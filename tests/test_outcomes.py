@@ -84,3 +84,11 @@ def test_scoring_is_idempotent(conn):
 def test_late_submission_does_not_count(conn):
     journal(conn, D, 6, 7, 2, submitted_at="2026-10-31T02:00:00.000000Z", status="late")
     assert outcomes.settle(conn, datetime(2026, 10, 31, 3, 0, tzinfo=UTC))["no_outcome"] == 1
+
+
+def test_void_and_no_outcome_payloads_are_not_guessable(conn):
+    snap_hash = conn.execute("SELECT snapshot_hash FROM snapshots").fetchone()[0]
+    journal(conn, D, 6, 7, 2, submitted_at="2026-10-30T05:00:00.000000Z")
+    outcomes.settle(conn, datetime(2026, 10, 30, 17, 0, tzinfo=UTC))
+    payload = json.loads(conn.execute("SELECT payload_json FROM ledger WHERE kind='void'").fetchone()[0])
+    assert payload["snapshot_hash"] == snap_hash  # private: not derivable from public lines
