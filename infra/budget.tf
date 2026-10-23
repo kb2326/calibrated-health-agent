@@ -23,16 +23,21 @@ resource "google_billing_budget" "this" {
   amount {
     specified_amount {
       currency_code = "USD"
-      units         = "5"
+      units         = "1"
     }
   }
 
-  # $2 and $4 of $5
+  # Owner cap: under $1/month. Email at $0.25 and $0.50 actual, and as soon as the
+  # month's forecast reaches $1, so a cost leak is caught before the bill lands.
   threshold_rules {
-    threshold_percent = 0.4
+    threshold_percent = 0.25
   }
   threshold_rules {
-    threshold_percent = 0.8
+    threshold_percent = 0.5
+  }
+  threshold_rules {
+    threshold_percent = 1.0
+    spend_basis       = "FORECASTED_SPEND"
   }
 
   all_updates_rule {
