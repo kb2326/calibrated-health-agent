@@ -7,7 +7,8 @@ Step and push rules:
 
 1. **pull** or **migrate** fails: stop. Nothing else runs, nothing is pushed.
 2. **sync** fails with an auth error (`ReauthRequired` / `AuthError`): the journal step
-   still runs (so a broken Forms token is reported too), but nothing is pushed.
+   still runs (so a broken Forms token is reported too). Sync itself changed nothing, so
+   only other completed work (journal, ledger) is pushed, under rule 6.
 3. **sync** fails with a SQLite `DatabaseError` (a damaged or unreadable file): the journal
    step still runs, but nothing is pushed, so the good copy in the bucket survives.
 4. **sync** raises any other exception (`SyncInterrupted`): the journal step still runs.
@@ -20,6 +21,14 @@ Step and push rules:
    (cursors, stage output, device inventory) is not worth a new bucket generation; the
    next run re-fetches the lookback anyway. So a network outage does not mint a new
    generation every run.
+7. **lock** and **settle** (the forecast ledger) run after the journal step, unless the
+   database errored (rule 3) or it is a dry run. Rows they write count as changed data.
+   Their failure fails the run but never blocks pushing the other work.
+8. **publish** (ledger bucket mirror, public date+hash log, scoreboard) runs only when the
+   bucket holds this run's database: after a successful push, or when the push was
+   skipped because nothing changed (then it retries whatever the destinations lack).
+   Never after a failed push or a database error, so nothing public can describe a
+   database state the bucket does not have.
 
 Every real run that got past migrate (not dry-run, synthetic or bucketless) then writes the
 heartbeat beside the database: when it checked, whether it succeeded, whether it pushed,
@@ -117,6 +126,50 @@ def _journal_import(settings: Settings) -> dict[str, Any]:
     return {"responses": len(responses), "new_submissions": sum(counts.values()), "invalid": len(problems)}
 
 
+def _lock(settings: Settings) -> dict[str, Any]:
+    from health_data import civil
+    from health_ledger import chain, lock
+
+    with db.connect() as conn:
+        chain.ensure_plan(conn, settings.analysis_plan_path)
+        result = lock.lock_today(conn, civil.now())
+    if result is None:
+        return {"written": False, "result": "not due"}
+    return {"written": True, **result}
+
+
+def _settle() -> dict[str, Any]:
+    from health_data import civil
+    from health_ledger import outcomes
+
+    with db.connect() as conn:
+        counts = outcomes.settle(conn, civil.now())
+    return {"written": any(counts.values()), **counts}
+
+
+def _publish(settings: Settings) -> dict[str, Any]:
+    from health_data import secrets
+    from health_ledger import publish, scoreboard
+
+    assert settings.ledger_bucket and settings.ledger_repo and settings.ledger_key_secret
+    key = secrets.read_secret(settings.gcp_project, settings.ledger_key_secret)
+    with db.connect() as conn:
+        objects = publish.to_bucket(conn, settings.ledger_bucket)
+        lines = publish.to_repo(conn, settings.ledger_repo, key, scoreboard.build(conn))
+    return {"bucket_objects": objects, "repo_lines": lines}
+
+
+def _locked_today() -> bool:
+    from health_data import civil
+
+    try:
+        with db.connect() as conn:
+            return conn.execute("SELECT 1 FROM snapshots WHERE day = ?",
+                                (civil.today().isoformat(),)).fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
 def _heartbeat(bucket: str, obj: str, *, ok: bool, pushed: bool, generation: int | None,
                changed_rows: int, new_submissions: int) -> dict[str, Any]:
     checked_at = db.utc_stamp()
@@ -129,7 +182,7 @@ def _heartbeat(bucket: str, obj: str, *, ok: bool, pushed: bool, generation: int
             last_ok_at = None
     beat = {"checked_at": checked_at, "ok": ok, "last_ok_at": last_ok_at, "pushed": pushed,
             "db_generation": generation, "changed_rows": changed_rows,
-            "new_submissions": new_submissions}
+            "new_submissions": new_submissions, "locked_today": _locked_today()}
     store.write_heartbeat(bucket, obj, beat)
     return {"ok": ok, "pushed": pushed}
 
@@ -185,26 +238,51 @@ def _run(settings: Settings, dry_run: bool) -> int:
             sync_rows = 0
         sync_cause = sync_error.__cause__ if isinstance(sync_error, SyncInterrupted) else sync_error
         new_submissions = int(journal_result.get("new_submissions", 0)) if journal_result else 0
-        changed = bool(migrated.get("migrated")) or bool(sync_rows) or bool(new_submissions)
+        db_error = isinstance(sync_cause, sqlite3.DatabaseError)
+
+        ledger_written = False  # rule 7
+        for name, fn in (("lock", lambda: _lock(settings)), ("settle", _settle)):
+            if db_error:
+                log(name, result="skipped (database error)")
+            elif dry_run:
+                log(name, result="skipped (dry-run)")
+            else:
+                try:
+                    ledger_written |= bool(_step(name, fn).get("written"))
+                except _Abort:
+                    failed = True
+
+        changed = (bool(migrated.get("migrated")) or bool(sync_rows) or bool(new_submissions)
+                   or ledger_written)
         generation = store.recorded_generation(generation_path)
-        pushed = False
-        if isinstance(sync_error, auth.AuthError):
-            log("push", result="skipped (sync auth failed; re-login needed)")  # rule 2
-        elif isinstance(sync_cause, sqlite3.DatabaseError):
+        pushed = publishable = False
+        if db_error:
             log("push", result="skipped (database error; the bucket copy is kept)")  # rule 3
         elif dry_run or not bucket:
             log("push", result="skipped (dry-run)" if dry_run else "skipped (CHA_DB_BUCKET not set)")
         elif not changed:
-            log("push", result="skipped (no data changed)")  # rule 6
+            # rule 6 (an auth failure lands here when nothing else changed: rule 2)
+            log("push", result="skipped (no data changed)" if not isinstance(
+                sync_error, auth.AuthError) else "skipped (sync auth failed; nothing else changed)")
+            publishable = True
         else:
             try:
                 generation = _step("push", lambda: {"generation": store.push_recorded(
                     bucket, settings.db_object, db.DB_PATH)})["generation"]
-                pushed = True
+                pushed = publishable = True
             except _Abort:
                 failed = True
         if dry_run or not bucket:
             return 1 if failed else 0
+        if not (settings.ledger_bucket and settings.ledger_repo and settings.ledger_key_secret):
+            log("publish", result="skipped (CHA_LEDGER_* not set)")
+        elif not publishable:
+            log("publish", result="skipped (database not in the bucket)")  # rule 8
+        else:
+            try:
+                _step("publish", lambda: _publish(settings))
+            except _Abort:
+                failed = True
         try:
             _step("heartbeat", lambda: _heartbeat(
                 bucket, settings.db_object, ok=not failed, pushed=pushed, generation=generation,

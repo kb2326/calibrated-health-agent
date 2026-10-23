@@ -23,12 +23,17 @@ def calls(monkeypatch, tmp_path):
     log = Calls()
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "health.db")
     monkeypatch.setattr(
-        sync_job, "get_settings", lambda: Settings.model_validate({"db_bucket": "bkt", "journal_form_id": "f"}))
+        sync_job, "get_settings", lambda: Settings.model_validate({
+            "db_bucket": "bkt", "journal_form_id": "f", "ledger_bucket": "lb",
+            "ledger_repo": "git@github.com:kb2326/cha-ledger-log.git", "ledger_key_secret": "k"}))
     monkeypatch.setattr(store, "pull_db", lambda *a, **k: log.append("pull") or 5)
     monkeypatch.setattr(sync_job, "_migrate", lambda: log.append("migrate") or {})
     monkeypatch.setattr(sync, "run", lambda: log.append("sync") or {"steps": {"fetched": 1, "inserted": 1}})
     monkeypatch.setattr(sync_job, "_journal_import", lambda s: log.append("import") or {})
     monkeypatch.setattr(store, "push_recorded", lambda *a, **k: log.append("push") or 6)
+    monkeypatch.setattr(sync_job, "_lock", lambda s: log.append("lock") or {"written": False})
+    monkeypatch.setattr(sync_job, "_settle", lambda: log.append("settle") or {"written": False})
+    monkeypatch.setattr(sync_job, "_publish", lambda s: log.append("publish") or {})
     monkeypatch.setattr(store, "read_heartbeat", lambda *a, **k: None)
     monkeypatch.setattr(store, "write_heartbeat", lambda b, o, beat, **k: log.append("heartbeat") or log.beats.append(beat))
     return log
@@ -50,9 +55,11 @@ def _interrupted(committed: dict, cause: Exception):
 
 def test_job_happy_path_order(calls, capsys):
     assert sync_job.main([]) == 0
-    assert calls == ["pull", "migrate", "sync", "import", "push", "heartbeat"]
+    assert calls == ["pull", "migrate", "sync", "import", "lock", "settle", "push", "publish",
+                     "heartbeat"]
     lines = _lines(capsys)
-    assert [line["step"] for line in lines] == ["pull", "migrate", "sync", "journal", "push", "heartbeat"]
+    assert [line["step"] for line in lines] == [
+        "pull", "migrate", "sync", "journal", "lock", "settle", "push", "publish", "heartbeat"]
     assert {line["severity"] for line in lines} == {"INFO"}
 
 
@@ -117,7 +124,7 @@ def test_empty_sync_summary_is_an_error(calls, monkeypatch, capsys):
 def test_sync_exception_still_imports_journal_and_pushes_committed_rows(calls, monkeypatch, capsys):
     monkeypatch.setattr(sync, "run", _interrupted({"steps": {"fetched": 3, "inserted": 2}}, RuntimeError("bug")))
     assert sync_job.main([]) == 1
-    assert calls == ["pull", "migrate", "import", "push", "heartbeat"]
+    assert calls == ["pull", "migrate", "import", "lock", "settle", "push", "publish", "heartbeat"]
     line = _step(_lines(capsys), "sync")
     assert (line["severity"], line["error"], line["changed_rows"]) == ("ERROR", "RuntimeError", 2)
 
@@ -164,7 +171,7 @@ def test_new_journal_submission_alone_is_pushed(calls, monkeypatch):
     monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"fetched": 9, "inserted": 0}})
     monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 1})
     assert sync_job.main([]) == 0
-    assert calls[-2:] == ["push", "heartbeat"]
+    assert "push" in calls
 
 
 def test_journal_error_log_has_type_and_response_id_only(calls, monkeypatch, capsys):
@@ -235,3 +242,73 @@ def test_heartbeat_write_failure_fails_the_job(calls, monkeypatch, capsys):
 def test_dry_run_writes_no_heartbeat(calls):
     sync_job.main(["--dry-run"])
     assert "heartbeat" not in calls
+
+
+def test_publish_runs_only_after_successful_push(calls, monkeypatch):
+    def clash(*a, **k):
+        raise store.ConcurrentUpdateError("changed")
+
+    monkeypatch.setattr(store, "push_recorded", clash)
+    assert sync_job.main([]) == 1
+    assert "publish" not in calls and calls[-1] == "heartbeat"
+
+
+def test_publish_retries_when_nothing_changed(calls, monkeypatch):
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"inserted": 0}})
+    monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 0})
+    assert sync_job.main([]) == 0
+    assert "push" not in calls and "publish" in calls
+
+
+def test_auth_failure_still_locks_and_keeps_the_lock(calls, monkeypatch):
+    def reauth():
+        raise auth.ReauthRequired("login")
+
+    monkeypatch.setattr(sync, "run", reauth)
+    monkeypatch.setattr(sync_job, "_lock", lambda s: calls.append("lock") or {"written": True})
+    assert sync_job.main([]) == 1
+    assert calls[calls.index("lock") + 1:calls.index("lock") + 4] == ["settle", "push", "publish"]
+
+
+def test_database_error_skips_ledger(calls, monkeypatch, capsys):
+    monkeypatch.setattr(sync, "run", _interrupted({}, sqlite3.DatabaseError("malformed")))
+    assert sync_job.main([]) == 1
+    assert "lock" not in calls and "settle" not in calls and "publish" not in calls
+    assert "database error" in _step(_lines(capsys), "lock")["result"]
+
+
+def test_ledger_rows_trigger_push(calls, monkeypatch):
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"inserted": 0}})
+    monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 0})
+    monkeypatch.setattr(sync_job, "_settle", lambda: calls.append("settle") or {"written": True})
+    assert sync_job.main([]) == 0
+    assert "push" in calls
+
+
+def test_lock_failure_fails_run_but_keeps_other_work(calls, monkeypatch, capsys):
+    def boom(_s):
+        raise RuntimeError("vertex down")
+
+    monkeypatch.setattr(sync_job, "_lock", boom)
+    assert sync_job.main([]) == 1
+    assert "push" in calls and "settle" in calls
+    assert _step(_lines(capsys), "lock")["severity"] == "ERROR"
+
+
+def test_dry_run_skips_ledger(calls):
+    sync_job.main(["--dry-run"])
+    assert not {"lock", "settle", "publish"} & set(calls)
+
+
+def test_publish_skipped_without_ledger_settings(calls, monkeypatch, capsys):
+    monkeypatch.setattr(sync_job, "get_settings", lambda: Settings.model_validate(
+        {"db_bucket": "bkt", "journal_form_id": "f"}))
+    assert sync_job.main([]) == 0
+    assert "publish" not in calls
+    assert "not set" in _step(_lines(capsys), "publish")["result"]
+
+
+def test_heartbeat_reports_lock(calls, monkeypatch):
+    monkeypatch.setattr(sync_job, "_locked_today", lambda: True)
+    sync_job.main([])
+    assert calls.beats[-1]["locked_today"] is True
