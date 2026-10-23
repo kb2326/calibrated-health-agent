@@ -100,8 +100,10 @@ def _emit(payload: dict) -> None:
     line = json.dumps(payload, allow_nan=False)
     if len(line) > OUTPUT_CAP:
         line = json.dumps({"ok": False, "error": "output too large", "stdout": ""})
-    sys.__stdout__.write(line + "\n")
-    sys.__stdout__.flush()
+    out = sys.__stdout__
+    assert out is not None
+    out.write(line + "\n")
+    out.flush()
 
 
 def main() -> None:
