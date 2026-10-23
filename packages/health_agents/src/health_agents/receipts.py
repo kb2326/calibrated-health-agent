@@ -68,3 +68,43 @@ def get(receipt_id: str) -> tuple[Receipt, str] | None:
     finally:
         conn.close()
     return (found, "investigator") if found is not None else None
+
+
+def rows_hash(rows: Any) -> str:
+    """A SQL receipt's data fingerprint is the hash of the rows it returned."""
+    return sha256(canonical(rows))
+
+
+def rerun(receipt_id: str) -> dict:
+    """Re-run a receipt's code on the current local data and compare.
+
+    `matches`: same value. `data_changed`: the data the code read differs from when the
+    receipt was made (a late sync or backfill), so a different value is expected.
+    """
+    from datetime import date
+
+    from . import sqlguard, tools
+
+    found = get(receipt_id)
+    if found is None:
+        return {"id": receipt_id, "error": "no such receipt"}
+    receipt, _ = found
+    if receipt.kind == "sql":
+        conn, denied = sqlguard.guarded_connect(db.DB_PATH)
+        try:
+            new = [dict(r) for r in conn.execute(receipt.code).fetchmany(tools.MAX_ROWS)]
+        except sqlite3.Error as exc:
+            return {"id": receipt_id, "error": sqlguard.explain(denied, exc)}
+        finally:
+            conn.close()
+        changed = rows_hash(new) != receipt.data_hash
+        return {"id": receipt_id, "matches": new == receipt.output, "data_changed": changed,
+                "old": receipt.output, "new": new}
+    with tools._ro_connect() as conn:
+        out = tools.run_python_on(conn, receipt.code, date.fromisoformat(receipt.as_of),
+                                  investigator=receipt.context == "investigator")
+    if "error" in out:
+        return {"id": receipt_id, "error": out["error"]}
+    return {"id": receipt_id, "matches": out["result"] == receipt.output,
+            "data_changed": out["data_hash"] != receipt.data_hash,
+            "old": receipt.output, "new": out["result"]}
