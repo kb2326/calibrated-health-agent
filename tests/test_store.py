@@ -28,6 +28,13 @@ class FakeBlob:
         self.bucket.objects[self.name] = (Path(path).read_bytes(), gen)
         self.generation = gen
 
+    def upload_from_string(self, data, content_type=None):
+        gen = self.bucket.counter = self.bucket.counter + 1
+        self.bucket.objects[self.name] = (data.encode(), gen)
+
+    def download_as_text(self):
+        return self.bucket.objects[self.name][0].decode()
+
 
 class FakeBucket:
     def __init__(self):
@@ -145,3 +152,11 @@ def test_push_recorded_first_push_then_reuses_generation(tmp_path):
     store.push_recorded("b", "health.db", src, client=client, gen_path=gen_file)
     store.push_recorded("b", "health.db", src, client=client, gen_path=gen_file)
     assert [u[1] for u in client.b.uploads] == [0, 101]
+
+
+def test_heartbeat_round_trip_beside_the_database():
+    client = FakeClient()
+    assert store.read_heartbeat("bkt", "health.db", client=client) is None
+    store.write_heartbeat("bkt", "health.db", {"checked_at": "t1", "ok": True}, client=client)
+    assert set(client.b.objects) == {"health.db.heartbeat.json"}  # never touches the database
+    assert store.read_heartbeat("bkt", "health.db", client=client) == {"checked_at": "t1", "ok": True}

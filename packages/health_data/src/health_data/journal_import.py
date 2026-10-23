@@ -8,8 +8,11 @@ Lateness is graded on the response's lastSubmittedTime: a response edited after
 D+1 06:00 (owner zone) is late even if it was first created on time, so an edit
 can never turn into an on-time outcome just because it was imported late.
 
-Errors carry only the exception type and the response id (`JournalImportError`);
-the CLI and the job log exactly that, never a message that could echo an answer.
+A response too malformed to parse (bad timestamps, missing id) is skipped and listed as
+a problem by response id and exception type; it never blocks the other responses, and it
+is retried on the next import. Errors carry only the exception type and the response id
+(`JournalImportError`); the CLI and the job log exactly that, never a message that could
+echo an answer.
 """
 from __future__ import annotations
 
@@ -118,7 +121,10 @@ def _int_or_none(raw: str | None) -> int | None:
 def parse_responses(
     question_ids: dict[str, str], responses: list[dict], tz: str,
 ) -> tuple[list[JournalRow], list[str]]:
-    """Turn raw Forms responses into rows; problems are listed without answer values."""
+    """Turn raw Forms responses into rows; problems are listed without answer values.
+
+    A response that cannot be parsed at all is skipped and listed as a problem.
+    """
     zone = ZoneInfo(tz)
     rows: list[JournalRow] = []
     problems: list[str] = []
@@ -126,8 +132,9 @@ def parse_responses(
         rid = resp.get("responseId")
         try:
             row, reasons = _parse_one(question_ids, resp, zone)
-        except Exception as exc:  # never re-raise with a message: it may quote an answer
-            raise JournalImportError(type(exc).__name__, rid) from None
+        except Exception as exc:  # never keep the message: it may quote an answer
+            problems.append(f"{rid}: malformed response ({type(exc).__name__})")
+            continue
         rows.append(row)
         if row.status == "invalid":
             problems.append(f"{rid}: {'; '.join(reasons)}")

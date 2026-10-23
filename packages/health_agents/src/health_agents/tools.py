@@ -81,6 +81,7 @@ def _generations() -> dict:
         return out
     try:
         out["bucket_generation"] = store.remote_generation(settings.db_bucket, settings.db_object)
+        out["last_check"] = store.read_heartbeat(settings.db_bucket, settings.db_object)
     except Exception as exc:  # network or auth: report, don't fail the tool
         out["bucket_generation"] = None
         out["note"] = f"bucket unreachable ({type(exc).__name__})"
@@ -129,9 +130,12 @@ def describe_substrate() -> dict:
 
     Returns:
         dict: row counts per table; `freshness` with the last successful sync
-        per metric (UTC), the newest of those, the last journal import, and the
+        per metric (UTC), the newest of those, the last journal import, the
         recorded vs bucket generation of the database (a mismatch means this
-        local copy is stale — say so before answering about recent days).
+        local copy is stale — say so before answering about recent days), and
+        `last_check`: the sync job's latest heartbeat (`checked_at`, `ok`,
+        `last_ok_at`). A run that found no new data does not push, so
+        `last_check` can be newer than every `last_synced_at`.
     """
     with _ro_connect() as conn:
         counts = {}

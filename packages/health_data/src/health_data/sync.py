@@ -231,11 +231,38 @@ def ingest(conn, data_type: str, lo: date, hi: date, counters: dict[str, Any],
         rebuild_daily(conn, data_type)
 
 
+class SyncInterrupted(RuntimeError):
+    """run() stopped on an unexpected error; `__cause__` is that error.
+
+    `summary` covers only the data types committed before it stopped, so a caller can
+    tell whether the interrupted run wrote any data worth keeping.
+    """
+
+    def __init__(self, summary: dict[str, dict[str, Any]]):
+        self.summary = summary
+        super().__init__(f"sync stopped after {len(summary)} committed data types")
+
+
 def run() -> dict:
+    """Sync every tracked type. Auth errors propagate as-is; any other unexpected error
+    becomes SyncInterrupted carrying the committed part of the summary."""
     db.init_db()
     summary: defaultdict[str, dict[str, Any]] = defaultdict(
         lambda: {"fetched": 0, "inserted": 0}
     )
+    committed: list[str] = []
+    try:
+        _sync_all(summary, committed)
+    except auth.AuthError:
+        raise
+    except Exception as exc:
+        raise SyncInterrupted({t: dict(summary[t]) for t in committed}) from exc
+    result = dict(summary)
+    db.write_stage_output("ingest", civil.today().isoformat(), result)
+    return result
+
+
+def _sync_all(summary: defaultdict[str, dict[str, Any]], committed: list[str]) -> None:
     with db.connect() as conn:
         for data_type in CONFIG["data_types"]:
             row = conn.execute(
@@ -270,6 +297,7 @@ def run() -> dict:
             # Commit per data type: rows and cursor land together, and an interrupt
             # keeps every type already finished.
             conn.commit()
+            committed.append(data_type)
             s = summary[data_type]
             log.info(
                 f"ingest.{data_type} ok",
@@ -291,9 +319,6 @@ def run() -> dict:
             # Needs the settings scope; absent until re-consent. Never fatal.
             summary["_devices"]["error"] = str(e)[:200]
             conn.rollback()
-    result = dict(summary)
-    db.write_stage_output("ingest", civil.today().isoformat(), result)
-    return result
 
 
 if __name__ == "__main__":

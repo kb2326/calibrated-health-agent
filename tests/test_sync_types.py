@@ -74,6 +74,34 @@ def test_unknown_type_records_error_and_continues(tmpdb, monkeypatch):
         assert conn.execute("SELECT COUNT(*) FROM sync_state").fetchone()[0] == 1
 
 
+def test_unexpected_error_reports_only_committed_types(tmpdb, monkeypatch):
+    def fake_points(data_type, start, end):
+        if data_type == "weight":
+            raise ConnectionError("network down")  # not a HealthApiError: stops the run
+        yield {"dailyRestingHeartRate": {"date": _ymd(date(2026, 10, 2)),
+                                         "beatsPerMinute": "60"}}
+
+    monkeypatch.setattr(sync, "CONFIG", _config(
+        ("daily-resting-heart-rate", "mean"), ("weight", "mean")))
+    monkeypatch.setattr(client, "iter_data_points", fake_points)
+    with pytest.raises(sync.SyncInterrupted) as err:
+        sync.run()
+    assert isinstance(err.value.__cause__, ConnectionError)
+    assert set(err.value.summary) == {"daily-resting-heart-rate"}
+    assert sync.changed_rows(err.value.summary) == 1
+
+
+def test_auth_error_is_not_wrapped(tmpdb, monkeypatch):
+    def fake_points(*a, **k):
+        raise auth.ReauthRequired("login")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(sync, "CONFIG", _config(("weight", "mean")))
+    monkeypatch.setattr(client, "iter_data_points", fake_points)
+    with pytest.raises(auth.ReauthRequired):
+        sync.run()
+
+
 def test_clean_run_exits_zero():
     assert sync.exit_code({"steps": {"fetched": 1, "inserted": 1}}) == 0
 

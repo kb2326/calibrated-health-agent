@@ -8,15 +8,24 @@ Step and push rules:
 1. **pull** or **migrate** fails: stop. Nothing else runs, nothing is pushed.
 2. **sync** fails with an auth error (`ReauthRequired` / `AuthError`): the journal step
    still runs (so a broken Forms token is reported too), but nothing is pushed.
-3. **sync** raises any other exception: the journal step still runs, and the database is
-   pushed (pull and migrate succeeded; each data type sync finished before the exception
-   committed atomically with its cursor, so the file is consistent).
-4. A sync that completed with some failed data types, or a journal step that failed, still
+3. **sync** fails with a SQLite `DatabaseError` (a damaged or unreadable file): the journal
+   step still runs, but nothing is pushed, so the good copy in the bucket survives.
+4. **sync** raises any other exception (`SyncInterrupted`): the journal step still runs.
+   Each data type finished before the exception committed atomically with its cursor, so
+   the file is consistent, and the rows those types changed count toward rule 6.
+5. A sync that completed with some failed data types, or a journal step that failed, still
    pushes the completed work.
-5. The push is skipped when the run changed no data: no migration applied, zero
+6. The push is skipped when the run changed no data: no migration applied, zero
    new-or-changed rows from sync and zero new journal submissions. Bookkeeping alone
    (cursors, stage output, device inventory) is not worth a new bucket generation; the
-   next run re-fetches the lookback anyway.
+   next run re-fetches the lookback anyway. So a network outage does not mint a new
+   generation every run.
+
+Every real run that got past migrate (not dry-run, synthetic or bucketless) then writes the
+heartbeat beside the database: when it checked, whether it succeeded, whether it pushed,
+and the last successful check. A skipped push leaves `sync_state` in the bucket older than
+the last check, so the heartbeat is the freshness record. A heartbeat that cannot be
+written fails the run.
 
 Any failure exits non-zero. `--dry-run` works on a temp copy and never pushes. Journal
 failures are logged as the error type and response id only.
@@ -29,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 import tempfile
 import time
@@ -55,6 +65,12 @@ def _error_fields(name: str, exc: BaseException) -> dict[str, Any]:
         from health_data.journal_import import describe_error
 
         return describe_error(exc)
+    if name == "sync":
+        from health_data.sync import SyncInterrupted, changed_rows
+
+        if isinstance(exc, SyncInterrupted):  # log the real error and what was kept
+            return {"error": type(exc.__cause__).__name__, "detail": str(exc.__cause__)[:300],
+                    "committed_types": len(exc.summary), "changed_rows": changed_rows(exc.summary)}
     return {"error": type(exc).__name__, "detail": str(exc)[:300]}
 
 
@@ -101,6 +117,23 @@ def _journal_import(settings: Settings) -> dict[str, Any]:
     return {"responses": len(responses), "new_submissions": sum(counts.values()), "invalid": len(problems)}
 
 
+def _heartbeat(bucket: str, obj: str, *, ok: bool, pushed: bool, generation: int | None,
+               changed_rows: int, new_submissions: int) -> dict[str, Any]:
+    checked_at = db.utc_stamp()
+    last_ok_at: str | None = checked_at
+    if not ok:
+        try:  # carry the last good check forward; a missing or unreadable one is not fatal
+            previous = store.read_heartbeat(bucket, obj) or {}
+            last_ok_at = previous.get("last_ok_at")
+        except Exception:
+            last_ok_at = None
+    beat = {"checked_at": checked_at, "ok": ok, "last_ok_at": last_ok_at, "pushed": pushed,
+            "db_generation": generation, "changed_rows": changed_rows,
+            "new_submissions": new_submissions}
+    store.write_heartbeat(bucket, obj, beat)
+    return {"ok": ok, "pushed": pushed}
+
+
 def _run(settings: Settings, dry_run: bool) -> int:
     synthetic = settings.data_mode == "synthetic"
     bucket = settings.db_bucket
@@ -126,6 +159,8 @@ def _run(settings: Settings, dry_run: bool) -> int:
                 log(name, result=SKIPPED)
             return 0
 
+        from health_data.sync import SyncInterrupted, changed_rows
+
         sync_result: dict[str, Any] | None = None
         sync_error: BaseException | None = None
         try:
@@ -142,23 +177,40 @@ def _run(settings: Settings, dry_run: bool) -> int:
         failed = (sync_error is not None or journal_result is None
                   or bool(sync_result and sync_result["types_failed"]))
 
-        changed = (
-            bool(migrated.get("migrated"))
-            or sync_error is not None  # rule 3: unknown how much was committed; push it
-            or bool(sync_result and sync_result["changed_rows"])
-            or bool(journal_result and journal_result.get("new_submissions"))
-        )
+        if sync_result:
+            sync_rows = sync_result["changed_rows"]
+        elif isinstance(sync_error, SyncInterrupted):  # rule 4: only what was committed
+            sync_rows = changed_rows(sync_error.summary)
+        else:
+            sync_rows = 0
+        sync_cause = sync_error.__cause__ if isinstance(sync_error, SyncInterrupted) else sync_error
+        new_submissions = int(journal_result.get("new_submissions", 0)) if journal_result else 0
+        changed = bool(migrated.get("migrated")) or bool(sync_rows) or bool(new_submissions)
+        generation = store.recorded_generation(generation_path)
+        pushed = False
         if isinstance(sync_error, auth.AuthError):
             log("push", result="skipped (sync auth failed; re-login needed)")  # rule 2
+        elif isinstance(sync_cause, sqlite3.DatabaseError):
+            log("push", result="skipped (database error; the bucket copy is kept)")  # rule 3
         elif dry_run or not bucket:
             log("push", result="skipped (dry-run)" if dry_run else "skipped (CHA_DB_BUCKET not set)")
         elif not changed:
-            log("push", result="skipped (no data changed)")  # rule 5
+            log("push", result="skipped (no data changed)")  # rule 6
         else:
             try:
-                _step("push", lambda: {"generation": store.push_recorded(bucket, settings.db_object, db.DB_PATH)})
+                generation = _step("push", lambda: {"generation": store.push_recorded(
+                    bucket, settings.db_object, db.DB_PATH)})["generation"]
+                pushed = True
             except _Abort:
-                return 1
+                failed = True
+        if dry_run or not bucket:
+            return 1 if failed else 0
+        try:
+            _step("heartbeat", lambda: _heartbeat(
+                bucket, settings.db_object, ok=not failed, pushed=pushed, generation=generation,
+                changed_rows=sync_rows, new_submissions=new_submissions))
+        except _Abort:
+            return 1
         return 1 if failed else 0
     finally:
         db.DB_PATH = saved_db_path

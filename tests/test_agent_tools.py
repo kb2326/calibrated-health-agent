@@ -98,9 +98,18 @@ def test_describe_substrate_reports_freshness(tmp_path):
 def test_describe_substrate_compares_bucket_generation(tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "get_settings", lambda: Settings.model_validate({"db_bucket": "bkt"}))
     monkeypatch.setattr(store, "remote_generation", lambda b, o: 42)
+    monkeypatch.setattr(store, "read_heartbeat", lambda b, o: None)
     (tmp_path / ".db_generation").write_text("41")
     f = tools.describe_substrate()["freshness"]
     assert (f["recorded_generation"], f["bucket_generation"], f["local_is_current"]) == (41, 42, False)
+
+
+def test_describe_substrate_reports_last_bucket_check(tmp_path, monkeypatch):
+    beat = {"checked_at": "2026-10-21T08:00:00.000000Z", "ok": True, "pushed": False}
+    monkeypatch.setattr(tools, "get_settings", lambda: Settings.model_validate({"db_bucket": "bkt"}))
+    monkeypatch.setattr(store, "remote_generation", lambda b, o: 41)
+    monkeypatch.setattr(store, "read_heartbeat", lambda b, o: beat)
+    assert tools.describe_substrate()["freshness"]["last_check"] == beat
 
 
 def test_series_tools_carry_last_sync_time():

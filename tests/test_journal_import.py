@@ -155,14 +155,20 @@ def test_edit_inside_window_stays_on_time(conn):
     assert counts == {"ok": 1}
 
 
-def test_parse_error_carries_only_type_and_response_id():
+def test_malformed_response_is_skipped_not_fatal(conn):
     secret = "SECRET-NOTE-VALUE"
     broken = resp("rX", note=secret)
     broken["createTime"] = "not-a-time " + secret
-    with pytest.raises(journal_import.JournalImportError) as err:
-        parse_responses(QIDS, [broken], TZ)
-    assert journal_import.describe_error(err.value) == {"error": "ValueError", "response_id": "rX"}
-    assert secret not in str(err.value) and err.value.__cause__ is None
+    counts, problems = run(conn, broken, resp("r2", day="2026-03-11", create="2026-03-11T15:00:00Z"))
+    assert counts == {"ok": 1}  # one poison response must not block the others
+    assert problems == ["rX: malformed response (ValueError)"]
+    assert secret not in " ".join(problems)
+
+
+def test_malformed_response_without_id_is_still_reported(conn):
+    counts, problems = run(conn, {"answers": {}}, resp("r2"))
+    assert counts == {"ok": 1}
+    assert problems == ["None: malformed response (KeyError)"]
 
 
 def test_cli_journal_writer_is_gone():
