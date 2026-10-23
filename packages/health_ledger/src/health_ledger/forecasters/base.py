@@ -13,10 +13,15 @@ TARGETS = ("mood", "energy", "soreness")
 
 @dataclass(frozen=True)
 class Forecast:
-    """Per target, exactly one of a distribution (`probs`) or an abstain reason."""
+    """Per target, exactly one of a distribution (`probs`) or an abstain reason.
+
+    `inputs` carries what a forecaster read beyond the shared snapshot (forecaster 7's notes)
+    and its model usage; the lock records both.
+    """
 
     probs: dict[str, Dist] = field(default_factory=dict)
     abstain: dict[str, str] = field(default_factory=dict)
+    inputs: dict | None = None
 
     @classmethod
     def abstain_all(cls, reason: str) -> Forecast:

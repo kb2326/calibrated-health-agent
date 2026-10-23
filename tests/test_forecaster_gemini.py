@@ -37,8 +37,8 @@ def _good() -> str:
 
 def test_registered_under_model_scoped_id():
     assert gemini.FORECASTER_ID == f"gemini:{gemini.get_settings().forecast_model}"
-    assert list(forecasters.FORECASTERS)[-1] == gemini.FORECASTER_ID
-    assert list(forecasters.FORECASTERS).index("timesfm") == len(forecasters.FORECASTERS) - 2
+    names = list(forecasters.FORECASTERS)
+    assert names.index(gemini.FORECASTER_ID) == names.index("timesfm") + 1
 
 
 def test_gemini_parses_three_distributions():
