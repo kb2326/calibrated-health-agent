@@ -9,22 +9,19 @@ def _load_agent():
     return importlib.reload(agent)
 
 
-def test_sub_agent_modes_are_explicit():
-    agent = _load_agent()
-    subs = agent.root_agent.sub_agents
-    assert [s.name for s in subs] == ["data_scientist", "domain_expert", "health_coach"]
-    for sub in subs:
-        assert sub.mode is not None, f"{sub.name} must set mode explicitly"
-        assert sub.mode == "single_turn"
+def test_root_agent_is_the_configured_workflow():
+    assert _load_agent().root_agent.name == f"health_agent_{get_settings().topology}"
 
 
 def test_agents_use_configured_model(monkeypatch):
+    from health_agents import workflow
+
     monkeypatch.setenv("CHA_MODEL_DEFAULT", "gemini-test-model")
     get_settings.cache_clear()
     try:
-        agent = _load_agent()
-        for a in [agent.root_agent, *agent.root_agent.sub_agents]:
-            assert a.model == "gemini-test-model", a.name
+        for agent in workflow.specialists(get_settings().model_default).values():
+            assert agent.model == "gemini-test-model", agent.name
+        assert _load_agent().MODEL == "gemini-test-model"
     finally:
         monkeypatch.undo()
         get_settings.cache_clear()
