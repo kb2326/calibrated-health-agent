@@ -113,3 +113,16 @@ def run(conn: sqlite3.Connection, targets: Sequence[str] = TARGETS,
     for row, q in zip(results, benjamini_hochberg([r["p"] for r in results]), strict=True):
         row["q"] = q
     return results
+
+
+def mean_diff_permutation(cond: Sequence[float], other: Sequence[float]) -> tuple[float, float]:
+    """(mean(cond) - mean(other), two-sided permutation p-value), seeded like `spearman`."""
+    a, b = np.asarray(cond, float), np.asarray(other, float)
+    effect = float(a.mean() - b.mean())
+    pooled = np.concatenate([a, b])
+    rng = np.random.default_rng(SEED)
+    hits = 0
+    for _ in range(PERMUTATIONS):
+        perm = rng.permutation(pooled)
+        hits += abs(perm[:len(a)].mean() - perm[len(a):].mean()) >= abs(effect) - 1e-12
+    return effect, (hits + 1) / (PERMUTATIONS + 1)

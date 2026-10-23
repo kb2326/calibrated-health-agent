@@ -41,3 +41,15 @@ def test_associations_find_a_planted_lag0_link(tmp_path):
     assert hit["rho"] == pytest.approx(1.0)
     assert hit["q"] < 0.05
     assert set(hit) == {"metric", "target", "lag", "rho", "n", "p", "q"}
+
+
+def test_mean_diff_permutation_is_seeded_and_two_sided():
+    from health_ledger.associations import mean_diff_permutation
+
+    cond, other = [3, 3, 4, 3, 2], [6, 7, 6, 5, 7, 6]
+    effect, p = mean_diff_permutation(cond, other)
+    assert effect == pytest.approx(3.0 - 6.1666667, abs=1e-6)
+    assert p < 0.05 and (effect, p) == mean_diff_permutation(cond, other)
+    flipped = mean_diff_permutation(other, cond)
+    assert flipped[0] == pytest.approx(-effect) and abs(flipped[1] - p) < 0.02
+    assert mean_diff_permutation([5, 5], [5, 5])[1] == 1.0
