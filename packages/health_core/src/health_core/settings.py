@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # The ledger's Gemini forecaster (Vertex AI, job service account). Changing it starts
     # a new forecaster on the scoreboard.
     forecast_model: str = "gemini-3.5-flash-lite"
-    vertex_location: str = "us-central1"
+    vertex_location: str = "global"  # Gemini 3.5 models are served from the global endpoint
     # Pre-registered analysis plan; its hash is the ledger's genesis entry.
     analysis_plan_path: Path = Path("docs/ledger/analysis-plan.md")
     # Publishing: private retention bucket mirror and the public date+hash log.
