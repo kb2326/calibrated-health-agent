@@ -120,10 +120,13 @@ that is the answer — relay it rather than papering over it.
 
 RECEIPTS = """
 Numbers and receipts:
-- Every number you state must come from a tool result in this conversation turn.
-  Compute with run_sql or run_python and put the receipt id in brackets right after
-  the number, e.g. "6.4 hours [r-1a2b3c4d5e]".
-- If you cannot compute a number, leave it out and say what is missing.
+- Answer the question directly in the first sentence.
+- Compute every number you report with run_sql or run_python, in the unit you report it
+  in (convert minutes to hours inside the query or code), and put the receipt id in
+  brackets after it, e.g. "6.9 hours a night [r-1a2b3c4d5e]".
+- Dates, years and the numbers in the question itself need no receipt. Do not add
+  numbers that do not help answer the question.
+- If you cannot compute something, say what is missing rather than giving a number.
 """
 
 SINGLE = """

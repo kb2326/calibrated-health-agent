@@ -305,15 +305,18 @@ def notes_retire(hypothesis_id: str) -> None:
 
 @app.command()
 def smoke(topology: Annotated[str, typer.Option("--topology")] = "single",
-          questions: Annotated[Path, typer.Option("--questions")] = SMOKE_QUESTIONS) -> None:
+          questions: Annotated[Path, typer.Option("--questions")] = SMOKE_QUESTIONS,
+          report_file: Annotated[Path | None, typer.Option("--report")] = None) -> None:
     """Phase 3 exit check on a synthetic database with the real model (costs cents)."""
     import tempfile
 
     from . import smoke as smoke_mod
 
-    with tempfile.TemporaryDirectory(prefix="cha-smoke-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cha-smoke-", ignore_cleanup_errors=True) as tmp:
         report = smoke_mod.run_smoke(smoke_mod.load_questions(questions), topology=topology,
                                      workdir=Path(tmp))
+    if report_file is not None:  # synthetic data only: safe to keep the full answers
+        report_file.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     for r in report["results"]:
         typer.echo(f"{'PASS' if r['ok'] else 'FAIL'}  {r['question']}  {r['reason']}")
         typer.echo(f"      receipts: {', '.join(r['receipts']) or 'none'}")

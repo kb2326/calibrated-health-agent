@@ -45,3 +45,20 @@ def test_thousands_separators():
 
 def test_no_outputs_means_every_number_is_unbacked():
     assert unbacked("Mean 6.4 over 12 days", []) == ["6.4", "12"]
+
+
+def test_years_and_written_dates_exempt():
+    assert unbacked("From August 24, 2026 to Oct 22, 2026 sleep averaged 6.9 h", [6.9]) == []
+    assert unbacked("In 2026 you slept 6.9 h", [6.9]) == []
+
+
+def test_times_and_ordinals_exempt():
+    assert unbacked("On the 3rd, at 22:30, it was 6.9", [6.9]) == []
+
+
+def test_week_numbers_are_not_exempt_without_output():
+    assert unbacked("week 41 averaged 50.2", [50.2]) == ["41"]
+
+
+def test_a_bare_number_that_looks_like_a_year_still_needs_backing():
+    assert unbacked("You burned 1950 kcal", [6.9]) == ["1950"]

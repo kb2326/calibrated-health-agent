@@ -94,6 +94,8 @@ def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
             turn = session.ask(question, confirm=lambda _args: False)
             numbers = verify._numbers(turn.answer.split("\n\nunverified:")[0])
             reruns = [receipts.rerun(r) for r in turn.receipts]
+            mismatched = [{"id": r.get("id"), "old": r.get("old"), "new": r.get("new"),
+                           "error": r.get("error")} for r in reruns if not r.get("matches")]
             rerun_ok = all(r.get("matches") for r in reruns)
             if "unverified:" in turn.answer:
                 ok, reason = False, "unverified numbers"
@@ -104,6 +106,9 @@ def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
             else:
                 ok, reason = True, ""
             results.append({"question": question, "ok": ok, "reason": reason,
+                            "unverified": turn.answer.split("unverified: ")[-1]
+                            if "unverified:" in turn.answer else "",
+                            "mismatched": mismatched,
                             "receipts": turn.receipts, "receipts_rerun": rerun_ok,
                             "input_tokens": turn.input_tokens, "output_tokens": turn.output_tokens,
                             "usd": turn.usd, "answer": turn.answer})
