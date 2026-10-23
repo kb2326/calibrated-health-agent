@@ -6,7 +6,7 @@ or later, and it abstains (with a reason) rather than inventing a bet it cannot 
 """
 from __future__ import annotations
 
-from health_ledger.forecasters import baselines, statistical
+from health_ledger.forecasters import baselines, statistical, timesfm
 from health_ledger.forecasters.base import TARGETS, Forecast, Forecaster
 from health_ledger.forecasters.baselines import outcome_history
 
@@ -15,6 +15,7 @@ FORECASTERS: dict[str, Forecaster] = {
     "persistence": baselines.persistence,
     "seasonal_naive": baselines.seasonal_naive,
     "statistical": statistical.forecast,
+    "timesfm": timesfm.forecast,
 }
 
 __all__ = ["FORECASTERS", "TARGETS", "Forecast", "Forecaster", "outcome_history"]

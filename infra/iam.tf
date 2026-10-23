@@ -34,3 +34,11 @@ resource "google_cloud_run_v2_job_iam_member" "invoker" {
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.scheduler_invoker.email}"
 }
+
+# Run query jobs (TimesFM via AI.FORECAST). No dataset access: the query reads only its
+# parameters, and every job caps maximum_bytes_billed.
+resource "google_project_iam_member" "sync_job_bq_jobs" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.sync_job.email}"
+}

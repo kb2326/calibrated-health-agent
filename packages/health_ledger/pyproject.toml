@@ -3,7 +3,14 @@ name = "health-ledger"
 version = "0.1.0"
 description = "Honest statistics and the forecast ledger"
 requires-python = ">=3.13"
-dependencies = ["health-core", "health-data", "numpy>=1.26", "pandas>=2.2", "typer>=0.12"]
+dependencies = [
+    "google-cloud-bigquery>=3.27",
+    "health-core",
+    "health-data",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "typer>=0.12",
+]
 
 [project.scripts]
 cha-ledger = "health_ledger.cli:app"
