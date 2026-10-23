@@ -16,6 +16,7 @@ members = [
     "health-agents",
     "health-core",
     "health-data",
+    "health-ledger",
     "jobs",
 ]
 
@@ -89,6 +90,7 @@ dependencies = [
     { name = "health-agents" },
     { name = "health-core" },
     { name = "health-data" },
+    { name = "health-ledger" },
     { name = "jobs" },
 ]
 
@@ -107,6 +109,7 @@ requires-dist = [
     { name = "health-agents", editable = "packages/health_agents" },
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
+    { name = "health-ledger", editable = "packages/health_ledger" },
     { name = "jobs", editable = "apps/jobs" },
 ]
 
@@ -839,6 +842,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "health-ledger"
+version = "0.1.0"
+source = { editable = "packages/health_ledger" }
+dependencies = [
+    { name = "health-core" },
+    { name = "health-data" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "health-core", editable = "packages/health_core" },
+    { name = "health-data", editable = "packages/health_data" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pandas", specifier = ">=2.2" },
+    { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -912,12 +936,14 @@ source = { editable = "apps/jobs" }
 dependencies = [
     { name = "health-core" },
     { name = "health-data" },
+    { name = "health-ledger" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
+    { name = "health-ledger", editable = "packages/health_ledger" },
 ]
 
 [[package]]
