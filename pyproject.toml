@@ -22,6 +22,7 @@ jobs = { workspace = true }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
+markers = ["linux_only: needs Linux resource limits (skipped elsewhere)"]
 
 [tool.ruff]
 line-length = 100
