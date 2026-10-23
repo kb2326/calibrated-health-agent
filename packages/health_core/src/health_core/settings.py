@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     vertex_location: str = "us-central1"
     # Pre-registered analysis plan; its hash is the ledger's genesis entry.
     analysis_plan_path: Path = Path("docs/ledger/analysis-plan.md")
+    # Publishing: private retention bucket mirror and the public date+hash log.
+    ledger_bucket: str | None = None
+    ledger_repo: str | None = None
+    ledger_key_secret: str | None = None
 
     @model_validator(mode="before")
     @classmethod

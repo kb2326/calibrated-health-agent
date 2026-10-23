@@ -3,7 +3,7 @@ FROM python:3.13-slim AS build
 COPY --from=ghcr.io/astral-sh/uv:0.13.3 /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
-# Only the jobs package and its deps (health-core, health-data): no ADK.
+# Only the jobs package and its deps (health-core, health-data, health-ledger): no ADK.
 COPY pyproject.toml uv.lock ./
 COPY packages ./packages
 COPY apps ./apps
@@ -14,10 +14,13 @@ RUN uv sync --package jobs --no-dev --frozen --no-editable \
     && find .venv -type d \( -name tests -o -name __pycache__ \) -prune -exec rm -rf {} +
 
 FROM python:3.13-slim
+# git + ssh push the ledger's date+hash lines to the public log (deploy key from Secret Manager).
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client     && rm -rf /var/lib/apt/lists/*
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 CHA_DATA_DIR=/tmp/data
 WORKDIR /app
 COPY --from=build /app/.venv ./.venv
 COPY config/health.yaml ./config/health.yaml
+COPY docs/ledger ./docs/ledger
 RUN useradd --create-home --uid 10001 job
 USER job
 ENTRYPOINT ["python", "-m", "jobs.sync_job"]

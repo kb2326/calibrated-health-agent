@@ -23,3 +23,12 @@ resource "google_secret_manager_secret" "oauth_forms_token" {
   }
   depends_on = [google_project_service.enabled]
 }
+
+# Private half of the write deploy key for the public kb2326/cha-ledger-log repo.
+resource "google_secret_manager_secret" "ledger_deploy_key" {
+  secret_id = "ledger-deploy-key"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.enabled]
+}

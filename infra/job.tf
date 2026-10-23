@@ -53,6 +53,22 @@ resource "google_cloud_run_v2_job" "sync" {
           name  = "CHA_TIMEZONE"
           value = var.timezone
         }
+        env {
+          name  = "CHA_LEDGER_BUCKET"
+          value = google_storage_bucket.ledger.name
+        }
+        env {
+          name  = "CHA_LEDGER_REPO"
+          value = "git@github.com:kb2326/cha-ledger-log.git"
+        }
+        env {
+          name  = "CHA_LEDGER_KEY_SECRET"
+          value = google_secret_manager_secret.ledger_deploy_key.secret_id
+        }
+        env {
+          name  = "CHA_ANALYSIS_PLAN_PATH"
+          value = "/app/docs/ledger/analysis-plan.md"
+        }
       }
     }
   }
