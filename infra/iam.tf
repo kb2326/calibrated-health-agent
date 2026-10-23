@@ -42,3 +42,10 @@ resource "google_project_iam_member" "sync_job_bq_jobs" {
   role    = "roles/bigquery.jobUser"
   member  = "serviceAccount:${google_service_account.sync_job.email}"
 }
+
+# Call Gemini on Vertex AI as the job itself (no API key to store).
+resource "google_project_iam_member" "sync_job_vertex" {
+  project = var.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.sync_job.email}"
+}

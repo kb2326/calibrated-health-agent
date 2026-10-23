@@ -17,6 +17,8 @@ from datetime import date, timedelta
 from health_ledger import readiness, wear
 
 TARGETS = ("mood", "energy", "soreness")
+KEYS = ("day", "weekday", "sleep_minutes", "hrv_rmssd", "resting_hr", "readiness",
+        "steps_prev_day", "journal_prev_day", "journal_last7", "journal_days_total")
 OPTIONAL = ("sleep_minutes", "hrv_rmssd", "resting_hr", "readiness", "steps_prev_day",
             "journal_prev_day")
 

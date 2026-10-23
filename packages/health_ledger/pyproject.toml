@@ -5,6 +5,7 @@ description = "Honest statistics and the forecast ledger"
 requires-python = ">=3.13"
 dependencies = [
     "google-cloud-bigquery>=3.27",
+    "google-genai>=1.20",
     "health-core",
     "health-data",
     "numpy>=1.26",

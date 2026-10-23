@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Kolkata"
     # Verified against https://ai.google.dev/gemini-api/docs/models (stable).
     model_default: str = "gemini-3.5-flash-lite"
+    # The ledger's Gemini forecaster (Vertex AI, job service account). Changing it starts
+    # a new forecaster on the scoreboard.
+    forecast_model: str = "gemini-3.5-flash-lite"
+    vertex_location: str = "us-central1"
 
     @model_validator(mode="before")
     @classmethod
