@@ -93,3 +93,61 @@ def test_html_shows_n(conn):
     assert "<script" not in html and "prefers-color-scheme" in html
     assert "n = 3" in html and "persistence" in html
     assert "published as-is" in html
+
+
+def test_calibration_is_reproducible_across_row_order(tmp_path):
+    """M3: randomized PIT draws are tied to rows by a fixed order."""
+    boards = []
+    for name, order in (("a", range(12)), ("b", reversed(range(12)))):
+        c = make_db(tmp_path / f"{name}.db")
+        chain.ensure_plan_hash(c, "ab")
+        sharp = dist.discretized_normal(7, 1)
+        for i in order:
+            _scored_day(c, START + timedelta(days=i), {"mood": 6, "energy": 3 + i % 5, "soreness": 2},
+                        {G: sharp, "persistence": tuple([0.1] * 10)})
+        boards.append(scoreboard.build(c)["calibration"])
+        c.close()
+    assert boards[0] == boards[1]
+
+
+def test_primary_pinned_to_original_gemini(conn, monkeypatch):
+    """M4: a model change does not move the pre-registered primary endpoint."""
+    monkeypatch.setattr(gemini, "FORECASTER_ID", "gemini:some-new-model")
+    _fill(conn, 3)
+    assert scoreboard.build(conn)["primary"]["forecaster"] == scoreboard.PRIMARY_FORECASTER
+    assert scoreboard.PRIMARY_FORECASTER == "gemini:gemini-3.5-flash-lite"
+
+
+def test_log_skill_columns_present(conn):
+    """M5: log scores alongside RPS, with paired n."""
+    _fill(conn, 4)
+    row = next(r for r in scoreboard.build(conn)["forecasters"] if r["id"] == G and r["target"] == "energy")
+    assert row["mean_log_score"] > 0
+    assert row["log_skill_vs_persistence"]["n"] == 4 and row["log_skill_vs_persistence"]["skill"] > 0
+
+
+def test_secondary_mood_soreness_and_7_vs_6(conn):
+    _fill(conn, 12)
+    sec = {(s["target"], s["forecaster"], s["reference"]): s for s in scoreboard.build(conn)["secondary"]}
+    assert ("mood", G, "persistence") in sec and ("soreness", G, "persistence") in sec
+    assert sec[("mood", G, "persistence")]["skill_vs_reference"] is not None  # n = 12 >= 10
+    seven = sec[("energy", scoreboard.NOTES_FORECASTER, scoreboard.PRIMARY_FORECASTER)]
+    assert seven["n"] == 0 and seven["skill_vs_reference"] is None
+
+
+def test_7_vs_6_counts_none_yet_days_and_reports_days_with_notes(conn):
+    sharp, flat = dist.discretized_normal(7, 1), tuple([0.1] * 10)
+    n7 = scoreboard.NOTES_FORECASTER
+    for i in range(11):
+        d = START + timedelta(days=i)
+        _scored_day(conn, d, {"mood": 6, "energy": 7, "soreness": 2}, {G: flat, n7: sharp})
+        notes = "[]" if i < 6 else '[{"id": "h-1"}]'
+        conn.execute("INSERT INTO lock_notes VALUES (?, ?, ?, 'h')", (d.isoformat(), n7, notes))
+    seven = next(s for s in scoreboard.build(conn)["secondary"] if s["forecaster"] == n7)
+    assert seven["n"] == 11 and seven["days_with_notes"] == 5
+    assert seven["skill_vs_reference"] is not None
+
+
+def test_html_shows_secondary_endpoints(conn):
+    _fill(conn, 3)
+    assert "Secondary endpoints" in scoreboard.render_html(scoreboard.build(conn))
