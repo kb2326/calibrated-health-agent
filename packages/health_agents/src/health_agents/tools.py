@@ -30,6 +30,8 @@ from datetime import timedelta
 from health_core.settings import get_settings
 from health_data import civil, db, store
 
+from .untrusted import wrap
+
 MAX_ROWS = 500
 
 # anomalies and correlations were written by the retired Phase 0 analysis loop and are
@@ -296,7 +298,8 @@ def get_journal(days: int = 30) -> dict:
     its window (later edits and resubmissions are kept but not shown here).
 
     Returns:
-        dict: `entries` is [{date, mood, energy, soreness, note}] newest first;
+        dict: `entries` is [{date, mood, energy, soreness, note}] newest first, the note
+        wrapped as untrusted text;
         `as_of` carries the owner's today and the last journal import time.
     """
     with _ro_connect() as conn:
@@ -305,6 +308,8 @@ def get_journal(days: int = 30) -> dict:
             "FROM journal_outcome o JOIN journal_submissions s ON s.id = o.submission_id "
             "WHERE o.date >= ? ORDER BY o.date DESC", (_since(days),)
         ))
+        for row in rows:
+            row["note"] = wrap("journal_note", row["note"])
         as_of = _as_of(conn)
         as_of["last_journal_import"] = conn.execute(
             "SELECT MAX(imported_at) m FROM journal_submissions").fetchone()["m"]
