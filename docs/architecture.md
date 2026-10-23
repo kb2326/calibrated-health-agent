@@ -198,6 +198,12 @@ trusts the server) · token refresh with the consent screen **In Production**.
 
 ### 5.1 Storage layers
 
+Phase 2 status: `forecasts`, `snapshots` (the feature snapshot per lock), `ledger` (the hash
+chain) and `scores` are live (schema v3, append-only by trigger). Wear is computed on demand
+by `health_ledger.wear` rather than stored. `daily_metrics` carries the `source` its value
+came from: types listed with `sources` in `config/health.yaml` take one preferred source per
+day (HRV: Fitbit RMSSD only; resting HR: Fitbit, else Apple), never a mean across sources.
+
 ```
 raw_points        API data as returned + source + fetched_at        (append; idempotent upsert)
 sync_state        cursor per data type                               (committed with rows)

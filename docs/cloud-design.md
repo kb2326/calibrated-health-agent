@@ -46,13 +46,17 @@ flowchart LR
 | Component | Role | Why this choice |
 |---|---|---|
 | Cloud Scheduler (`sync-hourly` `0 5-12 * * *`, `sync-evening` `30 22 * * *`, Asia/Kolkata) | Triggers the job | Managed cron; 2 jobs fit the free allowance. Hourly in the morning catches last night's sleep as soon as the watch uploads it. |
-| Cloud Run job `sync` (2 GiB, 900 s, 1 retry) | Runs one batch: pull, migrate, sync, journal, push | A job, not a service: runs to completion, bills only while running, no endpoint to attack. |
+| Cloud Run job `sync` (2 GiB, 900 s, 1 retry) | Runs one batch: pull, migrate, sync, journal, lock, settle, push, publish, heartbeat | A job, not a service: runs to completion, bills only while running, no endpoint to attack. |
 | GCS bucket `...-health-db` | Holds `health.db`, the system of record | Cheapest durable store for one small file. Private, public access prevention enforced, versioned; superseded versions are kept 14 days. |
-| Secret Manager | `oauth-client`, `oauth-token` (Health), `oauth-forms-token` (Forms) | Tokens never live in the image, env vars or Terraform state (Terraform creates empty containers only). |
+| GCS bucket `...-ledger` | One object per forecast-ledger chain entry | 365-day retention policy blocks deletes and overwrites; not locked until Phase 8 (locking is permanent). The job can create and read objects, never delete. |
+| Vertex AI (Gemini `gemini-3.5-flash-lite`, `global` endpoint) | Forecaster 6, one call per locked day | Called as the job's service account (`roles/aiplatform.user`): no API key to store or leak. |
+| BigQuery `AI.FORECAST` (TimesFM) | Forecaster 5 | Reads only query parameters (no tables, no stored data), `maximum_bytes_billed` 100 MB per query; job holds `roles/bigquery.jobUser` only. |
+| GitHub `kb2326/cha-ledger-log` + Pages | Public date + chain-hash log and aggregate scoreboard | Proves forecasts were not rewritten; pushed with a write deploy key scoped to that repo (secret `ledger-deploy-key`), GitHub host key pinned. |
+| Secret Manager | `oauth-client`, `oauth-token` (Health), `oauth-forms-token` (Forms), `ledger-deploy-key` | Tokens never live in the image, env vars or Terraform state (Terraform creates empty containers only). |
 | Artifact Registry `cha` | Stores the job image | Keep-3 cleanup policy holds the repo near the free 0.5 GB. |
 | Service accounts `sync-job`, `sync-scheduler` | Identities for the job and the trigger | One identity per duty, each with the minimum roles (see section 4). |
 | Cloud Monitoring (3 policies) + email channel | Tells the owner when a run fails | Email is enough for one person; no pager needed. |
-| Billing budget | Cost guard | Alerts at $2 and $4 of a $5 budget. |
+| Billing budget | Cost guard | $1/month: email at $0.25 and $0.50 spent, and when the month's forecast reaches $1. |
 | Terraform + versioned state bucket | Infrastructure as code | Reproducible, reviewable, and recoverable. |
 
 ## 3. Data flow of one run
@@ -134,13 +138,18 @@ Any failure in the table still exits non-zero and alerts.
 |---|---|
 | Cloud Run job (a few minutes a day) | $0 (inside free tier) |
 | Cloud Scheduler (2 jobs) | $0 |
-| Secret Manager (3 secrets) | $0 |
+| Secret Manager (4 secrets) | $0 |
+| Gemini Flash-Lite on Vertex (about 30 calls a month, 1-2k tokens each) | well under $0.01 |
+| BigQuery `AI.FORECAST` (query parameters only, ~0 bytes billed) | $0 (1 TiB free tier) |
+| Ledger bucket (a few KB a day) | $0 |
 | GCS (tens of MB) | $0 |
 | Artifact Registry (3 images, about 0.8 GB) | about $0.03 |
 | Monitoring alerts, budget, email channel | $0 |
 | **Total** | **about $0.03** |
 
-Guards: a $5 budget with alerts at $2 and $4; keep-3 image cleanup; no always-on resources.
+Guards: a $1 budget with alerts at $0.25 and $0.50 actual and a forecast alert at $1; keep-3
+image cleanup; a 100 MB billing cap on every BigQuery query; one Gemini call per day; no
+always-on resources.
 A budget alert is a notification, not a hard cap, so the real protection is the design:
 nothing here can scale up on its own.
 
