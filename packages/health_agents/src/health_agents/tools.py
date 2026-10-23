@@ -315,6 +315,10 @@ def get_journal(days: int = 30) -> dict:
 # Escape hatch: arbitrary read-only SQL
 # --------------------------------------------------------------------------
 
+# Blinding: the forecast ledger's tables are never readable through SQL, so an unsettled
+# bet can't anchor the owner's journal. Settled aggregates come from get_scoreboard.
+_BLINDED = re.compile(r"\b(forecasts|snapshots|scores|ledger)\b", re.I)
+
 _FORBIDDEN = re.compile(
     r"\b(insert|update|delete|drop|alter|create|replace|attach|detach|"
     r"pragma|vacuum|reindex|begin|commit|rollback)\b", re.I,
@@ -342,7 +346,9 @@ def run_sql(query: str) -> dict:
     submitted_at, status, reason); anomalies(date, data_type, value,
     baseline_mean, z_score, severity) and correlations(metric_a, metric_b,
     lag_days, r, n) — both historical, no longer refreshed;
-    sync_state(data_type, cursor_time, last_synced_at).
+    sync_state(data_type, cursor_time, last_synced_at). The forecast ledger's
+    tables (forecasts, snapshots, scores, ledger) are blinded and refused; use
+    get_scoreboard.
 
     Args:
         query: A single SELECT statement. Anything else is refused.
@@ -361,9 +367,37 @@ def run_sql(query: str) -> dict:
         return {"error": "only SELECT (or WITH ... SELECT) is allowed", "rows": [], "n": 0}
     if _FORBIDDEN.search(cleaned):
         return {"error": "query contains a non-read keyword", "rows": [], "n": 0}
+    if _BLINDED.search(cleaned):
+        return {"error": "the forecast ledger tables are blinded; use get_scoreboard for "
+                         "settled results", "rows": [], "n": 0}
     try:
         with _ro_connect() as conn:
             rows = _rows(conn.execute(cleaned))
     except sqlite3.Error as e:
         return {"error": f"sqlite: {e}", "rows": [], "n": 0}
     return {"rows": rows, "n": len(rows), "truncated": len(rows) == MAX_ROWS}
+
+
+# --------------------------------------------------------------------------
+# Forecast ledger (settled results only)
+# --------------------------------------------------------------------------
+
+
+def get_scoreboard() -> dict:
+    """How the forecasters are doing on settled days: aggregates with real n.
+
+    Use this for questions about prediction accuracy. It never reveals a bet for a day
+    that is not yet settled (blinding), nor any single day's values.
+
+    Returns:
+        dict: days locked/scored/voided/without journal, the pre-registered primary
+        endpoint (Gemini vs persistence on energy, RPS skill with an interval once
+        n >= 10), and per forecaster and target: n, mean RPS, paired skill vs
+        climatology and vs persistence.
+    """
+    from health_ledger import scoreboard
+
+    with _ro_connect() as conn:
+        board = scoreboard.build(conn)
+    board.pop("calibration", None)
+    return board

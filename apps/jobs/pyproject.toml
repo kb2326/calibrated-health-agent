@@ -3,7 +3,7 @@ name = "jobs"
 version = "0.1.0"
 description = "Cloud Run job entrypoints (no ADK)"
 requires-python = ">=3.13"
-dependencies = ["health-core", "health-data"]
+dependencies = ["health-core", "health-data", "health-ledger"]
 
 [build-system]
 requires = ["hatchling"]
@@ -15,3 +15,4 @@ packages = ["src/jobs"]
 [tool.uv.sources]
 health-core = { workspace = true }
 health-data = { workspace = true }
+health-ledger = { workspace = true }

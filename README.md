@@ -7,7 +7,7 @@
 ![python](https://img.shields.io/badge/python-3.13-blue)
 ![terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC)
 ![cost](https://img.shields.io/badge/run%20cost-~%240.03%2Fmonth-brightgreen)
-![status](https://img.shields.io/badge/status-phase%201%20of%208%20done-blue)
+![status](https://img.shields.io/badge/status-phase%202%20of%208%20live-blue)
 
 ## What it is
 
@@ -16,10 +16,13 @@ wearable data, then grades itself against my own journal and against dumb baseli
 "same as yesterday". Every number it states comes from executed code with a re-runnable
 receipt, not from an LLM's memory.
 
-**Today (Phase 1)** the data foundation is live on Google Cloud: a scale-to-zero job syncs my
-Google Health API data and my daily journal into a versioned database for about $0.03 a month.
-The forecasting, agent and web layers are **designed but not built yet**; this README marks
-every planned component as such.
+**Today (Phase 2)** the data foundation and the **forecast ledger** are live on Google Cloud.
+Every morning six forecasters (three simple rules, a statistical model, TimesFM and a Gemini
+agent) bet on my day; the bets are locked and hash-chained, the chain hashes go to a public
+log ([kb2326/cha-ledger-log](https://github.com/kb2326/cha-ledger-log)), and settled days
+feed an aggregate [scoreboard](https://kb2326.github.io/cha-ledger-log/). The conversational
+agent, evals and web layers are **designed but not built yet**; this README marks every
+planned component as such.
 
 ## Why it matters
 
@@ -38,7 +41,7 @@ every planned component as such.
 |---|---|---|
 | 0 | Research, live API verification, design | Done |
 | 1 | Foundation: ingestion, journal capture, scale-to-zero cloud sync, Terraform, CI | **Done and live** |
-| 2 | Honest statistics + forecast ledger (7 forecasters, investigator loop) | Planned |
+| 2 | Honest statistics + forecast ledger (6 forecasters live, blinding, hash chain, public log) | **Live** (first lock 2026-10-23) |
 | 3 | Agent core: code receipts, guarded tools, memory | Planned |
 | 4 | Evals, red-team, CI gate, tracing | Planned |
 | 5 | Read-only MCP server | Planned |
@@ -46,7 +49,7 @@ every planned component as such.
 | 7 | Web views (forecast ledger, receipts) | Planned |
 | 8 | Publish: scorecard, write-ups, demo | Planned |
 
-Nothing in phases 2-8 exists in the code yet. Phase 1 has 222 passing tests and CI on every push.
+Nothing in phases 3-8 exists in the code yet. 360 tests pass on synthetic data, with CI on every push.
 
 ## System context
 
@@ -207,7 +210,11 @@ one human? Details in the [architecture](docs/architecture.md).
 | Artifact Registry (3 images) | about $0.03 |
 | **Total** | **about $0.03** |
 
-A $5 budget alerts at $2 and $4. Alerts only notify, so the real guard is the design: nothing scales up on its own.
+Phase 2 adds Gemini Flash-Lite (one call a day, well under a cent a month), BigQuery
+`AI.FORECAST` over query parameters (inside the free tier, capped at 100 MB billed per query)
+and a few KB a day of ledger objects. A $1 budget emails at $0.25 and $0.50 spent and when the
+month's forecast reaches $1. Alerts only notify, so the real guard is the design: nothing
+scales up on its own.
 
 ## Tech stack
 
@@ -217,7 +224,8 @@ A $5 budget alerts at $2 and $4. Alerts only notify, so the real guard is the de
 | Data | Google Health API, Google Forms API, SQLite, pandas | DuckDB, Parquet, BigQuery |
 | Cloud | Cloud Run jobs, Cloud Scheduler, GCS, Secret Manager, Artifact Registry, Logging and Monitoring | Workflows, IAP services, Model Armor |
 | Infrastructure | Terraform, Docker, GitHub Actions (lint, types, tests, `terraform validate`) | Keyless deploys with Workload Identity Federation |
-| Agents | Google ADK scaffold in `packages/health_agents` | Gemini forecasters, investigator, code sandbox with receipts |
+| Agents | Google ADK scaffold in `packages/health_agents`; Gemini forecaster on Vertex AI | Investigator, code sandbox with receipts |
+| Forecasting | `packages/health_ledger`: baselines, readiness model, TimesFM (BigQuery `AI.FORECAST`), Gemini; RPS, skill, block bootstrap | Forecaster 7 (Gemini + investigator notes), backtest panel |
 | Protocols and web | | MCP server, Next.js with AG-UI |
 | Evals | One starter evalset in `evals/` | ~200-case suite, calibrated judge, red-team, CI gate |
 
@@ -227,12 +235,14 @@ A $5 budget alerts at $2 and $4. Alerts only notify, so the real guard is the de
 packages/
   health_core/     settings and shared config
   health_data/     Health API client, auth, reconcile, SQLite store, journal import, GCS sync (cha-data CLI)
-  health_agents/   ADK agent and tools (early scaffold)
+  health_ledger/   honest stats (wear, robust baselines, readiness, associations) and the
+                   forecast ledger (forecasters, lock, hash chain, scoring, scoreboard, publish)
+  health_agents/   ADK agent and tools (early scaffold; blinded from unsettled forecasts)
 apps/jobs/         Cloud Run sync job and Dockerfile
 infra/             Terraform for the whole cloud slice, plus runbook (infra/README.md)
 config/            tracked-types configuration
 evals/             starter evalset
-tests/             222 tests on synthetic fixtures
+tests/             360 tests on synthetic fixtures
 docs/              architecture, cloud design, spec, plan, research
 .github/workflows/ CI: lint, types, tests, terraform validate
 ```
@@ -241,7 +251,7 @@ docs/              architecture, cloud design, spec, plan, research
 
 ```bash
 uv sync --all-packages     # install the workspace (Python 3.13)
-uv run pytest -q           # 222 tests on synthetic fixtures; no real data or credentials needed
+uv run pytest -q           # 360 tests on synthetic fixtures; no real data or credentials needed
 uv run cha-data --help     # the data CLI
 ```
 

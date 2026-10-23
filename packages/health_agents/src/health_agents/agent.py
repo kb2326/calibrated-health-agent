@@ -76,7 +76,8 @@ Turn a vague question into an explicit analysis plan, then execute it:
    resting heart rate trend and active minutes over 30 days vs the prior 30).
 2. Check what data exists and over what range.
 3. Compute with run_sql where the purpose-built tools do not fit. Compute —
-   do not eyeball a series and estimate.
+   do not eyeball a series and estimate. For how well the daily forecasts are doing,
+   use get_scoreboard: the forecast tables are blinded and settled results only.
 4. State the result with its sample size and its limits.
 
 On correlation: it is not causation, and on one person's data it is weak
@@ -89,7 +90,7 @@ your data" is a correct and useful answer.
     tools=[
         tools.list_metrics, tools.describe_substrate, tools.get_metric_series,
         tools.compare_periods, tools.get_anomalies, tools.get_correlations,
-        tools.get_journal, tools.run_sql,
+        tools.get_journal, tools.run_sql, tools.get_scoreboard,
         api_tools.sources_for_metric,
     ],
     output_key="analysis",

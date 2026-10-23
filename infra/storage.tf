@@ -1,3 +1,19 @@
+# Ledger mirror: every chain entry as one object. A 365-day retention policy blocks
+# deletes and overwrites; it is deliberately NOT locked yet (locking is permanent and is
+# the owner's Phase 8 step). No versioning: objects are written once.
+resource "google_storage_bucket" "ledger" {
+  name                        = "${var.project_id}-ledger"
+  location                    = var.region
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  retention_policy {
+    retention_period = 31536000
+    is_locked        = false
+  }
+}
+
 resource "google_storage_bucket" "health_db" {
   name                        = "${var.project_id}-health-db"
   location                    = var.region

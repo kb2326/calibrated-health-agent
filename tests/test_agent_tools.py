@@ -75,7 +75,7 @@ def test_today_follows_the_owner_zone(monkeypatch):
     # 20:00Z on the 20th is already the 21st in Asia/Kolkata
     monkeypatch.setattr(civil, "now", lambda: datetime(2026, 10, 20, 20, 0, tzinfo=UTC))
     with db.connect() as conn:
-        conn.execute("INSERT INTO daily_metrics VALUES ('2026-10-20', 'steps', 100, 1)")
+        conn.execute("INSERT INTO daily_metrics (date, data_type, agg_value, n_points) VALUES ('2026-10-20', 'steps', 100, 1)")
     out = tools.get_metric_series("steps", 1)  # since = owner today - 1 = the 20th
     assert out["n"] == 1 and out["as_of"]["today"] == "2026-10-21"
     assert out["as_of"]["timezone"] == "Asia/Kolkata"

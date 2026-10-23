@@ -16,6 +16,7 @@ members = [
     "health-agents",
     "health-core",
     "health-data",
+    "health-ledger",
     "jobs",
 ]
 
@@ -89,6 +90,7 @@ dependencies = [
     { name = "health-agents" },
     { name = "health-core" },
     { name = "health-data" },
+    { name = "health-ledger" },
     { name = "jobs" },
 ]
 
@@ -107,6 +109,7 @@ requires-dist = [
     { name = "health-agents", editable = "packages/health_agents" },
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
+    { name = "health-ledger", editable = "packages/health_ledger" },
     { name = "jobs", editable = "apps/jobs" },
 ]
 
@@ -571,6 +574,24 @@ wheels = [
 ]
 
 [[package]]
+name = "google-cloud-bigquery"
+version = "3.46.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-api-core", extra = ["grpc"] },
+    { name = "google-auth", extra = ["pyopenssl"] },
+    { name = "google-cloud-core" },
+    { name = "google-resumable-media" },
+    { name = "packaging" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/05/df/1b6f6fa4c119babcbbd002826a0a24ac287066808fbc873e7733b5ecc2bf/google_cloud_bigquery-3.46.2.tar.gz", hash = "sha256:a87e2e8026133e709deab9ebf537a6a2eee3fbcf4befa334a2f9f6164435b331", size = 530538, upload-time = "2026-10-15T17:49:37.245Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/ba/e89552c32a1cd5483261483c303da560e6504365d7314ecd88216ff9e119/google_cloud_bigquery-3.46.2-py3-none-any.whl", hash = "sha256:5e9a4e15f778cc00ee88167de9934a4c1bbb7fc20058e8f573f2bfdaf0d99052", size = 269195, upload-time = "2026-10-15T17:49:06.152Z" },
+]
+
+[[package]]
 name = "google-cloud-core"
 version = "2.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -785,6 +806,7 @@ dependencies = [
     { name = "google-adk" },
     { name = "health-core" },
     { name = "health-data" },
+    { name = "health-ledger" },
 ]
 
 [package.metadata]
@@ -792,6 +814,7 @@ requires-dist = [
     { name = "google-adk", specifier = "==2.12.0" },
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
+    { name = "health-ledger", editable = "packages/health_ledger" },
 ]
 
 [[package]]
@@ -835,6 +858,31 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2" },
     { name = "python-dateutil", specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
+name = "health-ledger"
+version = "0.1.0"
+source = { editable = "packages/health_ledger" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-genai" },
+    { name = "health-core" },
+    { name = "health-data" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.27" },
+    { name = "google-genai", specifier = ">=1.20" },
+    { name = "health-core", editable = "packages/health_core" },
+    { name = "health-data", editable = "packages/health_data" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pandas", specifier = ">=2.2" },
     { name = "typer", specifier = ">=0.12" },
 ]
 
@@ -912,12 +960,14 @@ source = { editable = "apps/jobs" }
 dependencies = [
     { name = "health-core" },
     { name = "health-data" },
+    { name = "health-ledger" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
+    { name = "health-ledger", editable = "packages/health_ledger" },
 ]
 
 [[package]]

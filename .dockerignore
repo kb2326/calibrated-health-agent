@@ -6,6 +6,7 @@ config/*.json
 config/*.bak*
 .env
 docs
+!docs/ledger
 research_notes
 evals
 tests

@@ -104,6 +104,32 @@ re-fetches from that day, and the journal import re-reads every Form response an
 the ones already stored. The heartbeat object (`health.db.heartbeat.json`) needs no
 restore; the next run overwrites it.
 
+## Forecast ledger (Phase 2)
+
+The sync job also locks the day's forecasts, settles matured days and publishes the chain.
+
+- **Public log:** https://github.com/kb2326/cha-ledger-log (`docs/chain.csv`: date + chain
+  hash only; scoreboard on Pages at https://kb2326.github.io/cha-ledger-log/). The job
+  pushes with a write deploy key on that repo only; its private half is the Secret
+  Manager secret `ledger-deploy-key`.
+- **Rotate the deploy key:** `ssh-keygen -t ed25519 -N "" -C cha-ledger-bot -f <tmp>/k`,
+  add `<tmp>/k.pub` as a write deploy key on the repo, then
+  `gcloud secrets versions add ledger-deploy-key --data-file=<tmp>/k`, delete the old
+  deploy key on GitHub, and delete `<tmp>/k*`.
+- **Verify the chain:** `uv run cha-data db pull`, then `uv run cha-ledger verify`
+  (exit 0 = every hash recomputes and links) and `uv run cha-ledger status`.
+- **Ledger bucket** `artful-timing-506108-n8-ledger`: one object per chain entry, 365-day
+  retention policy, **not locked**. Locking is permanent (no deletes until each object
+  is a year old, even by the owner) and is the owner's Phase 8 step:
+  `gcloud storage buckets update gs://artful-timing-506108-n8-ledger --lock-retention-period`.
+- **Gemini forecaster** calls Vertex AI on the `global` endpoint as the job's service
+  account; **TimesFM** runs `AI.FORECAST` over query parameters (no tables), each query
+  capped at 100 MB billed. Self-tests on synthetic data:
+  `uv run python -m health_ledger.forecasters.gemini --selftest` and
+  `... .timesfm --selftest`.
+- Changing the analysis plan after the first lock changes nothing in the chain (the
+  genesis entry already holds the old hash); a new plan needs a documented amendment.
+
 ## Plan-only review without the real backend
 
 Add a temporary `infra/backend_override.tf` containing

@@ -63,25 +63,57 @@ def _flush(conn, batch: list[tuple]) -> int:
     return conn.total_changes - before
 
 
+def source_preference(data_type: str) -> tuple[str, ...]:
+    """Ordered sources a type's daily value may come from (empty = all, pooled).
+
+    Fitbit reports HRV as RMSSD and Apple Health as SDNN; averaging them is meaningless, so
+    such types name the sources they accept, first present on a day wins.
+    """
+    return tuple(CONFIG["data_types"].get(data_type, {}).get("sources", ()))
+
+
 def rebuild_daily(conn, data_type: str) -> None:
     """Rebuild a listed type's daily_metrics from raw_points, one row per civil day.
 
     Delete-then-insert so a day that no longer has any supporting point (e.g. after the
-    civil-day rule moved its points) does not linger.
+    civil-day rule moved its points) does not linger. With a source preference a day's
+    value comes from the first preferred source that has points that day (stored in
+    `source`); days with only other sources get no row. Without one, all sources are pooled
+    and `source` is ''.
     """
     agg = CONFIG["data_types"].get(data_type, {}).get("agg", "mean")
     sql_agg = "SUM(value)" if agg == "sum" else "AVG(value)"
     conn.execute("DELETE FROM daily_metrics WHERE data_type = ?", (data_type,))
-    conn.execute(
-        f"""
-        INSERT INTO daily_metrics (date, data_type, agg_value, n_points)
-        SELECT civil_date, ?, {sql_agg}, COUNT(*)
-        FROM raw_points
-        WHERE data_type = ? AND value IS NOT NULL AND civil_date IS NOT NULL
-        GROUP BY civil_date
-        """,
-        (data_type, data_type),
-    )
+    prefer = source_preference(data_type)
+    if not prefer:
+        conn.execute(
+            f"""
+            INSERT INTO daily_metrics (date, data_type, agg_value, n_points, source)
+            SELECT civil_date, ?, {sql_agg}, COUNT(*), ''
+            FROM raw_points
+            WHERE data_type = ? AND value IS NOT NULL AND civil_date IS NOT NULL
+            GROUP BY civil_date
+            """,
+            (data_type, data_type),
+        )
+        return
+    by_day: dict[str, dict[str, tuple[float, int]]] = {}
+    for day, source, value, n in conn.execute(
+        f"""SELECT civil_date, source, {sql_agg}, COUNT(*) FROM raw_points
+            WHERE data_type = ? AND value IS NOT NULL AND civil_date IS NOT NULL
+            GROUP BY civil_date, source""",
+        (data_type,),
+    ):
+        by_day.setdefault(day, {})[source] = (value, n)
+    rows = []
+    for day, sources in by_day.items():
+        chosen = next((s for s in prefer if s in sources), None)
+        if chosen is not None:
+            value, n = sources[chosen]
+            rows.append((day, data_type, value, n, chosen))
+    conn.executemany(
+        "INSERT INTO daily_metrics (date, data_type, agg_value, n_points, source) "
+        "VALUES (?, ?, ?, ?, ?)", rows)
 
 
 def _upsert_rollup(conn, data_type: str, bucket: dict, windowed: bool) -> bool:
@@ -101,8 +133,8 @@ def _upsert_rollup(conn, data_type: str, bucket: dict, windowed: bool) -> bool:
                                json.dumps(bucket), db.now_iso(), day))
     changed = conn.total_changes > before
     conn.execute(
-        """INSERT INTO daily_metrics (date, data_type, agg_value, n_points)
-           VALUES (?, ?, ?, 1)
+        """INSERT INTO daily_metrics (date, data_type, agg_value, n_points, source)
+           VALUES (?, ?, ?, 1, '')
            ON CONFLICT(date, data_type) DO UPDATE SET
              agg_value=excluded.agg_value, n_points=excluded.n_points""",
         (day, data_type, value),

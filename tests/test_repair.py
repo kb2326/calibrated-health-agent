@@ -42,11 +42,11 @@ def env(tmp_path, monkeypatch):
             conn.execute("INSERT INTO raw_points (data_type, start_time, end_time, value, source,"
                          " raw_json, inserted_at, civil_date) VALUES ('heart-rate', ?, ?, ?,"
                          " 'dailyRollUp', '{}', 'n', ?)", (day, day, v, day))
-            conn.execute("INSERT INTO daily_metrics VALUES (?, 'heart-rate', ?, 1)", (day, v))
+            conn.execute("INSERT INTO daily_metrics (date, data_type, agg_value, n_points) VALUES (?, 'heart-rate', ?, 1)", (day, v))
         conn.execute("INSERT INTO raw_points (data_type, start_time, end_time, value, source, raw_json,"
                      " inserted_at, civil_date) VALUES ('heart-rate-variability', '2026-10-19T20:00:00Z',"
                      " '2026-10-19T20:00:00Z', 40, 'unknown', ?, 'n', '2026-10-19')", (json.dumps(hrv),))
-        conn.execute("INSERT INTO daily_metrics VALUES ('2026-10-19', 'heart-rate-variability', 40, 1)")
+        conn.execute("INSERT INTO daily_metrics (date, data_type, agg_value, n_points) VALUES ('2026-10-19', 'heart-rate-variability', 40, 1)")
     return path
 
 

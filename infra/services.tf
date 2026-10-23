@@ -10,6 +10,8 @@ locals {
     "iam.googleapis.com",
     "monitoring.googleapis.com",
     "cloudresourcemanager.googleapis.com", # needed to read the project number for the budget filter
+    "bigquery.googleapis.com",             # TimesFM forecaster (AI.FORECAST over query parameters)
+    "aiplatform.googleapis.com",           # Gemini forecaster on Vertex AI
   ]
 }
 

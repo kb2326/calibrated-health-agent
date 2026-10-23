@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS daily_metrics (
     data_type TEXT NOT NULL,
     agg_value REAL NOT NULL,
     n_points INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (date, data_type)
 );
 
@@ -372,7 +373,85 @@ def _split(script: str) -> list[str]:
     return out
 
 
-MIGRATIONS = [_migrate_v1, _migrate_v2]
+# v3: daily_metrics records which source its value came from, and types with a source
+# preference (config/health.yaml `sources`) are rebuilt so no day mixes sources (Fitbit
+# RMSSD with Apple SDNN). The forecast ledger's evidence tables arrive here too; all four
+# are append-only (health_ledger writes them; nothing ever edits or deletes a row).
+# (Fresh databases already get the daily_metrics column from SCHEMA; older ones gain it here.)
+_V3_DDL = """
+ALTER TABLE daily_metrics ADD COLUMN source TEXT NOT NULL DEFAULT '';
+"""
+
+_LEDGER_TABLES = ("snapshots", "forecasts", "ledger", "scores")
+
+_V3_LEDGER = """
+CREATE TABLE snapshots (
+    day TEXT PRIMARY KEY,
+    snapshot_json TEXT NOT NULL,
+    snapshot_hash TEXT NOT NULL,
+    locked_at TEXT NOT NULL,
+    missing_json TEXT NOT NULL
+);
+
+CREATE TABLE forecasts (
+    id INTEGER PRIMARY KEY,
+    day TEXT NOT NULL,
+    forecaster TEXT NOT NULL,
+    target TEXT NOT NULL CHECK(target IN ('mood','energy','soreness')),
+    probs_json TEXT,
+    abstain_reason TEXT,
+    locked_at TEXT NOT NULL,
+    UNIQUE(day, forecaster, target),
+    CHECK((probs_json IS NULL) <> (abstain_reason IS NULL))
+);
+
+CREATE TABLE ledger (
+    seq INTEGER PRIMARY KEY,
+    day TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('plan','lock','outcome','void','no_outcome')),
+    payload_json TEXT NOT NULL,
+    payload_hash TEXT NOT NULL,
+    prev_hash TEXT NOT NULL,
+    entry_hash TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL,
+    UNIQUE(day, kind)
+);
+
+CREATE TABLE scores (
+    id INTEGER PRIMARY KEY,
+    day TEXT NOT NULL,
+    forecaster TEXT NOT NULL,
+    target TEXT NOT NULL,
+    outcome INT NOT NULL,
+    rps REAL NOT NULL,
+    log_score REAL NOT NULL,
+    scored_at TEXT NOT NULL,
+    UNIQUE(day, forecaster, target)
+);
+""" + "".join(f"""
+CREATE TRIGGER {t}_no_update BEFORE UPDATE ON {t}
+BEGIN SELECT RAISE(ABORT, '{t} is append-only'); END;
+
+CREATE TRIGGER {t}_no_delete BEFORE DELETE ON {t}
+BEGIN SELECT RAISE(ABORT, '{t} is append-only'); END;
+""" for t in _LEDGER_TABLES)
+
+
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    from health_data import sync  # lazy: sync imports this module
+
+    if _is_table(conn, "daily_metrics") and "source" not in _columns(conn, "daily_metrics"):
+        for stmt in _split(_V3_DDL):
+            conn.execute(stmt)
+    if _is_table(conn, "raw_points") and _is_table(conn, "daily_metrics"):
+        for data_type in sync.CONFIG["data_types"]:
+            if sync.source_preference(data_type):
+                sync.rebuild_daily(conn, data_type)
+    for stmt in _split(_V3_LEDGER):
+        conn.execute(stmt)
+
+
+MIGRATIONS = [_migrate_v1, _migrate_v2, _migrate_v3]
 
 
 class SchemaTooNewError(RuntimeError):
