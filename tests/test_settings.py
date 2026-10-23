@@ -48,3 +48,13 @@ def test_forms_token_path_follows_config_dir(monkeypatch, tmp_path):
     assert Settings(_env_file=None).forms_token_path == tmp_path / "elsewhere.json"  # pyright: ignore[reportCallIssue]
     monkeypatch.delenv("CHA_FORMS_TOKEN_PATH")
     assert Settings.model_validate({"config_dir": "cfg"}).forms_token_path == Path("cfg") / "forms_token.json"
+
+
+def test_agent_defaults_caps_and_topology(monkeypatch, tmp_path):
+    for key in [k for k in os.environ if k.startswith("CHA_")]:
+        monkeypatch.delenv(key)
+    monkeypatch.setenv("CHA_DATA_DIR", str(tmp_path))
+    s = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+    assert s.agent_cloud_monthly_usd_cap == 0.30 and s.chat_monthly_usd_cap == 0.30
+    assert s.topology == "single"
+    assert s.agent_db_path == tmp_path / "agent.db"

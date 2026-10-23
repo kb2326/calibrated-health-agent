@@ -52,7 +52,7 @@ class FakeLlm(BaseLlm):
         return [r"fake-.*"]
 
     async def generate_content_async(self, llm_request: LlmRequest,
-                                     stream: bool = False) -> AsyncGenerator[LlmResponse, None]:
+                                     stream: bool = False) -> AsyncGenerator[LlmResponse]:
         self.requests.append(llm_request)
         step = self._script[min(self._i, len(self._script) - 1)]
         self._i += 1

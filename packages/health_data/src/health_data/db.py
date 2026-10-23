@@ -451,7 +451,84 @@ def _migrate_v3(conn: sqlite3.Connection) -> None:
         conn.execute(stmt)
 
 
-MIGRATIONS = [_migrate_v1, _migrate_v2, _migrate_v3]
+# v4: the agent layer's evidence (Phase 3). Append-only like the ledger: hypotheses and
+# their receipts are what forecaster 7 read, and its notes are hashed into the chain.
+_AGENT_TABLES = ("receipts", "hypotheses", "hypothesis_status", "lock_notes", "agent_runs")
+
+_V4_AGENT = """
+CREATE TABLE receipts (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK(kind IN ('python','sql')),
+    code TEXT NOT NULL,
+    data_hash TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    output_json TEXT NOT NULL,
+    executor TEXT NOT NULL,
+    context TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE hypotheses (
+    id TEXT PRIMARY KEY,
+    created_day TEXT NOT NULL,
+    statement TEXT NOT NULL,
+    target TEXT NOT NULL CHECK(target IN ('mood','energy','soreness')),
+    direction TEXT NOT NULL CHECK(direction IN ('lower','higher')),
+    condition_code TEXT NOT NULL,
+    in_sample_json TEXT NOT NULL,
+    receipt_ids_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE hypothesis_status (
+    id INTEGER PRIMARY KEY,
+    hypothesis_id TEXT NOT NULL,
+    day TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('open','supported','refuted','retired')),
+    n_cond INT NOT NULL,
+    n_other INT NOT NULL,
+    effect REAL,
+    p_value REAL,
+    receipt_id TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(hypothesis_id, day)
+);
+
+CREATE TABLE lock_notes (
+    day TEXT NOT NULL,
+    forecaster TEXT NOT NULL,
+    notes_json TEXT NOT NULL,
+    notes_hash TEXT NOT NULL,
+    PRIMARY KEY(day, forecaster)
+);
+
+CREATE TABLE agent_runs (
+    id INTEGER PRIMARY KEY,
+    day TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('investigate','forecast7')),
+    covered_days_json TEXT NOT NULL,
+    calls INT NOT NULL,
+    input_tokens INT NOT NULL,
+    output_tokens INT NOT NULL,
+    usd REAL NOT NULL,
+    outcome TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+""" + "".join(f"""
+CREATE TRIGGER {t}_no_update BEFORE UPDATE ON {t}
+BEGIN SELECT RAISE(ABORT, '{t} is append-only'); END;
+
+CREATE TRIGGER {t}_no_delete BEFORE DELETE ON {t}
+BEGIN SELECT RAISE(ABORT, '{t} is append-only'); END;
+""" for t in _AGENT_TABLES)
+
+
+def _migrate_v4(conn: sqlite3.Connection) -> None:
+    for stmt in _split(_V4_AGENT):
+        conn.execute(stmt)
+
+
+MIGRATIONS = [_migrate_v1, _migrate_v2, _migrate_v3, _migrate_v4]
 
 
 class SchemaTooNewError(RuntimeError):

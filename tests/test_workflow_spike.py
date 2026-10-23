@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 
+from agent_fakes import FakeLlm, call, text
 from google.adk.agents import LlmAgent
 from google.adk.agents.context import Context
 from google.adk.runners import Runner
@@ -16,10 +17,8 @@ from google.adk.tools.tool_context import ToolContext
 from google.adk.workflow import Workflow
 from google.genai import types
 
-from agent_fakes import FakeLlm, call, text
 
-
-def _run(workflow, message: str = "hi") -> list:
+def _run(workflow, message: str = "hi") -> tuple:
     async def go():
         sessions = InMemorySessionService()
         runner = Runner(app_name="spike", node=workflow, session_service=sessions)
