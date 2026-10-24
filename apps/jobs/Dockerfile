@@ -3,7 +3,8 @@ FROM python:3.13-slim AS build
 COPY --from=ghcr.io/astral-sh/uv:0.13.3 /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /app
-# Only the jobs package and its deps (health-core, health-data, health-ledger): no ADK.
+# The jobs package and its deps (health-core, health-data, health-ledger, health-agents:
+# the investigator runs ADK in the job; its sandbox is a child of this Python).
 COPY pyproject.toml uv.lock ./
 COPY packages ./packages
 COPY apps ./apps

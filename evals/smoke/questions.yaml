@@ -1,0 +1,14 @@
+# Phase 3 exit check (cha smoke): numeric questions over the synthetic smoke fixture.
+# Every number in each answer must be backed by this turn's tool outputs, and every cited
+# receipt must re-run to the same value.
+questions:
+  - What was my average sleep per night over the last 30 days?
+  - How many days did I walk more than 10,000 steps?
+  - Is my energy lower on days after a late meal than on other days?
+  - What was my average resting heart rate in the last 14 days, compared with the 14 days before?
+  - How many journal entries do I have?
+  - What is my average heart rate variability?
+  - Which week had my highest average heart rate variability?
+  - What is my average mood after nights with more than 7 hours of sleep, versus less?
+  - What was my highest daily step count, and on which day?
+  - On how many days did I tag high stress?

@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from health_data import client
 
+from .untrusted import wrap
+
 
 def _points_api():
     return client.service().users().dataTypes().dataPoints()
@@ -46,7 +48,9 @@ def list_devices() -> dict:
         an error mentioning scopes means it was never granted.
     """
     try:
-        return {"devices": client.list_paired_devices()}
+        devices = client.list_paired_devices()
+        return {"devices": [{k: wrap("device", v) if isinstance(v, str) else v
+                             for k, v in d.items()} for d in devices]}
     except Exception as e:
         return {"error": str(e)[:300]}
 
@@ -123,4 +127,6 @@ def sources_for_metric(metric: str) -> dict:
         """, (metric,))]
     finally:
         conn.close()
+    for row in rows:
+        row["source"] = wrap("source_name", row["source"])
     return {"metric": metric, "sources": rows, "n": len(rows)}

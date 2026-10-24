@@ -125,3 +125,12 @@ def test_tools_refuse_a_newer_schema():
         conn.execute(f"PRAGMA user_version = {len(db.MIGRATIONS) + 1}")
     with pytest.raises(db.SchemaTooNewError):
         tools.list_metrics()
+
+
+def test_journal_entries_carry_tags():
+    with db.connect() as conn:
+        conn.execute(
+            "INSERT INTO journal_submissions (date, mood, energy, soreness, note, tags, submitted_at,"
+            " source, row_hash, imported_at, status) VALUES ('2026-10-20', 5, 5, 5, NULL,"
+            " '[\"Late meal\"]', '2026-10-20T15:00:00.000000Z', 'form', 'h', 'i', 'ok')")
+    assert tools.get_journal(3650)["entries"][0]["tags"] == ["Late meal"]

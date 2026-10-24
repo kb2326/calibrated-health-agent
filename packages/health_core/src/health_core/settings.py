@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     ledger_bucket: str | None = None
     ledger_repo: str | None = None
     ledger_key_secret: str | None = None
+    # Agent layer (Phase 3). Prices are list prices per million tokens for model_default
+    # (gemini-3.5-flash-lite, standard paid tier; output includes thinking tokens), checked
+    # 2026-10-23 at ai.google.dev/gemini-api/docs/pricing. Used only for the spend caps.
+    topology: Literal["single", "multi"] = "single"
+    embedding_model: str = "gemini-embedding-2"
+    price_in_per_m: float = 0.30
+    price_out_per_m: float = 2.50
+    agent_cloud_monthly_usd_cap: float = 0.30  # investigator + forecaster 7 (cloud job)
+    chat_monthly_usd_cap: float = 0.30  # laptop chat
 
     @model_validator(mode="before")
     @classmethod
@@ -52,6 +61,11 @@ class Settings(BaseSettings):
     def db_path(self) -> Path:
         name = "synthetic.db" if self.data_mode == "synthetic" else "health.db"
         return self.data_dir / name
+
+    @property
+    def agent_db_path(self) -> Path:
+        """Laptop-only agent state (chat receipts, memory, usage); never pushed."""
+        return self.data_dir / "agent.db"
 
 
 @lru_cache

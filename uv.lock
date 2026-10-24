@@ -807,6 +807,7 @@ dependencies = [
     { name = "health-core" },
     { name = "health-data" },
     { name = "health-ledger" },
+    { name = "typer" },
 ]
 
 [package.metadata]
@@ -815,6 +816,7 @@ requires-dist = [
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
     { name = "health-ledger", editable = "packages/health_ledger" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [[package]]
@@ -958,6 +960,7 @@ name = "jobs"
 version = "0.1.0"
 source = { editable = "apps/jobs" }
 dependencies = [
+    { name = "health-agents" },
     { name = "health-core" },
     { name = "health-data" },
     { name = "health-ledger" },
@@ -965,6 +968,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "health-agents", editable = "packages/health_agents" },
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
     { name = "health-ledger", editable = "packages/health_ledger" },

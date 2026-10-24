@@ -18,6 +18,7 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import datetime, time
 
+from health_core.settings import get_settings
 from health_data import civil, db
 
 from health_ledger import chain, features
@@ -55,6 +56,13 @@ def _rows(name: str, forecast: Forecast, day: str, locked_at: str) -> list[tuple
     return rows
 
 
+def _usage_row(day: str, usage: dict, at: str) -> tuple:
+    settings = get_settings()
+    tokens_in, tokens_out = int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0))
+    usd = (tokens_in * settings.price_in_per_m + tokens_out * settings.price_out_per_m) / 1e6
+    return (day, tokens_in, tokens_out, usd, at)
+
+
 def lock_today(conn: sqlite3.Connection, now: datetime,
                forecasters: Mapping[str, Forecaster] = FORECASTERS) -> dict | None:
     if not due(conn, now):
@@ -63,12 +71,19 @@ def lock_today(conn: sqlite3.Connection, now: datetime,
     snap, missing = features.snapshot(conn, day)
     locked_at = db.utc_stamp(now)
     rows: list[tuple] = []
+    notes: list[tuple] = []
+    runs: list[tuple] = []
     for name, forecaster in forecasters.items():
         try:
             forecast = forecaster(conn, day, snap)
         except Exception as exc:  # a broken forecaster abstains; the others still lock
             forecast = Forecast.abstain_all(f"error: {type(exc).__name__}")
         rows.extend(_rows(name, forecast, day.isoformat(), locked_at))
+        if forecast.inputs and "notes" in forecast.inputs:
+            notes_json = features.canonical(forecast.inputs["notes"])
+            notes.append((day.isoformat(), name, notes_json, features.sha256(notes_json)))
+        if forecast.inputs and "usage" in forecast.inputs:
+            runs.append(_usage_row(day.isoformat(), forecast.inputs["usage"], locked_at))
     snap_json = features.canonical(snap)
     snap_hash = features.sha256(snap_json)
     if conn.in_transaction:
@@ -79,10 +94,18 @@ def lock_today(conn: sqlite3.Connection, now: datetime,
         conn.executemany(
             """INSERT INTO forecasts (day, forecaster, target, probs_json, abstain_reason,
                                       locked_at) VALUES (?, ?, ?, ?, ?, ?)""", rows)
-        chain.append(conn, day.isoformat(), "lock", {
+        conn.executemany("INSERT INTO lock_notes VALUES (?, ?, ?, ?)", notes)
+        conn.executemany(
+            """INSERT INTO agent_runs (day, kind, covered_days_json, calls, input_tokens,
+                                       output_tokens, usd, outcome, created_at)
+               VALUES (?, 'forecast7', '[]', 1, ?, ?, ?, 'done', ?)""", runs)
+        payload = {
             "snapshot_hash": snap_hash,
             "forecasts_hash": features.sha256(features.canonical([list(r) for r in rows])),
-        })
+        }
+        if notes:  # forecaster 7 ran: the chain commits to exactly what it read
+            payload["notes_hash"] = features.sha256(features.canonical([list(n) for n in notes]))
+        chain.append(conn, day.isoformat(), "lock", payload)
         conn.commit()
     except BaseException:
         conn.rollback()

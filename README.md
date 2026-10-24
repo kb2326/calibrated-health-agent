@@ -7,7 +7,7 @@
 ![python](https://img.shields.io/badge/python-3.13-blue)
 ![terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC)
 ![cost](https://img.shields.io/badge/run%20cost-~%240.03%2Fmonth-brightgreen)
-![status](https://img.shields.io/badge/status-phase%202%20of%208%20live-blue)
+![status](https://img.shields.io/badge/status-phase%203%20of%208%20live-blue)
 
 ## What it is
 
@@ -16,13 +16,15 @@ wearable data, then grades itself against my own journal and against dumb baseli
 "same as yesterday". Every number it states comes from executed code with a re-runnable
 receipt, not from an LLM's memory.
 
-**Today (Phase 2)** the data foundation and the **forecast ledger** are live on Google Cloud.
-Every morning six forecasters (three simple rules, a statistical model, TimesFM and a Gemini
-agent) bet on my day; the bets are locked and hash-chained, the chain hashes go to a public
-log ([kb2326/cha-ledger-log](https://github.com/kb2326/cha-ledger-log)), and settled days
-feed an aggregate [scoreboard](https://kb2326.github.io/cha-ledger-log/). The conversational
-agent, evals and web layers are **designed but not built yet**; this README marks every
-planned component as such.
+**Today (Phase 3)** the data foundation, the **forecast ledger** and the **agent core** are
+live. Every morning seven forecasters (three simple rules, a statistical model, TimesFM, a
+Gemini agent, and the same agent reading its own notes) bet on my day; the bets are locked
+and hash-chained, the chain hashes go to a public log
+([kb2326/cha-ledger-log](https://github.com/kb2326/cha-ledger-log)), and settled days feed
+an aggregate [scoreboard](https://kb2326.github.io/cha-ledger-log/). Each night an
+investigator agent studies the biggest miss with sandboxed code and files testable
+hypotheses, which are judged only on later days. On my laptop, `cha ask` answers questions
+with a re-runnable receipt behind every number. Evals, MCP and the web layer are **planned**.
 
 ## Why it matters
 
@@ -42,14 +44,14 @@ planned component as such.
 | 0 | Research, live API verification, design | Done |
 | 1 | Foundation: ingestion, journal capture, scale-to-zero cloud sync, Terraform, CI | **Done and live** |
 | 2 | Honest statistics + forecast ledger (6 forecasters live, blinding, hash chain, public log) | **Live** (first lock 2026-10-23) |
-| 3 | Agent core: code receipts, guarded tools, memory | Planned |
+| 3 | Agent core: ADK workflow (single vs multi), sandboxed code with receipts, guarded SQL, memory, investigator + forecaster 7 | **Live** (2026-10-24) |
 | 4 | Evals, red-team, CI gate, tracing | Planned |
 | 5 | Read-only MCP server | Planned |
 | 6 | GCP expansion as code (Workflows, IAP services, forecast lock) | Planned |
 | 7 | Web views (forecast ledger, receipts) | Planned |
 | 8 | Publish: scorecard, write-ups, demo | Planned |
 
-Nothing in phases 3-8 exists in the code yet. 360 tests pass on synthetic data, with CI on every push.
+Nothing in phases 4-8 exists in the code yet. 559 tests pass on synthetic data, with CI on every push.
 
 ## System context
 
@@ -208,9 +210,13 @@ one human? Details in the [architecture](docs/architecture.md).
 |---|---|
 | Cloud Run job, Scheduler (2 jobs), Secret Manager, GCS, monitoring | $0 (free tiers) |
 | Artifact Registry (3 images) | about $0.03 |
-| **Total** | **about $0.03** |
+| Gemini Flash-Lite: forecasters 6 and 7 (one call a day each) | about $0.05 |
+| Gemini Flash-Lite: nightly investigator (hard-capped) | up to $0.30 |
+| Laptop chat (`cha ask`, about $0.01 a question, capped) | up to $0.30 |
+| **Total** | **about $0.10 typical, under $0.70 worst case** |
 
-Phase 2 adds Gemini Flash-Lite (one call a day, well under a cent a month), BigQuery
+Gemini spend is capped in code: the investigator and forecaster 7 share $0.30 a month and
+laptop chat has its own $0.30. Phase 2 adds BigQuery
 `AI.FORECAST` over query parameters (inside the free tier, capped at 100 MB billed per query)
 and a few KB a day of ledger objects. A $1 budget emails at $0.25 and $0.50 spent and when the
 month's forecast reaches $1. Alerts only notify, so the real guard is the design: nothing
@@ -237,12 +243,13 @@ packages/
   health_data/     Health API client, auth, reconcile, SQLite store, journal import, GCS sync (cha-data CLI)
   health_ledger/   honest stats (wear, robust baselines, readiness, associations) and the
                    forecast ledger (forecasters, lock, hash chain, scoring, scoreboard, publish)
-  health_agents/   ADK agent and tools (early scaffold; blinded from unsettled forecasts)
+  health_agents/   ADK workflow (single/multi), sandbox, receipts, guarded tools, memory,
+                   investigator, hypotheses, `cha` CLI
 apps/jobs/         Cloud Run sync job and Dockerfile
 infra/             Terraform for the whole cloud slice, plus runbook (infra/README.md)
 config/            tracked-types configuration
 evals/             starter evalset
-tests/             360 tests on synthetic fixtures
+tests/             559 tests on synthetic fixtures
 docs/              architecture, cloud design, spec, plan, research
 .github/workflows/ CI: lint, types, tests, terraform validate
 ```
@@ -251,8 +258,9 @@ docs/              architecture, cloud design, spec, plan, research
 
 ```bash
 uv sync --all-packages     # install the workspace (Python 3.13)
-uv run pytest -q           # 360 tests on synthetic fixtures; no real data or credentials needed
+uv run pytest -q           # 559 tests on synthetic fixtures; no real data or credentials needed
 uv run cha-data --help     # the data CLI
+uv run cha --help          # the agent CLI (ask, chat, notes, receipt, memory, smoke)
 ```
 
 Owner-only commands (need my own Google account and GCP project; not needed for the tests):
@@ -280,6 +288,7 @@ uv run cha-data db repair           # re-fetch history under the civil-day rule
 | [docs/cloud-design.md](docs/cloud-design.md) | The live cloud design: components, security, reliability, cost |
 | [Spec](docs/superpowers/specs/2026-10-20-calibrated-health-agent-design.md) | Vision, goals, non-goals, phases |
 | [Phase 1 plan](docs/superpowers/plans/2026-10-20-phase-1-foundation.md) | The executable task list |
+| [Phase 3 design](docs/superpowers/specs/2026-10-23-phase-3-agent-core-design.md) and [ADR 0001](docs/adr/0001-phase3-workflow.md) | The agent core: workflow, sandbox, receipts, investigator |
 | [Research](docs/research/00-synthesis.md) | The research behind each decision, with sources |
 
 ## Roadmap

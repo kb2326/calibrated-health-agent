@@ -91,5 +91,5 @@ def test_v3_migration_rebuilds_mixed_days(tmp_path, monkeypatch):
     conn.execute("INSERT INTO daily_metrics (date, data_type, agg_value, n_points) "
                  "VALUES (?, 'heart-rate-variability', 60.0, 2)", (DAY,))  # the old mixed mean
     conn.commit()
-    assert db.migrate(conn) == 3
+    assert db.migrate(conn) == len(db.MIGRATIONS)
     assert _daily(conn, "heart-rate-variability") == [(40.0, "FITBIT", 1)]

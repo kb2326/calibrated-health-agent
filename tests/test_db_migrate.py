@@ -34,7 +34,7 @@ LATEST = len(db.MIGRATIONS)
 
 def test_migrate_from_v0_moves_journal_rows(tmp_path):
     conn = _v0(tmp_path)
-    assert db.migrate(conn) == LATEST == 3
+    assert db.migrate(conn) == LATEST == 4
     assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST
     rows = conn.execute(
         "SELECT date, mood, source, status FROM journal_submissions ORDER BY date"

@@ -99,16 +99,30 @@ def _parse(text: str) -> dict[str, dist.Dist]:
     return probs
 
 
-def forecast(conn: sqlite3.Connection, day: date, snapshot: dict, *, client: Any = None) -> Forecast:
+def bet(text: str, *, client: Any = None, label: str = "gemini") -> tuple[Forecast, dict]:
+    """One model call on `text`; the forecast (or an abstention) and the token usage.
+
+    Shared by forecasters 6 and 7 so they differ only in the prompt text.
+    """
+    usage = {"input_tokens": 0, "output_tokens": 0}
     try:
         client = client or _client()
         response = client.models.generate_content(
-            model=get_settings().forecast_model, contents=prompt(snapshot), config=_config())
-        return Forecast(probs=_parse(response.text))
+            model=get_settings().forecast_model, contents=text, config=_config())
+        meta = getattr(response, "usage_metadata", None)
+        if meta is not None:
+            usage = {"input_tokens": int(getattr(meta, "prompt_token_count", 0) or 0),
+                     "output_tokens": int(getattr(meta, "candidates_token_count", 0) or 0)
+                     + int(getattr(meta, "thoughts_token_count", 0) or 0)}  # billed as output
+        return Forecast(probs=_parse(response.text)), usage
     except _Invalid as exc:
-        return Forecast.abstain_all(f"gemini: {exc}")
+        return Forecast.abstain_all(f"{label}: {exc}"), usage
     except Exception as exc:  # never keep the message: it may echo the prompt
-        return Forecast.abstain_all(f"gemini: {type(exc).__name__}")
+        return Forecast.abstain_all(f"{label}: {type(exc).__name__}"), usage
+
+
+def forecast(conn: sqlite3.Connection, day: date, snapshot: dict, *, client: Any = None) -> Forecast:
+    return bet(prompt(snapshot), client=client)[0]
 
 
 def _selftest() -> int:

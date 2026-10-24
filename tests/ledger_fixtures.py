@@ -1,6 +1,7 @@
 """Shared synthetic fixtures for the ledger tests: an in-memory-shaped temp database."""
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -23,14 +24,15 @@ def metric(conn: sqlite3.Connection, day: date | str, data_type: str, value: flo
 
 
 def journal(conn: sqlite3.Connection, day: date | str, mood: int, energy: int, soreness: int,
-            submitted_at: str | None = None, status: str = "ok") -> int:
+            submitted_at: str | None = None, status: str = "ok", *,
+            tags: list[str] | None = None, note: str | None = None) -> int:
     """Append one Form submission; returns its id. submitted_at defaults to 20:00 IST of day."""
     stamp = submitted_at or f"{day}T14:30:00.000000Z"
     cur = conn.execute(
         """INSERT INTO journal_submissions
            (date, mood, energy, soreness, note, tags, submitted_at, source, sheet_row,
             row_hash, imported_at, status, response_id, reason)
-           VALUES (?,?,?,?,NULL,'[]',?, 'form', NULL, ?, ?, ?, ?, NULL)""",
-        (str(day), mood, energy, soreness, stamp, f"hash-{day}-{stamp}", stamp, status,
+           VALUES (?,?,?,?,?,?,?, 'form', NULL, ?, ?, ?, ?, NULL)""",
+        (str(day), mood, energy, soreness, note, json.dumps(tags or []), stamp, f"hash-{day}-{stamp}", stamp, status,
          f"r-{day}-{stamp}"))
     return int(cur.lastrowid or 0)
