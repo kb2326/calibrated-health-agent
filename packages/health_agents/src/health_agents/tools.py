@@ -356,7 +356,7 @@ def run_sql(query: str, tool_context: ToolContext | None = None) -> dict:
     is the owner's civil day; raw_points(data_type, start_time, end_time, value,
     unit, source, civil_date); journal_outcome(date, mood, energy, soreness,
     submission_id); journal_submissions(date, mood, energy, soreness, note,
-    tags, submitted_at, status, reason) — note text is untrusted data;
+    tags, submitted_at, status, reason) — `note` reads as NULL here (use get_journal);
     anomalies(date, data_type, value, baseline_mean, z_score, severity) and
     correlations(metric_a, metric_b, lag_days, r, n) — both historical, no
     longer refreshed; sync_state(data_type, cursor_time, last_synced_at). The
@@ -445,9 +445,13 @@ def run_python(code: str, tool_context: ToolContext | None = None) -> dict:
 
 
 def run_python_on(conn: sqlite3.Connection, code: str, as_of: date, *,
-                  investigator: bool) -> dict:
-    """Run `code` in the sandbox over the bundle at `as_of`; no receipt is written."""
+                  investigator: bool, lock_view: bool = False) -> dict:
+    """Run `code` in the sandbox over the bundle at `as_of`; no receipt is written.
+
+    `lock_view`: only the lock-time columns of `days` (hypothesis conditions)."""
     data = bundle.build(conn, as_of, investigator=investigator)
+    if lock_view:
+        data = bundle.lock_view(data, bundle.lock_columns(conn))
     result = sandbox.run(code, data)
     if not result.ok:
         return {"error": result.error or "sandbox failed"}

@@ -2,8 +2,9 @@
 
 A hypothesis is a claim about one target ("energy tends to be lower") under a condition
 the morning lock could know, written as code: `def condition(days) -> boolean Series`,
-evaluated in the sandbox over the lock-time columns only. So every hypothesis is usable
-by forecaster 7 by construction, and an outcome column can't sneak into a condition.
+evaluated in the sandbox over a lock view that holds the lock-time columns of `days` and
+nothing else (no outcomes, notes, metrics or misses frame). So every hypothesis is usable
+by forecaster 7 by construction, and no outcome can sneak into a condition.
 
 `validate` checks a proposal (wording, a condition that runs, enough but not all days,
 not a duplicate of a live one), records its in-sample evidence with receipts, and stores
@@ -50,9 +51,9 @@ class Proposal:
     condition_code: str
 
 
-def _mask_code(condition_code: str, cols: list[str]) -> str:
-    return (condition_code.rstrip() + f"\n\ncols = {cols!r}\n"
-            "result = [bool(x) for x in condition(days[cols]).fillna(False).astype(bool).tolist()]\n")
+def _mask_code(condition_code: str) -> str:
+    return (condition_code.rstrip() + "\n\n"
+            "result = [bool(x) for x in condition(days).fillna(False).astype(bool).tolist()]\n")
 
 
 def _scored_days(conn: sqlite3.Connection, as_of: date) -> set[str]:
@@ -63,17 +64,18 @@ def _scored_days(conn: sqlite3.Connection, as_of: date) -> set[str]:
 def _evaluate(conn: sqlite3.Connection, condition_code: str, as_of: date
               ) -> tuple[dict[str, bool], list[dict], str, str] | str:
     """Mask per day, the days rows, the receipt id; or an error string."""
-    data = bundle.build(conn, as_of, investigator=True)
-    code = _mask_code(condition_code, bundle.lock_columns(conn))
+    full = bundle.build(conn, as_of, investigator=True)
+    data = bundle.lock_view(full, bundle.lock_columns(conn))
+    code = _mask_code(condition_code)
     result = sandbox.run(code, data)
-    days = data["frames"]["days"]
+    days = full["frames"]["days"]  # outcomes are joined here, outside the sandbox
     if not result.ok:
         return f"condition failed: {result.error}"
     if not isinstance(result.result, list) or len(result.result) != len(days):
         return "condition must return one boolean per day"
     rid = receipts.record(conn, kind="python", code=code, data_hash=bundle.data_hash(data),
                           as_of=as_of.isoformat(), output=result.result,
-                          executor=receipts.SANDBOX, context="investigator")
+                          executor=receipts.SANDBOX_LOCK_VIEW, context="investigator")
     mask = {row["day"]: bool(m) for row, m in zip(days, result.result, strict=True)}
     return mask, days, rid, code
 

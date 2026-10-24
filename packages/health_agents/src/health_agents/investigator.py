@@ -24,7 +24,7 @@ import asyncio
 import json
 import re
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from google.adk.agents import LlmAgent
@@ -48,6 +48,9 @@ MAX_INPUT_TOKENS = 15_000
 MAX_OUTPUT_TOKENS = 2_000
 WALL_SECONDS = 180
 MAX_STORED = 2
+# The investigator leaves room in the shared monthly cap for forecaster 7's remaining daily
+# bets (measured ~$0.00075 a call), so 7 never abstains with "budget" because of it.
+FORECASTER7_DAILY_USD = 0.001
 CONTEXT_DAYS = 14
 EMPTY = '{"hypotheses": []}'
 
@@ -69,6 +72,13 @@ def pick_miss(conn: sqlite3.Connection, days: list[str]) -> tuple[str, str] | No
         row = conn.execute(f"SELECT day, target FROM scores WHERE day IN ({marks}) GROUP BY day,"
                            " target ORDER BY AVG(rps) DESC, day DESC LIMIT 1", days).fetchone()
     return (row[0], row[1]) if row else None
+
+
+def forecaster7_reserve(now: datetime) -> float:
+    """Dollars to keep for forecaster 7 until the end of the owner's month (today included)."""
+    today = now.astimezone(civil.zone()).date()
+    first_next = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return (first_next - today).days * FORECASTER7_DAILY_USD
 
 
 def _record_run(conn: sqlite3.Connection, today: str, covered: list[str], usage: dict,
@@ -192,7 +202,8 @@ def run_investigation(conn: sqlite3.Connection, now: datetime, *, llm: BaseLlm |
         return {"result": "skipped (nothing new)", "proposals": 0, "stored": 0, "covered": [],
                 "usd": 0.0}
     usage = {"calls": 0, "tools": 0, "in": 0, "out": 0, "capped": False}
-    if costs.cloud_month_spend(conn, today[:7]) >= get_settings().agent_cloud_monthly_usd_cap:
+    cap = get_settings().agent_cloud_monthly_usd_cap - forecaster7_reserve(now)
+    if costs.cloud_month_spend(conn, today[:7]) >= cap:
         _record_run(conn, today, new_days, usage, "skipped (budget)")
         return {"result": "skipped (budget)", "proposals": 0, "stored": 0, "covered": new_days,
                 "usd": 0.0}

@@ -136,3 +136,15 @@ def test_failure_is_contained(conn):
 def test_bad_json_stores_nothing(conn):
     out = investigator.run_investigation(conn, NOW, llm=FakeLlm([text("no json here")]))
     assert out["result"] == "done" and out["stored"] == 0
+
+
+def test_investigator_leaves_headroom_for_forecaster7(conn):
+    reserve = investigator.forecaster7_reserve(NOW)
+    assert reserve > 0
+    conn.execute("INSERT INTO agent_runs (day, kind, covered_days_json, calls, input_tokens,"
+                 " output_tokens, usd, outcome, created_at) VALUES ('2026-09-05', 'investigate',"
+                 " '[]', 1, 1, 1, ?, 'done', 't')", (0.30 - reserve / 2,))
+    llm = FakeLlm([text(GOOD)])
+    assert investigator.run_investigation(conn, NOW, llm=llm)["result"] == "skipped (budget)"
+    from health_ledger.forecasters import gemini_notes
+    assert gemini_notes._month_spend(conn, "2026-09") < 0.30  # forecaster 7 still bets

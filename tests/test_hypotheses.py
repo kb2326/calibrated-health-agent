@@ -1,6 +1,7 @@
 """Hypotheses: checked in the sandbox when written, then judged only on later days."""
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 
 import pytest
@@ -116,3 +117,27 @@ def test_refuted_and_retired_not_live(conn):
     hid, _ = hypotheses.validate(conn, _p(), _day(29))
     assert hid is not None and hypotheses.retire(conn, hid, _day(30)) is True
     assert hypotheses.live(conn) == []
+
+
+def test_condition_cannot_read_outcomes_through_other_frames(conn):
+    _seed(conn, 30, effect_until=99)
+    code = ("def condition(days):\n"
+            "    return days['day'].map(journal.set_index('date')['energy']) < 5\n")
+    hid, reason = hypotheses.validate(conn, _p(condition_code=code), _day(29))
+    assert hid is None and "condition" in str(reason)
+
+
+def test_condition_receipt_reruns_on_the_lock_view(conn, monkeypatch, tmp_path):
+    from health_agents import receipts
+    from health_data import db
+    path = tmp_path / "h.db"
+    conn.close()
+    monkeypatch.setattr(db, "DB_PATH", path)
+    c = make_db(path)
+    _seed(c, 30, effect_until=99)
+    hid, _ = hypotheses.validate(c, _p(), _day(29))
+    c.commit()
+    rid = json.loads(c.execute("SELECT receipt_ids_json FROM hypotheses WHERE id = ?",
+                               (hid,)).fetchone()[0])[0]
+    out = receipts.rerun(rid)
+    assert out["matches"] and not out["data_changed"]

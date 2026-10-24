@@ -15,9 +15,11 @@ import importlib.util
 import io
 import json
 import math
+import os
 import statistics
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
@@ -35,10 +37,13 @@ DENY_PREFIXES = ("socket.", "subprocess.", "os.system", "os.exec", "os.spawn", "
                  "os.replace", "os.mkdir", "os.rmdir", "os.chmod", "os.chown", "os.truncate",
                  "os.symlink", "os.link", "os.putenv", "os.unsetenv", "shutil.", "ctypes.",
                  "winreg.", "_winapi.", "msvcrt.", "urllib.", "http.", "ftplib.", "smtplib.",
-                 "webbrowser.", "pty.", "fcntl.", "mmap.")
+                 "webbrowser.", "pty.", "fcntl.", "mmap.", "sqlite3.", "os.listdir",
+                 "os.scandir", "os.chdir", "glob.")
 DENY_MODULES = frozenset({"socket", "_socket", "ssl", "_ssl", "subprocess", "_posixsubprocess",
                           "ctypes", "_ctypes", "multiprocessing", "urllib", "http", "ftplib",
-                          "smtplib", "webbrowser", "asyncio", "pty", "winreg", "_winapi"})
+                          "smtplib", "webbrowser", "asyncio", "pty", "winreg", "_winapi",
+                          "sqlite3", "_sqlite3", "importlib", "pickle", "_pickle", "marshal",
+                          "shelve", "dbm", "zipimport", "runpy", "code", "codeop"})
 LIB_ROOTS = tuple({str(Path(p).resolve()) for p in (sys.prefix, sys.base_prefix, sys.exec_prefix)})
 WRITE_FLAGS = 0o1 | 0o2 | 0o100 | 0o1000 | 0o2000  # O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND
 OUTPUT_CAP = 20_000
@@ -55,10 +60,12 @@ def _readable(path: object) -> bool:
         resolved = str(Path(str(path if not isinstance(path, bytes) else path.decode())).resolve())
     except (OSError, ValueError):
         return False
-    return resolved.startswith(LIB_ROOTS)
+    return any(resolved == root or resolved.startswith(root + os.sep) for root in LIB_ROOTS)
 
 
 def _hook(event: str, args: tuple) -> None:
+    # No "exec" rule: pandas and numpy exec code internally. The ways user code could reach
+    # exec (builtins, frames, getattr) are refused by policy.check and the module views.
     if event.startswith(DENY_PREFIXES):
         raise Blocked(f"blocked: {event}")
     if event == "import" and args and str(args[0]).split(".")[0] in DENY_MODULES:
@@ -71,11 +78,46 @@ def _hook(event: str, args: tuple) -> None:
             raise Blocked("blocked: file access")
 
 
+class _Module:
+    """A read-only view of an allowed module: no private names, and a submodule is reachable
+    only inside the same package (`pd.io.common.os` stops at `os`)."""
+
+    __slots__ = ("_mod", "_root")
+
+    def __init__(self, mod: ModuleType, root: str):
+        object.__setattr__(self, "_mod", mod)
+        object.__setattr__(self, "_root", root)
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        value = getattr(self._mod, name)
+        if isinstance(value, ModuleType):
+            if value.__name__.split(".")[0] != self._root:
+                raise AttributeError(f"module {name} is not available")
+            return _Module(value, self._root)
+        return value
+
+    def __setattr__(self, name: str, value) -> None:
+        raise AttributeError("read-only")
+
+    def __dir__(self):
+        return [n for n in dir(self._mod) if not n.startswith("_")]
+
+
+def _view(mod: ModuleType) -> _Module:
+    return _Module(mod, mod.__name__.split(".")[0])
+
+
 def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
     root = name.split(".")[0]
     if level or root not in MODULES:
         raise ImportError(f"import not allowed: {name}")
-    return __import__(name, globals, locals, fromlist, level)
+    if not fromlist:
+        __import__(name)
+        return _view(MODULES[root])
+    module = __import__(name, globals, locals, fromlist, level)
+    return _view(module)
 
 
 def _jsonable(value):
@@ -129,7 +171,8 @@ def main() -> None:
             if (name in __builtins__ if isinstance(__builtins__, dict) else hasattr(__builtins__, name))}
     safe["print"] = _print
     safe["__import__"] = _guarded_import
-    scope = {"__builtins__": safe, "pd": pd, "pandas": pd, "np": np, "numpy": np, **frames}
+    scope = {"__builtins__": safe, "pd": _view(pd), "pandas": _view(pd), "np": _view(np),
+             "numpy": _view(np), **frames}
     compiled = compile(code, "<agent>", "exec")
     sys.addaudithook(_hook)
     try:

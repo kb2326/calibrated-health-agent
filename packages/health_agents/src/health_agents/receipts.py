@@ -19,6 +19,7 @@ from health_ledger.features import canonical, sha256
 from . import agent_db
 
 SANDBOX = "sandbox-subprocess/1"
+SANDBOX_LOCK_VIEW = "sandbox-subprocess/1 lock-view"  # hypothesis conditions
 SQLITE = "sqlite-ro/1"
 
 
@@ -102,7 +103,8 @@ def rerun(receipt_id: str) -> dict:
                 "old": receipt.output, "new": new}
     with tools._ro_connect() as conn:
         out = tools.run_python_on(conn, receipt.code, date.fromisoformat(receipt.as_of),
-                                  investigator=receipt.context == "investigator")
+                                  investigator=receipt.context == "investigator",
+                                  lock_view=receipt.executor == SANDBOX_LOCK_VIEW)
     if "error" in out:
         return {"id": receipt_id, "error": out["error"]}
     return {"id": receipt_id, "matches": out["result"] == receipt.output,

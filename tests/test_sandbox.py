@@ -103,3 +103,38 @@ def test_set_order_is_reproducible_across_runs():
     code = "result = list({'Alcohol', 'Late meal', 'High stress', 'Hard training', 'Caffeine'})"
     results = {tuple(run(code, B).result) for _ in range(4)}
     assert len(results) == 1
+
+
+@pytest.mark.parametrize("code", [
+    "result = pd.io.common.os.listdir('.')",
+    "import pandas\nresult = pandas.io.common.os.getcwd()",
+    "from pandas.io import common\nresult = common.os.getcwd()",
+    "result = np.ctypeslib.ctypes.sizeof(1)",
+    "g = (x for x in [1])\nresult = len(g.gi_frame.f_globals)",
+    "result = days.x.tolist.__self__",
+    "days.to_sql('t', 'sqlite:///x.db')",
+    "days.x.to_numpy().tofile('x.bin')",
+    "result = np.load('x.npy')",
+    "result = pd.read_pickle('x.pkl')",
+])
+def test_escape_routes_are_refused(code):
+    r = run(code, B)
+    assert not r.ok, (code, r.result)
+
+
+def test_reflective_exec_through_frames_is_blocked():
+    code = ("g = (x for x in [1])\n"
+            "b = g.gi_frame.f_builtins\n"
+            "b['exec']('result = 42')")
+    assert not run(code, B).ok
+
+
+def test_sqlite_is_blocked_by_the_audit_hook_even_if_reached():
+    from health_agents.sandbox import runner
+    assert "sqlite3" in runner.DENY_MODULES and "importlib" in runner.DENY_MODULES
+    assert any(p.startswith("sqlite3") for p in runner.DENY_PREFIXES)
+
+
+def test_numpy_submodules_still_work():
+    r = run("result = float(np.linalg.norm([3, 4])) + float(np.random.default_rng(1).integers(0, 1))", B)
+    assert r.ok and r.result == 5.0

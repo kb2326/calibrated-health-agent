@@ -9,6 +9,10 @@ Three layers on every `run_sql` connection:
    PRAGMA, ATTACH and `load_extension` are refused the same way.
 3. A progress handler that interrupts any statement running past `TIME_LIMIT_S`.
 
+Untrusted text columns (journal notes, device and source names, raw API payloads) read as
+NULL through SQL whatever the query calls them (`SQLITE_IGNORE`): notes reach a prompt only
+wrapped, through `get_journal`.
+
 Python's `execute` already refuses more than one statement. The old keyword blocklist
 (which refused harmless `replace()`) is gone.
 """
@@ -29,6 +33,9 @@ BLINDED = frozenset({
     "forecasts", "snapshots", "scores", "ledger", "lock_notes", "receipts", "hypotheses",
     "hypothesis_status", "agent_runs",
 })
+UNTRUSTED_COLUMNS = frozenset({("journal_submissions", "note"), ("raw_points", "source"),
+                               ("raw_points", "raw_json")})
+UNTRUSTED_TABLES = frozenset({"devices"})  # every column: names and models typed by people
 ALLOWED_FUNCTIONS = frozenset({
     # core scalar
     "abs", "coalesce", "ifnull", "iif", "instr", "length", "lower", "upper", "ltrim", "rtrim",
@@ -55,6 +62,8 @@ def _authorizer(denied: list[str], real: frozenset[str]):
             return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_READ:
             table = (arg1 or "").lower()
+            if table in UNTRUSTED_TABLES or (table, (arg2 or "").lower()) in UNTRUSTED_COLUMNS:
+                return sqlite3.SQLITE_IGNORE  # reads as NULL
             if table in ALLOWED_TABLES or (table not in real and table not in BLINDED):
                 return sqlite3.SQLITE_OK  # a CTE's own name is not a stored table
             denied.append("blinded" if table in BLINDED else f"table {arg1}")

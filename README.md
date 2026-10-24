@@ -51,7 +51,7 @@ with a re-runnable receipt behind every number. Evals, MCP and the web layer are
 | 7 | Web views (forecast ledger, receipts) | Planned |
 | 8 | Publish: scorecard, write-ups, demo | Planned |
 
-Nothing in phases 4-8 exists in the code yet. 539 tests pass on synthetic data, with CI on every push.
+Nothing in phases 4-8 exists in the code yet. 559 tests pass on synthetic data, with CI on every push.
 
 ## System context
 
@@ -249,7 +249,7 @@ apps/jobs/         Cloud Run sync job and Dockerfile
 infra/             Terraform for the whole cloud slice, plus runbook (infra/README.md)
 config/            tracked-types configuration
 evals/             starter evalset
-tests/             539 tests on synthetic fixtures
+tests/             559 tests on synthetic fixtures
 docs/              architecture, cloud design, spec, plan, research
 .github/workflows/ CI: lint, types, tests, terraform validate
 ```
@@ -258,7 +258,7 @@ docs/              architecture, cloud design, spec, plan, research
 
 ```bash
 uv sync --all-packages     # install the workspace (Python 3.13)
-uv run pytest -q           # 539 tests on synthetic fixtures; no real data or credentials needed
+uv run pytest -q           # 559 tests on synthetic fixtures; no real data or credentials needed
 uv run cha-data --help     # the data CLI
 uv run cha --help          # the agent CLI (ask, chat, notes, receipt, memory, smoke)
 ```

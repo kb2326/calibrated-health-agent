@@ -112,6 +112,13 @@ def build(conn: sqlite3.Connection, as_of: date, *, investigator: bool = False,
     return {"as_of": as_of.isoformat(), "frames": frames}
 
 
+def lock_view(bundle: dict, cols: list[str]) -> dict:
+    """Only the lock-time columns of `days`, and no other frame: what a hypothesis condition
+    may see. Outcomes, notes, metrics and misses are not in it at all."""
+    days = [{c: row.get(c) for c in cols} for row in bundle["frames"]["days"]]
+    return {"as_of": bundle["as_of"], "frames": {"days": days}}
+
+
 def data_hash(bundle: dict) -> str:
     return features.sha256(features.canonical(bundle))
 
