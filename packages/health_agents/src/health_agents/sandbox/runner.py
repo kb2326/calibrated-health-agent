@@ -1,4 +1,4 @@
-"""Child-process entrypoint of the sandbox. Started as `python -I -X utf8 runner.py`.
+"""Child-process entrypoint of the sandbox. Started as `python -s -P -X utf8 runner.py`.
 
 Reads {"code", "bundle"} as JSON on stdin and prints one JSON line on stdout:
 {"ok": true, "result": ..., "stdout": "..."} or {"ok": false, "error": "...", "stdout": "..."}.

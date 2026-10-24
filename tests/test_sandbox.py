@@ -96,3 +96,10 @@ def test_runtime_error_is_reported_without_crashing():
 
 def test_policy_allows_plain_pandas_code():
     assert policy.check("result = days.groupby('x').size().to_dict()") is None
+
+
+def test_set_order_is_reproducible_across_runs():
+    """Receipts must re-run to the same value: string hashing is seeded in the child."""
+    code = "result = list({'Alcohol', 'Late meal', 'High stress', 'Hard training', 'Caffeine'})"
+    results = {tuple(run(code, B).result) for _ in range(4)}
+    assert len(results) == 1

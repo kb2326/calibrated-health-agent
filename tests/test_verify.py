@@ -67,3 +67,8 @@ def test_a_bare_number_that_looks_like_a_year_still_needs_backing():
 def test_decimal_on_a_ten_point_scale_is_checked_whole():
     assert unbacked("averaging 4.6 out of 10 versus 6.6 out of 10", [4.6, 6.6]) == []
     assert unbacked("averaging 7.1 out of 10", [6.6]) == ["7.1"]
+
+
+def test_window_lengths_are_exempt():
+    assert unbacked("the 7-day rolling average peaked at 52.3 ms", [52.3]) == []
+    assert unbacked("a 14-night stretch", []) == []

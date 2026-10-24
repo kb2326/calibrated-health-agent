@@ -1,6 +1,6 @@
 """Run model-written Python over handed-in data, in a fresh locked-down child process.
 
-Layers (spec §4.2): a static policy check (`policy.check`), a child started with `-I` in an
+Layers (spec §4.2): a static policy check (`policy.check`), a child started with `-s -P` (no user site, no script directory) in an
 empty temp directory with a scrubbed environment (no credentials, no project settings),
 an audit hook in the child that blocks network, processes, ctypes and file writes,
 resource limits on Linux (CPU, address space, file size, process count), a wall-clock
@@ -68,7 +68,9 @@ def run(code: str, bundle: dict, *, timeout_s: float = 15.0) -> SandboxResult:
     with tempfile.TemporaryDirectory(prefix="cha-sandbox-") as cwd:
         try:
             proc = subprocess.run(
-                [sys.executable, "-I", "-X", "utf8", str(RUNNER)], input=payload,
+                # Not -I: it would also ignore PYTHONHASHSEED, and receipts need set order
+                # to repeat. The environment is ours alone (_child_env), so -E adds nothing.
+                [sys.executable, "-s", "-P", "-X", "utf8", str(RUNNER)], input=payload,
                 capture_output=True, text=True, encoding="utf-8", cwd=cwd, env=_child_env(),
                 timeout=timeout_s, preexec_fn=_limits if sys.platform.startswith("linux") else None)
         except subprocess.TimeoutExpired:

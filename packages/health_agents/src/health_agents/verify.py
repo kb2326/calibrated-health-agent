@@ -3,7 +3,7 @@
 A number is backed when it equals, at the answer's own precision, a numeric value (or a
 row count) somewhere in this turn's tool outputs, or that value times 100 for a
 percentage. Exempt: receipt ids, ISO dates, written dates ("Oct 3", "August 24, 2026"),
-years, clock times, ordinals ("the 3rd"), ordered-list markers, "out of 10" scales, and
+years, clock times, ordinals ("the 3rd"), window lengths ("7-day"), ordered-list markers, "out of 10" scales, and
 numbers the question itself contained ("last 30 days").
 """
 from __future__ import annotations
@@ -19,6 +19,7 @@ _MONTH_DAY = re.compile(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|
 _YEAR = re.compile(r"(?i)\b(?:in|of|since|year|by)\s+(?:19|20)\d{2}\b")
 _TIME = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 _ORDINAL = re.compile(r"\b\d+(?:st|nd|rd|th)\b")
+_WINDOW = re.compile(r"\b\d+-(?:day|week|month|night|hour)s?\b", re.I)
 _LIST_MARKER = re.compile(r"(?m)^\s*\d+[.)]\s")
 _SCALE = re.compile(r"(?:out of|/)\s*10\b|\b1\s*[–-]\s*10\b")  # the value before it is checked
 _NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?%?|(?<![\w.])-?\d+(?:\.\d+)?%?")
@@ -44,7 +45,7 @@ def _leaves(value: Any) -> Iterable[float]:
 
 
 def _strip(text: str) -> str:
-    for pattern in (_RECEIPT, _DATE, _MONTH_DAY, _TIME, _ORDINAL, _YEAR, _LIST_MARKER, _SCALE):
+    for pattern in (_RECEIPT, _DATE, _MONTH_DAY, _TIME, _ORDINAL, _WINDOW, _YEAR, _LIST_MARKER, _SCALE):
         text = pattern.sub(" ", text)
     return text
 
