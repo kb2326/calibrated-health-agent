@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import uuid
 from collections.abc import Callable
@@ -30,7 +29,7 @@ from google.genai import types
 from health_core.settings import get_settings
 from health_data import civil, db, store
 
-from . import agent_db, costs, memory, receipts, tools
+from . import agent_db, costs, memory, receipts, tools, vertex
 from .workflow import build_workflow
 
 app = typer.Typer(add_completion=False, help="Ask the Calibrated Health Agent.")
@@ -61,11 +60,8 @@ class TurnResult:
 
 def _model() -> str | BaseLlm:
     """The chat model: Gemini on Vertex AI (global endpoint), owner credentials."""
-    settings = get_settings()
-    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "true")
-    os.environ.setdefault("GOOGLE_CLOUD_PROJECT", settings.gcp_project)
-    os.environ.setdefault("GOOGLE_CLOUD_LOCATION", settings.vertex_location)
-    return settings.model_default
+    vertex.configure()
+    return get_settings().model_default
 
 
 def _confirm_with_typer(args: dict) -> bool:

@@ -37,7 +37,7 @@ from health_core.settings import get_settings
 from health_data import civil, db
 from health_ledger.forecasters import gemini
 
-from . import bundle, costs, hypotheses, instructions, receipts, tools
+from . import bundle, costs, hypotheses, instructions, receipts, tools, vertex
 from .untrusted import UNTRUSTED_RULE, wrap
 
 MAX_CALLS = 6
@@ -185,6 +185,7 @@ async def _investigate(agent: LlmAgent, prompt: str) -> str:
 
 
 def run_investigation(conn: sqlite3.Connection, now: datetime, *, llm: BaseLlm | None = None) -> dict:
+    vertex.configure()
     today = now.astimezone(civil.zone()).date().isoformat()
     new_days = _uncovered(conn)
     if not new_days:
