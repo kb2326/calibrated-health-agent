@@ -23,6 +23,7 @@ without a schema round-trip.
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from datetime import date, timedelta
@@ -290,7 +291,10 @@ def get_correlations(min_abs_r: float = 0.3) -> dict:
 
 
 def get_journal(days: int = 30) -> dict:
-    """Subjective daily entries: mood, energy, soreness, each 1-10.
+    """Subjective daily entries: mood, energy, soreness (each 1-10) and behaviour tags.
+
+    Tags are the person's yes/no journal flags (e.g. "Late meal", "High stress",
+    "Alcohol", "Hard training"): use them for questions about those behaviours.
 
     This is the only data no wearable can observe. When it is empty, say so
     — do not substitute an inference from activity data for how someone
@@ -303,18 +307,22 @@ def get_journal(days: int = 30) -> dict:
     its window (later edits and resubmissions are kept but not shown here).
 
     Returns:
-        dict: `entries` is [{date, mood, energy, soreness, note}] newest first, the note
-        wrapped as untrusted text;
+        dict: `entries` is [{date, mood, energy, soreness, tags, note}] newest first, the
+        note wrapped as untrusted text;
         `as_of` carries the owner's today and the last journal import time.
     """
     with _ro_connect() as conn:
         rows = _rows(conn.execute(
-            "SELECT o.date, o.mood, o.energy, o.soreness, s.note "
+            "SELECT o.date, o.mood, o.energy, o.soreness, s.tags, s.note "
             "FROM journal_outcome o JOIN journal_submissions s ON s.id = o.submission_id "
             "WHERE o.date >= ? ORDER BY o.date DESC", (_since(days),)
         ))
         for row in rows:
             row["note"] = wrap("journal_note", row["note"])
+            try:
+                row["tags"] = [t for t in json.loads(row["tags"] or "[]") if isinstance(t, str)]
+            except ValueError:
+                row["tags"] = []
         as_of = _as_of(conn)
         as_of["last_journal_import"] = conn.execute(
             "SELECT MAX(imported_at) m FROM journal_submissions").fetchone()["m"]

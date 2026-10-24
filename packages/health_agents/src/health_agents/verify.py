@@ -20,7 +20,7 @@ _YEAR = re.compile(r"(?i)\b(?:in|of|since|year|by)\s+(?:19|20)\d{2}\b")
 _TIME = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 _ORDINAL = re.compile(r"\b\d+(?:st|nd|rd|th)\b")
 _LIST_MARKER = re.compile(r"(?m)^\s*\d+[.)]\s")
-_SCALE = re.compile(r"\b\d+\s*(?:out of|/)\s*10\b|\b1\s*[–-]\s*10\b")
+_SCALE = re.compile(r"(?:out of|/)\s*10\b|\b1\s*[–-]\s*10\b")  # the value before it is checked
 _NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?%?|(?<![\w.])-?\d+(?:\.\d+)?%?")
 
 

@@ -117,9 +117,12 @@ def verify_receipts(ctx: Context, node_input: Any) -> str:
     if unbacked and attempts < MAX_RETRIES:
         ctx.state["verify_attempts"] = attempts + 1
         ctx.route = "retry"
-        return ("These numbers have no receipt from a tool result in this turn: "
-                f"{', '.join(unbacked)}. Compute them with run_sql or run_python and cite the "
-                "receipt id, or remove them. Then give the full answer again.")
+        question = ctx.state.get("question", "")
+        return (f"The person asked: {question}\n\nYour draft answer was:\n{answer}\n\n"
+                f"These numbers in it have no tool result behind them: {', '.join(unbacked)}. "
+                "Compute them with run_sql or run_python (citing the receipt id) or leave them "
+                "out. Then reply to the person with the complete answer to their question, "
+                "not a note about the numbers.")
     ctx.route = "done"
     return answer + (f"\n\nunverified: {', '.join(unbacked)}" if unbacked else "")
 
