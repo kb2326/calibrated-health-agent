@@ -348,22 +348,27 @@ sequenceDiagram
   A-->>U: streamed answer + tool cards + receipt links + n
 ```
 
-### 7.2 Components
+### 7.2 Components (built in Phase 3)
+
+Phase 3 design: `docs/superpowers/specs/2026-10-23-phase-3-agent-core-design.md`; workflow
+shape proven in ADR `docs/adr/0001-phase3-workflow.md`.
 
 | Component | Design |
 |---|---|
-| Framework | Google ADK 2.12.x pinned; graph `Workflow` with deterministic nodes and LLM nodes |
-| Topologies | `single` (one agent, all tools) and `multi` (orchestrator → data scientist · domain expert · coach, explicit `single_turn`/`task` modes). Config switch; both evaluated; winner is default |
-| Models | Gemini 3.8 Flash (orchestration), 3.5 Flash-Lite (specialists, batch, forecaster 6), Gemini Embedding 2; IDs in config |
-| Inputs | Sensor captions (computed summaries), not raw rows |
-| Code execution | Sandboxed Python/pandas (container locally, managed sandbox wrapped as a tool when deployed); no network; time and memory limits |
-| `run_sql` | SQLite `mode=ro` + authorizer allowlist + progress-handler timeout + single-statement parse; row cap |
-| Untrusted text | Journal notes and source names wrapped and labelled as data before any prompt |
-| Memory | Typed facts with validity windows + episode vectors in SQLite, behind ADK's memory interface; saving requires owner confirmation (`require_confirmation`); Memory Bank optional backend |
-| Literature RAG | Europe PMC abstracts, hybrid retrieval, citations verified against source; unverifiable claims dropped (later phase) |
-| Ledger access | Agent can read matured scores and scoreboard; unmatured forecasts invisible under blinding |
-| Investigator | Nightly after scoring: investigates the largest misses with code, writes hypotheses (receipts, n, status) into memory; forecaster 7 reads them; hypotheses re-tested and audited |
-| Interfaces | AG-UI (web), MCP (tools) |
+| Framework | Google ADK 2.12.0 pinned; graph `Workflow`: `screen` (deterministic) → answer (LLM) → `verify_receipts` (deterministic, one retry) |
+| Topologies | `single` (one agent, all tools; default) and `multi` (router → data scientist · domain expert · coach, all `single_turn`, chosen by a graph edge from the router's structured output → synthesizer). `CHA_TOPOLOGY`; Phase 4 evals pick the winner |
+| Models | Gemini 3.5 Flash-Lite everywhere (Vertex AI, global endpoint); `gemini-embedding-2` for memory; IDs and prices in `Settings` |
+| Code execution | `run_python`: a fresh subprocess per call (`-s -P`, scrubbed environment, empty temp dir), AST allowlist, an audit hook that blocks sockets, processes, ctypes and file writes, Linux rlimits (CPU 10 s, 1.5 GiB, no files, no forks), 15 s timeout. Data arrives as JSON (a leakage-safe bundle cut at an as-of day), never the database. Defense in depth, not a VM boundary; gVisor underneath on Cloud Run |
+| Receipts | Content-addressed `{code, data hash, as-of, output, executor}`; chat receipts in the laptop's `agent.db`, investigator receipts in `health.db`. `cha receipt <id> --rerun` reproduces the value or says the data changed |
+| `run_sql` | SQLite `mode=ro` + authorizer (SELECT, allowlisted tables and functions; ledger and agent tables blinded) + 2 s progress-handler limit + single statement; row cap 500; every call leaves a receipt |
+| Verification | Every number in an answer must equal (at its precision) a value in this turn's tool outputs; dates, window lengths and the question's own numbers exempt; otherwise one retry, then an explicit `unverified:` footer |
+| Untrusted text | Journal notes, device/source names, sandbox output and hypothesis statements wrapped in `<untrusted>` before any prompt; every instruction says what that means |
+| Memory | `HealthMemoryService(BaseMemoryService)` over `agent.db`: facts saved only via `save_fact` (`require_confirmation`, a y/n in the terminal) with validity windows; journal notes and hypotheses embedded and searched by cosine; ADK `load_memory` tool |
+| Ledger access | `get_scoreboard` (settled aggregates) only; unsettled forecasts invisible under blinding |
+| Investigator | In the nightly job after settle and re-test: one Flash-Lite agent studies the night's biggest forecaster-6 miss with `run_python`/`run_sql`, capped at 6 calls, 15k input / 2k output tokens and 180 s; proposals become hypotheses only after `validate` (sandboxed condition over lock-time columns, 3+ matching days, not a duplicate, no disease words). `retest` judges each on days settled after it was written (open → supported/refuted by fixed rules) |
+| Forecaster 7 | Forecaster 6's prompt plus up to five live hypotheses (always-present notes section); notes stored in `lock_notes` and hashed into the lock's chain entry |
+| Budget | `agent_runs` records tokens and dollars; $0.30/month cloud cap (investigator + forecaster 7) and $0.30/month laptop chat cap, enforced in code |
+| Interfaces | `cha` terminal (`ask`, `chat`, `notes`, `receipt`, `memory`, `smoke`); AG-UI (web, Phase 7) and MCP (Phase 5) wrap the same runner |
 
 ---
 
@@ -494,7 +499,7 @@ docs/         architecture, ADRs, spec, runbooks
 |---|---|
 | 1 Foundation | Repo + layout; API client with reconcile/profile/devices; **thin GCP slice**: personal project, Secret Manager token, GCS db, Scheduler → one `sync` job; journal Form import |
 | 2 Ledger | `quality`, `forecast-lock`, `score` jobs; all six forecasters (incl. BigQuery mirror + TimesFM, Gemini); WORM bucket + hash chain; blinding |
-| 3 Agent core | Workflow, both topologies, sandbox, receipts, guarded tools, memory |
+| 3 Agent core | **Live 2026-10-24:** workflow, both topologies, sandbox, receipts, guarded tools, memory, investigator in the nightly job, forecaster 7 |
 | 4 Evals | Fixtures, suites, judge, CI gate, owner-only runner, tracing |
 | 5 Protocols | MCP server |
 | 6 Deploy | Full Terraform, IAP owner services (scale to zero), all jobs on Workflows, synthetic twin, WIF CD, destroy/redeploy drill, cost report, webhooks |

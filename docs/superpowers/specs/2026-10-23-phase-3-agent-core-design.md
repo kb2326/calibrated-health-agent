@@ -425,3 +425,24 @@ stays: the investigator has a 180 s wall budget **[call]**.
 The exact `Workflow` wiring on 2.12.0 (spike first, fallback named in §4.1); the embedding
 model ID; the function allowlist details; the receipt-number matcher's tolerance rules; CLI
 formatting; the investigator's prompt wording within the guardrails above.
+
+## 14. As built (2026-10-24)
+
+Where the build differs from the text above (each is a ledgered ruling):
+
+- **Prices** checked at deploy: Flash-Lite $0.30 / $2.50 per million tokens (output includes
+  thinking), `gemini-embedding-2` $0.20. The investigator's per-night caps are therefore
+  6 model calls, 15k input and 2k output tokens (worst case about $0.0095 a night), and
+  thinking tokens count as output everywhere. A forecaster call measured 507 / 241 tokens.
+- **Verification** backs a number with any tool output of the turn, not only receipts; dates,
+  years, window lengths and the question's own numbers are exempt; the retry message carries
+  the question and the draft so the model rewrites the answer instead of describing numbers.
+- **Sandbox child** starts with `-s -P` (not `-I`) so `PYTHONHASHSEED=0` applies and set order
+  repeats on re-run; `RLIMIT_AS` is 1.5 GiB (numpy/pandas reserve ~1 GiB to import).
+- **Investigator** is one `LlmAgent` run inside deterministic Python steps (a one-node graph
+  added nothing); its tools write receipts to `health.db`.
+- **Memory search** goes through ADK's own `load_memory` tool against `HealthMemoryService`.
+- **Hypotheses** can be retired by the owner (`cha notes retire`) rather than deleted, because
+  forecaster 7's notes are hashed into the public chain.
+- **Chat** costs about $0.01 a question (~38k input tokens with all tool schemas), so the
+  $0.30 cap is about 20-30 questions a month.

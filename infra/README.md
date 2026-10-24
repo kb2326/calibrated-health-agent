@@ -130,6 +130,29 @@ The sync job also locks the day's forecasts, settles matured days and publishes 
 - Changing the analysis plan after the first lock changes nothing in the chain (the
   genesis entry already holds the old hash); a new plan needs a documented amendment.
 
+## Agent layer (Phase 3)
+
+The same job runs two more steps after settle: **retest** (re-judges live hypotheses on
+newly settled days; no model) and **investigate** (one capped Flash-Lite run on the night's
+biggest miss). Forecaster 7 (`gemini_notes:<model>`) locks with the other six.
+
+- **Budget:** the investigator and forecaster 7 share a $0.30/month cap
+  (`CHA_AGENT_CLOUD_MONTHLY_USD_CAP`), read from `agent_runs` in the database; at the cap the
+  investigator skips and forecaster 7 abstains with `budget`. Laptop chat has its own
+  $0.30/month cap (`CHA_CHAT_MONTHLY_USD_CAP`) in `data/agent.db`. Prices per million tokens
+  are `CHA_PRICE_IN_PER_M` / `CHA_PRICE_OUT_PER_M` (Flash-Lite list: 0.30 / 2.50).
+- **A failed investigator** logs a WARNING on the `investigate` step and the job still
+  succeeds; an exception escaping `retest`/`investigate` fails the run like any other step.
+- **Owner terminal** (laptop, owner credentials, `CHA_DB_BUCKET` set):
+  `uv run cha notes` (pulls, then shows new hypotheses and journal gaps),
+  `uv run cha notes retire <id>` (writes and pushes through the write guard),
+  `uv run cha ask "..."`, `uv run cha receipt <id> --rerun`, `uv run cha memory`.
+- **Exit check:** `uv run cha smoke [--topology multi] [--report out.json]` asks 10 questions
+  on a synthetic database with the real model (about $0.05-0.10); every number must be
+  backed and every cited receipt must re-run.
+- **Roll back the agent layer only:** set `CHA_AGENT_CLOUD_MONTHLY_USD_CAP=0` on the job
+  (investigator skips, forecaster 7 abstains) or redeploy the previous image tag.
+
 ## Plan-only review without the real backend
 
 Add a temporary `infra/backend_override.tf` containing

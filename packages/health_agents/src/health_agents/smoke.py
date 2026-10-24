@@ -5,7 +5,8 @@ resting heart rate and steps; 40 journal days with tags and notes, one of them a
 injection). `run_smoke` points the agent at a copy in a temp directory (never the real
 data), asks each question, and passes an answer only when it has no unverified number and,
 if it states any number, cites at least one receipt and every cited receipt re-runs to the
-same value. `cha smoke` runs it with the real model (owner credentials, cents).
+same value, and an answer with no number at all fails (every question asks for one).
+`cha smoke` runs it with the real model (owner credentials, cents).
 """
 from __future__ import annotations
 
@@ -99,7 +100,9 @@ def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
             rerun_ok = all(r.get("matches") for r in reruns)
             if "unverified:" in turn.answer:
                 ok, reason = False, "unverified numbers"
-            elif numbers and not turn.receipts:
+            elif not numbers:  # every smoke question asks for a number
+                ok, reason = False, "no number in the answer"
+            elif not turn.receipts:
                 ok, reason = False, "numbers without any receipt"
             elif not rerun_ok:
                 ok, reason = False, "a receipt did not re-run to the same value"
