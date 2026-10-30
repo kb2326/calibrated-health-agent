@@ -51,6 +51,15 @@ resource "google_project_iam_member" "sync_job_vertex" {
   member  = "serviceAccount:${google_service_account.sync_job.email}"
 }
 
+# Write traces (ADK's OTLP exporter to telemetry.googleapis.com, stored in Cloud Trace).
+# Spans carry ids, hashes, tokens and cost only: message content is forced off in the job.
+resource "google_project_iam_member" "sync_job_traces" {
+  for_each = toset(["roles/cloudtrace.agent", "roles/telemetry.tracesWriter"])
+  project  = var.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.sync_job.email}"
+}
+
 # Ledger bucket: create and read objects, never delete or overwrite them.
 resource "google_storage_bucket_iam_member" "sync_job_ledger" {
   for_each = toset(["roles/storage.objectCreator", "roles/storage.objectViewer"])

@@ -12,6 +12,8 @@ locals {
     "cloudresourcemanager.googleapis.com", # needed to read the project number for the budget filter
     "bigquery.googleapis.com",             # TimesFM forecaster (AI.FORECAST over query parameters)
     "aiplatform.googleapis.com",           # Gemini forecaster on Vertex AI
+    "cloudtrace.googleapis.com",           # traces (free tier: 2.5M spans/month)
+    "telemetry.googleapis.com",            # ADK exports OTLP spans here
   ]
 }
 

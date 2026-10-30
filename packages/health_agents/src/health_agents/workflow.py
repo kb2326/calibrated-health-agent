@@ -26,7 +26,7 @@ from google.genai import types
 from health_core.settings import get_settings
 from pydantic import BaseModel
 
-from . import api_tools, instructions, memory, tools
+from . import api_tools, instructions, memory, tools, tracing
 from .verify import numbers_without_receipts
 
 Topology = Literal["single", "multi"]
@@ -48,6 +48,7 @@ def _note_output(tool: Any, args: dict, tool_context: Any, tool_response: Any) -
     outputs = list(tool_context.state.get(TURN_OUTPUTS, []))
     outputs.append(tool_response)
     tool_context.state[TURN_OUTPUTS] = outputs
+    tracing.annotate_tool(args, tool_response)
     return None
 
 

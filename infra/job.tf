@@ -54,6 +54,10 @@ resource "google_cloud_run_v2_job" "sync" {
           value = var.timezone
         }
         env {
+          name  = "CHA_TRACING"
+          value = "cloud"
+        }
+        env {
           name  = "CHA_LEDGER_BUCKET"
           value = google_storage_bucket.ledger.name
         }

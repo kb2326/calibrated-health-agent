@@ -29,7 +29,7 @@ from google.genai import types
 from health_core.settings import get_settings
 from health_data import civil, db, store
 
-from . import agent_db, costs, memory, receipts, tools, vertex
+from . import agent_db, costs, memory, receipts, tools, tracing, vertex
 from .workflow import Topology, build_workflow
 
 app = typer.Typer(add_completion=False, help="Ask the Calibrated Health Agent.")
@@ -37,6 +37,12 @@ memory_app = typer.Typer(invoke_without_command=True, help="What the agent remem
 app.add_typer(memory_app, name="memory")
 notes_app = typer.Typer(invoke_without_command=True, help="What the investigator found.")
 app.add_typer(notes_app, name="notes")
+
+
+@app.callback()
+def _start() -> None:
+    """Tracing per CHA_TRACING (default off; never message content outside the laptop)."""
+    tracing.setup()
 STALE_JOURNAL_DAYS = 2
 SMOKE_QUESTIONS = Path("evals/smoke/questions.yaml")
 
@@ -148,8 +154,11 @@ class Session:
                     self.memory.refresh_episodes(conn)
             except Exception:
                 pass  # offline or no embeddings yet: memory search falls back to recent episodes
-        result = asyncio.run(self._ask(question, confirm))
-        result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
+        with tracing.tracer().start_as_current_span("cha.turn") as span:
+            result = asyncio.run(self._ask(question, confirm))
+            result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
+            span.set_attribute("cha.usd", result.usd)
+            span.set_attribute("cha.receipts", len(result.receipts))
         return result
 
 

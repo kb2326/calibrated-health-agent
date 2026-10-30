@@ -362,6 +362,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sync-job", description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="run every step on a temp copy; never push")
     args = parser.parse_args(argv)
+    from health_agents import tracing
+
+    tracing.setup()  # CHA_TRACING=cloud in the job: Cloud Trace, content forced off
     return _run(get_settings(), args.dry_run)
 
 
