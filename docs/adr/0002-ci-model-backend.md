@@ -27,11 +27,13 @@ reaches Gemini through ADK, which reads `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLO
   synthetic smoke question answered with a receipt on a key from project
   `my-demo-projects-for-credits` (AI Studio shows "Free tier"; its billing account is closed,
   so nothing can be charged). No `Settings.eval_model` is needed.
-- Free-tier limits for that model (AI Studio, 2026-10-30): **15 RPM**, **250K TPM**; RPD still
-  to record. One agent question costs about 3–6 model requests (answer, tool rounds, at most
+- Free-tier limits for that model (AI Studio, 2026-10-30): **15 RPM**, **250K TPM**, **500 RPD**. One agent question costs about 3–6 model requests (answer, tool rounds, at most
   one verify retry), so CI paces cases to stay under 15 requests a minute.
 - PR suite size: regression × 2 (retry worst case) must fit the daily limit; otherwise PRs run
-  the `must_pass` subset and the nightly job runs the rest.
+  the `must_pass` subset and the nightly job runs the rest. At 500 RPD and up to 6 requests a
+  question, a day holds about 80 questions. Budget: a PR run is capped at **30 cases**
+  (≤ 180 requests, ≤ 360 with one full retry), leaving the rest of the day for one nightly run;
+  everything beyond the cap runs nightly.
 
 ## Consequences
 
