@@ -3,7 +3,10 @@ name = "health-eval"
 version = "0.1.0"
 description = "Evals, red team and tracing for the Calibrated Health Agent"
 requires-python = ">=3.13"
-dependencies = ["health-core", "health-data", "health-ledger", "health-agents", "PyYAML>=6.0", "numpy>=1.26"]
+dependencies = ["health-core", "health-data", "health-ledger", "health-agents", "PyYAML>=6.0", "numpy>=1.26", "typer>=0.12"]
+
+[project.scripts]
+cha-eval = "health_eval.cli:app"
 
 [build-system]
 requires = ["hatchling"]

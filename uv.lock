@@ -877,6 +877,7 @@ dependencies = [
     { name = "health-ledger" },
     { name = "numpy" },
     { name = "pyyaml" },
+    { name = "typer" },
 ]
 
 [package.metadata]
@@ -887,6 +888,7 @@ requires-dist = [
     { name = "health-ledger", editable = "packages/health_ledger" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [[package]]
