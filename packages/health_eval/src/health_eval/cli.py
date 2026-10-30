@@ -14,7 +14,7 @@ from typing import Annotated
 
 import typer
 
-from . import cases, questions, review
+from . import ablation, cases, questions, review
 
 app = typer.Typer(add_completion=False, help="Evals for the Calibrated Health Agent.")
 
@@ -51,3 +51,19 @@ def review_cmd(file: Path,
                port: Annotated[int, typer.Option("--port")] = review.PORT) -> None:
     """Label transcripts Pass / Fail on a local page (127.0.0.1 only)."""
     review.serve(file, port)
+
+
+@app.command("ablation")
+def ablation_cmd(suite: Annotated[str, typer.Option("--suite")] = "ablation",
+                 trials: Annotated[int, typer.Option("--trials")] = 1,
+                 out_dir: Annotated[Path, typer.Option("--out-dir")] = Path("data/evals/ablation"),
+                 limit: Annotated[int, typer.Option("--limit")] = 0) -> None:
+    """Run the four ablation arms on the synthetic fixture (live model: 4 x cases x trials turns)."""
+    chosen = cases.load_cases(suite)
+    result = ablation.run_ablation(chosen[:limit] if limit else chosen, trials=trials,
+                                   out_dir=out_dir)
+    for arm, s in result["arms"].items():
+        typer.echo(f"{arm:9} {s['k']}/{s['n']}  ci {s['ci'][0]:.2f}-{s['ci'][1]:.2f}")
+    for name, c in result["comparisons"].items():
+        typer.echo(f"{name:17} b={c['b']} c={c['c']} p={c['p_mcnemar']:.3f} "
+                   f"diff={c['diff']:+.2f} mdd={c['mdd'] or 0:.2f}")

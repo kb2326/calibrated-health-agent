@@ -16,7 +16,8 @@ import json
 import subprocess
 import tempfile
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -98,7 +99,8 @@ def _run_one(case_id: str, turns: list[str], tags: dict, *, model_factory, varia
     start = time.monotonic()
     try:
         session = cli.Session(model=model_factory() if model_factory else None,
-                              refresh_memory=False, tools=variant_tools(variant))
+                              refresh_memory=False, tools=variant_tools(variant),
+                              topology=topology)  # type: ignore[arg-type]
         for turn in turns:
             result = session.ask(turn, confirm=lambda _args: False)
             t.answer = result.answer
@@ -113,35 +115,49 @@ def _run_one(case_id: str, turns: list[str], tags: dict, *, model_factory, varia
     return t
 
 
+def collect(items: Sequence[Case | dict], *, topology: str = "single", trials: int = 1,
+            variant: Variant = "full", model_factory: Callable[[], Any] | None = None,
+            commit: str = "", fixture_hash: str = "") -> list[Transcript]:
+    """Run every item `trials` times against whatever database is active (no fixture setup)."""
+    return [_run_one(case_id, turns, tags, model_factory=model_factory, variant=variant,
+                     topology=topology, trial=trial, commit=commit, fixture_hash=fixture_hash)
+            for case_id, turns, tags in _items(items) for trial in range(trials)]
+
+
+def write(transcripts: list[Transcript], out: Path) -> Path:
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("a", encoding="utf-8") as fh:
+        for t in transcripts:
+            fh.write(json.dumps(asdict(t), ensure_ascii=False) + "\n")
+    return out
+
+
+@contextmanager
+def eval_fixture(workdir: Path | None = None) -> Iterator[tuple[Path, str]]:
+    """Build the eval fixture in `workdir` (or a temp dir) and point the agent at it."""
+    work = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="cha-eval-"))
+    work.mkdir(parents=True, exist_ok=True)
+    path = fixture.build(work / "health.db")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    with smoke.use_fixture(work, path):
+        yield path, digest
+
+
 def run(items: Sequence[Case | dict], *, topology: str = "single", trials: int = 1,
         variant: Variant = "full", model_factory: Callable[[], Any] | None = None,
         real: bool = False, out: Path, workdir: Path | None = None) -> list[Transcript]:
     out = Path(out)
     if real and not out.resolve().is_relative_to(REAL_ROOT.resolve()):
         raise ValueError("real-data transcripts must be written under data/evals/")
-    commit = _commit()
-    work = Path(workdir) if workdir else Path(tempfile.mkdtemp(prefix="cha-eval-"))
-    work.mkdir(parents=True, exist_ok=True)
-    transcripts: list[Transcript] = []
-
-    def go(fixture_hash: str) -> None:
-        for case_id, turns, tags in _items(items):
-            for trial in range(trials):
-                transcripts.append(_run_one(case_id, turns, tags, model_factory=model_factory,
-                                            variant=variant, topology=topology, trial=trial,
-                                            commit=commit, fixture_hash=fixture_hash))
-
+    kw = {"topology": topology, "trials": trials, "variant": variant,
+          "model_factory": model_factory, "commit": _commit()}
     if real:
-        go("real")
+        transcripts = collect(items, fixture_hash="real", **kw)
     else:
-        path = fixture.build(work / "health.db")
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()[:16]
-        with smoke.use_fixture(work, path, topology):
-            go(digest)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with out.open("a", encoding="utf-8") as fh:
-        for t in transcripts:
-            fh.write(json.dumps(asdict(t), ensure_ascii=False) + "\n")
+        with eval_fixture(workdir) as (_, digest):
+            transcripts = collect(items, fixture_hash=digest, **kw)
+    write(transcripts, out)
     return transcripts
 
 

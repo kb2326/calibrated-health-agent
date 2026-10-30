@@ -30,7 +30,7 @@ from health_core.settings import get_settings
 from health_data import civil, db, store
 
 from . import agent_db, costs, memory, receipts, tools, vertex
-from .workflow import build_workflow
+from .workflow import Topology, build_workflow
 
 app = typer.Typer(add_completion=False, help="Ask the Calibrated Health Agent.")
 memory_app = typer.Typer(invoke_without_command=True, help="What the agent remembers.")
@@ -89,12 +89,12 @@ class Session:
     """One ADK runner + session, reused across the turns of `cha chat`."""
 
     def __init__(self, model: str | BaseLlm | None = None, *, refresh_memory: bool = True,
-                 tools: list | None = None):
+                 tools: list | None = None, topology: Topology | None = None):
         self.refresh_memory = refresh_memory
         self.service = InMemorySessionService()
         self.memory = memory.HealthMemoryService()
         self.runner = Runner(app_name=APP_NAME,
-                             node=build_workflow(model=model or _model(), tools=tools),
+                             node=build_workflow(topology, model=model or _model(), tools=tools),
                              session_service=self.service, memory_service=self.memory)
         self.session_id = uuid.uuid4().hex
 
