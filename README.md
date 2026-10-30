@@ -1,6 +1,6 @@
 # Calibrated Health Agent
 
-**A personal health agent that computes its answers, shows a receipt for every number, and keeps score.**
+**Talk to your own health data with an agent that does the analysis itself: it plans, writes and runs code, proves every number, and is measured like production software.**
 
 [![ci](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml)
 [![evals](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml/badge.svg)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml)
@@ -8,16 +8,56 @@
 ![python](https://img.shields.io/badge/python-3.13-blue)
 ![terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC)
 ![cost](https://img.shields.io/badge/run%20cost-under%20%241%2Fmonth-brightgreen)
-![status](https://img.shields.io/badge/status-phase%204%20of%208-blue)
+![status](https://img.shields.io/badge/status-phase%204%20of%207-blue)
 
-I ask it about my own wearable and journal data. It answers by running SQL or sandboxed
-Python, and cites a re-runnable receipt next to every number. It is evaluated like a product,
-with versioned suites, code graders, judges calibrated against my labels, a red team and a CI
-gate. A second, slower experiment runs alongside: it locks a forecast of my day every morning
-and publishes how it scores against simple baselines, including when it loses.
+I ask questions about my own Fitbit / Pixel Watch data and daily journal in plain language:
+"How did I sleep this week compared with last month?", "Do late meals hurt my HRV the next
+day?", "What changed before my worst days?" The agent doesn't look up an answer or summarise a
+dashboard. It works the question out the way an analyst would:
+
+1. Decides what has to be computed.
+2. Picks the tools and writes the SQL or Python to compute it.
+3. Runs that code over the raw data in a locked-down sandbox.
+4. Checks its own draft before replying, so every number in the answer comes with a receipt
+   you can re-run.
+
+Around that agent sits the engineering that real agent products need and most demos skip: an
+evaluation harness with a CI gate, a red team and threat model, guarded tools, consented
+memory, tracing with no health data in it, and infrastructure as code. The whole thing costs
+under $1 a month.
 
 A one-person portfolio project, not a medical device and not a replacement for any health
 product.
+
+## Not a chatbot on top of two APIs
+
+The Google Health and Forms APIs are just where the data comes from. Everything that makes
+this an agent happens after the data lands:
+
+| A typical "chat with your data" bot | This agent |
+|---|---|
+| Pastes a summary into the prompt and lets the model answer from it | **Plans and acts.** An ADK graph workflow gives Gemini 15 tools (read-only SQL, a Python sandbox, metrics, journal, devices, memory, scoreboard) and lets it decide what to compute |
+| Numbers you have to take on trust | **Every number is proven.** A deterministic verify step rejects any figure not produced by code this turn, retries once, and otherwise labels it `unverified:`. Every receipt re-runs on demand |
+| Treats any text it reads as instructions | **Untrusted input stays data.** Journal notes, device names and code output are wrapped as untrusted, SQL returns them as NULL, and no tool can send data out |
+| Forgets, or remembers everything | **Consented memory.** Facts are saved only after an explicit yes, with validity windows |
+| Never checks itself | **Self-review.** A nightly investigator agent studies its own worst forecast misses in sandboxed code and files hypotheses that are tested only on later days |
+| "It seems to work" | **Measured.** 246 eval cases, code graders, LLM judges calibrated against my labels, ablations (no tools / no code / full / multi-agent), a red team with 8 attack families, and a CI gate on every pull request |
+| One prompt, one model call | **Designed and compared.** A single agent and a multi-agent team (router → data scientist / domain expert / coach → synthesizer) face the same evals; the team becomes the default only if it wins a paired test |
+
+## Why build it this way
+
+- **In health, a confident wrong number is the failure that matters.** In Google's PHIA study
+  (*Nature Communications*, 2026), a plain LLM answered personal-health data questions
+  correctly about 22% of the time, and an agent that wrote and ran code reached 84%. So this
+  agent computes, and shows its work.
+- **Agents are judged by evidence, not demos.** The project follows the practice of teams
+  shipping agents (error analysis, calibrated judges, regression gates, red teaming,
+  observability) at a scale one person can run for free.
+- **Private data deserves a real security model.** The agent reads private data and untrusted
+  text, so the design removes the third leg of the "lethal trifecta": it has no way to
+  communicate externally.
+- **An agent should know how good it is.** A second experiment locks a forecast of my day every
+  morning and publishes how it scores against simple rules, including when it loses.
 
 ## Ask it
 
@@ -42,7 +82,7 @@ re-run: matches
 
 Also: `cha chat` for a conversation, `cha notes` for the investigator's findings on its
 forecast misses, and `cha memory` to see what it remembers. It runs on the laptop today; a
-web front end (Next.js + AG-UI) is Phase 7.
+web front end (Next.js + AG-UI) is next (Phase 5).
 
 ## Scorecard
 
@@ -69,19 +109,15 @@ flowchart LR
   verify --> a(["Answer + receipt ids<br/>or an 'unverified:' footer"])
 ```
 
-- **Computed, not narrated.** In Google's PHIA study (*Nature Communications*, 2026), a plain
-  LLM answered personal-health data questions correctly about 22% of the time, and an agent
-  that wrote and ran code reached 84%. Here every number must come from a tool result in the
-  same turn ([ADR 0003](docs/adr/0003-receipts.md)).
-- **Two topologies, one honest test.** A single agent, or a router → data scientist / domain
-  expert / coach → synthesizer team modelled on Google Research's Personal Health Agent. Both
-  face the same evals, and the multi-agent version must win a paired test to become the
-  default ([ADR 0005](docs/adr/0005-topology-default.md)).
-- **Untrusted text stays data.** Journal notes, device names and code output reach the model
-  only inside `<untrusted>` wrappers, and SQL returns those columns as NULL.
-- **Memory with consent.** Facts are saved only after my explicit yes, with validity windows.
-- **An investigator.** Each night it studies the biggest forecast miss in sandboxed code and
-  files hypotheses that are judged only on later days.
+- **Deterministic guards around the model.** `screen` and `verify_receipts` are plain code
+  nodes in the graph, so the rules that matter don't depend on the model obeying a prompt
+  ([ADR 0001](docs/adr/0001-phase3-workflow.md), [ADR 0003](docs/adr/0003-receipts.md)).
+- **Swappable topology.** `CHA_TOPOLOGY=single|multi`; the multi-agent team is modelled on
+  Google Research's Personal Health Agent, and routing is a graph edge rather than LLM-to-LLM
+  hand-off ([ADR 0005](docs/adr/0005-topology-default.md)).
+- **One sandbox, two callers.** The chat agent and the nightly investigator share the
+  sandbox, the receipts and the guarded SQL
+  ([ADR 0004](docs/adr/0004-sandbox.md)).
 
 ## Evaluation
 
@@ -207,10 +243,13 @@ guard is the design: nothing scales up on its own, and the agent's spend is capp
 | 2 | Honest statistics and the forecast ledger | Live (first lock 2026-10-23) |
 | 3 | Agent core: ADK workflow, sandbox, receipts, guarded SQL, memory, investigator | Live (2026-10-24) |
 | 4 | Evals, red team, CI gate, tracing | In progress: built and deployed; first full scorecard and owner labelling under way |
-| 5 | MCP server | Planned, scope under review |
-| 6 | GCP expansion as code (Workflows, IAP services) | Planned |
-| 7 | Web front end (Next.js + AG-UI) | Planned |
-| 8 | Publish: write-ups and demo | Planned |
+| 5 | Web front end: Next.js + AG-UI, streaming answers with clickable receipts, phone-installable, Google sign-in | Next |
+| 6 | GCP expansion as code (agent API on Cloud Run behind IAP, Workflows) | Planned |
+| 7 | Publish: write-ups and demo | Planned |
+
+A read-only MCP server was in the original plan. It was dropped: I have already built MCP in
+another project, several Google Health MCP servers exist, and a new door into private health
+data isn't worth the attack surface. That effort goes to the front end.
 
 ## Repository layout
 
