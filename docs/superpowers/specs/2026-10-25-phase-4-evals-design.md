@@ -1,6 +1,6 @@
 # Phase 4 — Evals, red-team and tracing: design
 
-**Status:** Draft for owner review, 2026-10-25
+**Status:** Approved by owner 2026-10-30
 **Parent spec:** `docs/superpowers/specs/2026-10-20-calibrated-health-agent-design.md` (§6.7, §6.8, §6.9, Phase 4 row)
 **Research:** `docs/research/09-industry-practice-2026.md` (the practices and sources this design follows)
 **Builds on:** Phase 3 (`docs/superpowers/specs/2026-10-23-phase-3-agent-core-design.md`), live since 2026-10-24
