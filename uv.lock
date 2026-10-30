@@ -16,6 +16,7 @@ members = [
     "health-agents",
     "health-core",
     "health-data",
+    "health-eval",
     "health-ledger",
     "jobs",
 ]
@@ -90,6 +91,7 @@ dependencies = [
     { name = "health-agents" },
     { name = "health-core" },
     { name = "health-data" },
+    { name = "health-eval" },
     { name = "health-ledger" },
     { name = "jobs" },
 ]
@@ -109,6 +111,7 @@ requires-dist = [
     { name = "health-agents", editable = "packages/health_agents" },
     { name = "health-core", editable = "packages/health_core" },
     { name = "health-data", editable = "packages/health_data" },
+    { name = "health-eval", editable = "packages/health_eval" },
     { name = "health-ledger", editable = "packages/health_ledger" },
     { name = "jobs", editable = "apps/jobs" },
 ]
@@ -861,6 +864,29 @@ requires-dist = [
     { name = "python-dateutil", specifier = ">=2.9" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "typer", specifier = ">=0.12" },
+]
+
+[[package]]
+name = "health-eval"
+version = "0.1.0"
+source = { editable = "packages/health_eval" }
+dependencies = [
+    { name = "health-agents" },
+    { name = "health-core" },
+    { name = "health-data" },
+    { name = "health-ledger" },
+    { name = "numpy" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "health-agents", editable = "packages/health_agents" },
+    { name = "health-core", editable = "packages/health_core" },
+    { name = "health-data", editable = "packages/health_data" },
+    { name = "health-ledger", editable = "packages/health_ledger" },
+    { name = "numpy", specifier = ">=1.26" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [[package]]
