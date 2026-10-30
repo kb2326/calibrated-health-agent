@@ -23,8 +23,10 @@ reaches Gemini through ADK, which reads `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLO
 
 ## Open (filled when the free-tier key exists)
 
-- Model served on the free tier: `gemini-3.5-flash-lite` — to confirm with one synthetic
-  question.
+- Model served on the free tier: `gemini-3.5-flash-lite` — **confirmed 2026-10-30**: one
+  synthetic smoke question answered with a receipt on a key from project
+  `my-demo-projects-for-credits` (AI Studio shows "Free tier"; its billing account is closed,
+  so nothing can be charged). No `Settings.eval_model` is needed.
 - Free-tier limits (RPM / RPD) for that model — to record from AI Studio.
 - PR suite size: regression × 2 (retry worst case) must fit the daily limit; otherwise PRs run
   the `must_pass` subset and the nightly job runs the rest.
