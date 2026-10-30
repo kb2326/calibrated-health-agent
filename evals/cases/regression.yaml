@@ -287,7 +287,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
 - id: reg-021
   category: gap
-  question: How many of the last 30 days have no watch data at all?
+  question: Not counting today, how many of the last 30 days have no watch data at all?
   expect:
     must_pass: true
     numbers:
