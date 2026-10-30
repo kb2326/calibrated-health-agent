@@ -8,13 +8,14 @@ real-data runs are laptop-only and write under data/evals/.
 """
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from . import ablation, cases, questions, review
+from . import ablation, cases, questions, report, review
 
 app = typer.Typer(add_completion=False, help="Evals for the Calibrated Health Agent.")
 
@@ -67,3 +68,47 @@ def ablation_cmd(suite: Annotated[str, typer.Option("--suite")] = "ablation",
     for name, c in result["comparisons"].items():
         typer.echo(f"{name:17} b={c['b']} c={c['c']} p={c['p_mcnemar']:.3f} "
                    f"diff={c['diff']:+.2f} mdd={c['mdd'] or 0:.2f}")
+
+
+@app.command("run")
+def run_cmd(suite: Annotated[list[str], typer.Option("--suite")],
+            trials: Annotated[int, typer.Option("--trials")] = 1,
+            limit: Annotated[int, typer.Option("--limit")] = 0,
+            out_dir: Annotated[Path, typer.Option("--out-dir")] = Path("data/evals/runs")) -> None:
+    """Run and grade suites on the synthetic fixture; writes transcripts and summary.json."""
+    chosen = [c for s in suite for c in cases.load_cases(s)]
+    chosen = chosen[:limit] if limit else chosen
+    stamp = date.today().isoformat()
+    transcripts, verdicts = report.run_suite(chosen, trials=trials,
+                                             out=out_dir / f"{stamp}-transcripts.jsonl")
+    summary = report.summarise(transcripts, chosen, verdicts, {})
+    path = out_dir / "summary.json"
+    path.write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
+    typer.echo(report.readme_block(summary))
+    typer.echo(f"summary: {path}")
+
+
+@app.command("report")
+def report_cmd(summary: Path,
+               out: Annotated[Path, typer.Option("--out")] = report.RESULTS,
+               readme: Annotated[Path | None, typer.Option("--readme")] = None) -> None:
+    """Write docs/evals/results/<date>-<sha>.md from a summary; optionally refresh README."""
+    data = json.loads(summary.read_text(encoding="utf-8"))
+    typer.echo(f"wrote {report.write_results(data, out)}")
+    if readme:
+        readme.write_text(report.replace_readme_block(readme.read_text(encoding="utf-8"),
+                                                      report.readme_block(data)), encoding="utf-8")
+        typer.echo(f"updated {readme}")
+
+
+@app.command("gate")
+def gate_cmd(summary: Path,
+             baseline: Annotated[Path | None, typer.Option("--baseline")] = None) -> None:
+    """Exit 1 if the summary fails the gate (must-pass, not evaluated, regression)."""
+    current = json.loads(summary.read_text(encoding="utf-8"))
+    base = json.loads(baseline.read_text(encoding="utf-8")) if baseline and baseline.exists() else None
+    ok, messages = report.gate(current, base)
+    for m in messages:
+        typer.echo(m)
+    typer.echo("gate: PASS" if ok else "gate: FAIL")
+    raise typer.Exit(0 if ok else 1)
