@@ -56,6 +56,7 @@ class TurnResult:
     input_tokens: int = 0
     output_tokens: int = 0
     usd: float = 0.0
+    tool_calls: list[dict] = field(default_factory=list)  # {name, args, response}
 
 
 def _model() -> str | BaseLlm:
@@ -87,11 +88,13 @@ def _stale_note() -> str | None:
 class Session:
     """One ADK runner + session, reused across the turns of `cha chat`."""
 
-    def __init__(self, model: str | BaseLlm | None = None, *, refresh_memory: bool = True):
+    def __init__(self, model: str | BaseLlm | None = None, *, refresh_memory: bool = True,
+                 tools: list | None = None):
         self.refresh_memory = refresh_memory
         self.service = InMemorySessionService()
         self.memory = memory.HealthMemoryService()
-        self.runner = Runner(app_name=APP_NAME, node=build_workflow(model=model or _model()),
+        self.runner = Runner(app_name=APP_NAME,
+                             node=build_workflow(model=model or _model(), tools=tools),
                              session_service=self.service, memory_service=self.memory)
         self.session_id = uuid.uuid4().hex
 
@@ -101,6 +104,7 @@ class Session:
             await self.service.create_session(app_name=APP_NAME, user_id="owner",
                                               session_id=self.session_id)
         result = TurnResult(answer="")
+        calls: dict[str, dict] = {}
         message: types.Content | None = types.Content(role="user", parts=[types.Part(text=question)])
         while message is not None:
             pending = []
@@ -112,6 +116,13 @@ class Session:
                                              + (ev.usage_metadata.thoughts_token_count or 0))
                 if isinstance(ev.output, str):
                     result.answer = ev.output
+                for fc in ev.get_function_calls():
+                    if fc.name != CONFIRM:
+                        calls[fc.id or str(len(calls))] = {"name": fc.name, "args": dict(fc.args or {}),
+                                                           "response": None}
+                for fr in ev.get_function_responses():
+                    if fr.id in calls:
+                        calls[fr.id]["response"] = fr.response
                 pending += [fc for fc in ev.get_function_calls() if fc.name == CONFIRM]
             message = None
             if pending:
@@ -124,6 +135,7 @@ class Session:
         turn = (session.state.get(tools.TURN_RECEIPTS, []) if session else []) or []
         ids = [r["receipt"] for r in turn] + _RECEIPT_ID.findall(result.answer)
         result.receipts = list(dict.fromkeys(ids))
+        result.tool_calls = list(calls.values())
         return result
 
     def ask(self, question: str, confirm: Callable[[dict], bool] = _confirm_with_typer) -> TurnResult:

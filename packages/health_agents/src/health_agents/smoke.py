@@ -14,6 +14,8 @@ import json
 import os
 import random
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -72,23 +74,40 @@ def load_questions(path: Path = QUESTIONS) -> list[str]:
     return list(yaml.safe_load(Path(path).read_text(encoding="utf-8"))["questions"])
 
 
-def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
-              topology: str | None = None, workdir: Path) -> dict[str, Any]:
+@contextmanager
+def use_fixture(workdir: Path, fixture: Path, topology: str | None = None) -> Iterator[Path]:
+    """Point the agent at `fixture` (and a scratch agent.db in `workdir`) for the block.
+
+    Never the owner's data: the bucket is unset and every setting reads from `workdir`.
+    """
     from health_core import settings as core
 
-    from . import agent_db, cli, receipts, tools, verify
+    from . import agent_db, tools
 
-    workdir = Path(workdir)
-    fixture = build_fixture(workdir / "health.db")
     saved = (db.DB_PATH, dict(os.environ), agent_db.get_settings, tools.get_settings)
     os.environ.update(CHA_DATA_DIR=str(workdir), CHA_DB_BUCKET="")
     if topology:
         os.environ["CHA_TOPOLOGY"] = topology
     core.get_settings.cache_clear()
-    db.DB_PATH = fixture
+    db.DB_PATH = Path(fixture)
     agent_db.get_settings = core.get_settings  # chat receipts and usage go to the temp dir
     tools.get_settings = core.get_settings
     try:
+        yield Path(fixture)
+    finally:
+        db.DB_PATH, env, agent_db.get_settings, tools.get_settings = saved
+        os.environ.clear()
+        os.environ.update(env)
+        core.get_settings.cache_clear()
+
+
+def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
+              topology: str | None = None, workdir: Path) -> dict[str, Any]:
+    from . import cli, receipts, verify
+
+    workdir = Path(workdir)
+    fixture = build_fixture(workdir / "health.db")
+    with use_fixture(workdir, fixture, topology):
         results = []
         for question in questions:
             session = cli.Session(model=model or cli._model(), refresh_memory=False)
@@ -117,8 +136,3 @@ def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
                             "usd": turn.usd, "answer": turn.answer})
         return {"passed": sum(r["ok"] for r in results), "total": len(results),
                 "usd": sum(r["usd"] for r in results), "results": results}
-    finally:
-        db.DB_PATH, env, agent_db.get_settings, tools.get_settings = saved
-        os.environ.clear()
-        os.environ.update(env)
-        core.get_settings.cache_clear()

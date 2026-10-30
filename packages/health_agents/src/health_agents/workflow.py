@@ -160,13 +160,16 @@ def collect(ctx: Context, node_input: Any) -> str:
 
 
 def build_workflow(topology: Topology | None = None, *, model: Model | None = None,
-                   models: dict[str, Model] | None = None) -> Workflow:
+                   models: dict[str, Model] | None = None,
+                   tools: list | None = None) -> Workflow:
+    """`tools` replaces the single agent's tool list (the eval ablation's variants)."""
     topology = topology or get_settings().topology
     model = model or get_settings().model_default
     models = models or {}
     if topology == "single":
         answer = _agent("answer", models.get("answer", model),
-                        instructions.SHARED + instructions.SINGLE, ALL_TOOLS)
+                        instructions.SHARED + instructions.SINGLE,
+                        ALL_TOOLS if tools is None else tools)
         return Workflow(name="health_agent_single", edges=[
             ("START", screen), (screen, {"ok": answer, "refuse": refuse}),
             (answer, verify_receipts), (verify_receipts, {"retry": answer, "done": done}),
