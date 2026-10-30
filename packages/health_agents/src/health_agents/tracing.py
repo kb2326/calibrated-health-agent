@@ -75,6 +75,12 @@ def annotate_tool(args: dict, response: Any) -> None:
         span.set_attribute("cha.receipt_id", response["receipt"])
 
 
+def error_status(description: str) -> Any:
+    from opentelemetry.trace import Status, StatusCode
+
+    return Status(StatusCode.ERROR, description)
+
+
 def tracer() -> Any:
     from opentelemetry import trace
 

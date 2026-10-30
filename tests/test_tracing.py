@@ -79,3 +79,24 @@ def test_tool_span_has_receipt_and_no_args(tmp_path, monkeypatch):
     every_value = json.dumps([dict(s.attributes or {}) for s in spans], default=str)
     assert "n_secret_marker" not in every_value
     assert "How many journal entries" not in every_value
+
+
+def test_job_steps_emit_spans_without_step_output(monkeypatch):
+    from jobs import sync_job
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(trace, "_TRACER_PROVIDER", provider)
+    sync_job._step("journal", lambda: {"note_text": "private_marker", "imported": 3})
+    with pytest.raises(sync_job._Abort):
+        sync_job._step("push", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    spans = {s.name: s for s in exporter.get_finished_spans()}
+    assert set(spans) >= {"job.journal", "job.push"}
+    assert spans["job.journal"].attributes["cha.step"] == "journal"
+    assert not spans["job.push"].status.is_ok
+    assert "private_marker" not in json.dumps([dict(s.attributes or {}) for s in spans.values()])

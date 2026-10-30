@@ -90,12 +90,18 @@ def _error_fields(name: str, exc: BaseException) -> dict[str, Any]:
 
 
 def _step(name: str, fn: Callable[[], dict[str, Any] | None]) -> dict[str, Any]:
+    from health_agents import tracing
+
     started = time.monotonic()
-    try:
-        extra = fn() or {}
-    except Exception as exc:
-        log(name, "ERROR", **_error_fields(name, exc))
-        raise _Abort from exc
+    # One span per step: name, duration and status only, never the step's output.
+    with tracing.tracer().start_as_current_span(f"job.{name}") as span:
+        span.set_attribute("cha.step", name)
+        try:
+            extra = fn() or {}
+        except Exception as exc:
+            span.set_status(tracing.error_status(type(exc).__name__))
+            log(name, "ERROR", **_error_fields(name, exc))
+            raise _Abort from exc
     log(name, "INFO", seconds=round(time.monotonic() - started, 2), **extra)
     return extra
 
@@ -365,7 +371,8 @@ def main(argv: list[str] | None = None) -> int:
     from health_agents import tracing
 
     tracing.setup()  # CHA_TRACING=cloud in the job: Cloud Trace, content forced off
-    return _run(get_settings(), args.dry_run)
+    with tracing.tracer().start_as_current_span("cha.job"):
+        return _run(get_settings(), args.dry_run)
 
 
 if __name__ == "__main__":
