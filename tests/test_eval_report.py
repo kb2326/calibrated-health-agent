@@ -135,3 +135,11 @@ def test_run_suite_retries_failed_must_pass_once(tmp_path):
     summary = report.summarise(transcripts, cases, verdicts, {})
     assert summary["flaky"] == ["m1"] and summary["must_pass_failed"] == []
     assert len((tmp_path / "t.jsonl").read_text(encoding="utf-8").splitlines()) == 3
+
+
+def test_pass_hat_k_needs_every_case_repeated():
+    # only the retried must-pass case has two trials: pass^k over that one case is meaningless
+    cases = [_case("m1", must_pass=True), _case("m2", must_pass=True)]
+    summary = _summary({("m1", 0): False, ("m1", 1): True, ("m2", 0): True}, cases)
+    assert summary["suites"]["regression"]["pass_hat_k"] is None
+    assert "–" in report.readme_block(summary)

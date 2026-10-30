@@ -16,6 +16,14 @@ _RECEIPT = re.compile(r"\br-[0-9a-f]{10}\b")
 _DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:[T ][\d:.]+Z?)?\b")
 _MONTH_DAY = re.compile(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?"
                         r"\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s+\d{4})?\b")
+# "October 9, 10, 11, 12, and 13, 2026" / "Oct 9 to 13" / "Sept 2–6": the extra numbers are
+# days only when the list is closed by and/or, or is a range. Without that ("Oct 3, 12 of
+# your nights") the number after the date stays a number and must be backed.
+_DAY = r"\d{1,2}(?:st|nd|rd|th)?"
+_MONTH_DAY_LIST = re.compile(
+    r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+" + _DAY
+    + r"(?:(?:\s*,\s*" + _DAY + r")*\s*,?\s+(?:and|or)\s+" + _DAY
+    + r"|\s*(?:–|-|to|through)\s*" + _DAY + r")(?:,?\s+\d{4})?\b")
 _YEAR = re.compile(r"(?i)\b(?:in|of|since|year|by)\s+(?:19|20)\d{2}\b")
 _TIME = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 _ORDINAL = re.compile(r"\b\d+(?:st|nd|rd|th)\b")
@@ -45,7 +53,7 @@ def _leaves(value: Any) -> Iterable[float]:
 
 
 def _strip(text: str) -> str:
-    for pattern in (_RECEIPT, _DATE, _MONTH_DAY, _TIME, _ORDINAL, _WINDOW, _YEAR, _LIST_MARKER, _SCALE):
+    for pattern in (_RECEIPT, _DATE, _MONTH_DAY_LIST, _MONTH_DAY, _TIME, _ORDINAL, _WINDOW, _YEAR, _LIST_MARKER, _SCALE):
         text = pattern.sub(" ", text)
     return text
 

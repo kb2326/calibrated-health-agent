@@ -96,7 +96,10 @@ def summarise(transcripts: list[runner.Transcript], cases: Sequence[Case], verdi
         members = [c for c in cases if c.suite == suite]
         first = [(c, trials[c.id].get(0)) for c in members]
         graded = [(c, r) for c, r in first if r is not None]
-        repeated = [list(trials[c.id].values()) for c in members if len(trials[c.id]) >= 2]
+        # pass^k only when every case ran k >= 2 times; a retry of the failures alone is not
+        # a reliability sample (first CI run reported 0% from the retried cases)
+        all_repeated = bool(members) and all(len(trials[c.id]) >= 2 for c in members)
+        repeated = [list(trials[c.id].values()) for c in members] if all_repeated else []
         repeated = [r for r in repeated if None not in r]
         cats: dict[str, dict] = {}
         for cat in sorted({c.category for c in members}):

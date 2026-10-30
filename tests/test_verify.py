@@ -72,3 +72,18 @@ def test_decimal_on_a_ten_point_scale_is_checked_whole():
 def test_window_lengths_are_exempt():
     assert unbacked("the 7-day rolling average peaked at 52.3 ms", [52.3]) == []
     assert unbacked("a 14-night stretch", []) == []
+
+
+def test_enumerated_and_ranged_days_are_dates():
+    # found by the Phase 4 PR gate: day lists after a month were read as unbacked numbers
+    answer = ("5 days have no watch data at all: October 9, 10, 11, 12, and 13, 2026 "
+              "[r-4c4d9eb3e5].")
+    assert unbacked(answer, [{"result": 5}]) == []
+    assert unbacked("No data from Oct 9 to 13 or on Oct 20 [r-1a2b3c4d5e].", [{"n": 0}]) == []
+    assert unbacked("Sept 2–6 were quiet (5 days).", [{"n": 5}]) == []
+
+
+def test_a_count_after_a_date_is_still_checked():
+    # no closing "and"/"or": "12" is a count, not a day, and must be backed
+    assert unbacked("Since Oct 3, 12 of your nights were short.", [{"n": 4}]) == ["12"]
+    assert unbacked("On October 9, 10 hours of sleep.", [{"n": 4}]) == ["10"]
