@@ -162,6 +162,10 @@ class Session:
         return result
 
 
+DISCLOSURE = ("AI agent (Gemini) answering from your own data. It can be wrong and is not "
+              "medical advice; every number has a receipt you can re-run.")
+
+
 def _print_turn(result: TurnResult) -> None:
     typer.echo(result.answer)
     typer.echo("")
@@ -173,6 +177,7 @@ def _print_turn(result: TurnResult) -> None:
 @app.command()
 def ask(question: str) -> None:
     """Ask one question about your health data."""
+    typer.echo(DISCLOSURE)
     note = _stale_note()
     if note:
         typer.echo(note)
@@ -186,6 +191,7 @@ def ask(question: str) -> None:
 @app.command()
 def chat() -> None:
     """A conversation; an empty line ends it."""
+    typer.echo(DISCLOSURE)
     note = _stale_note()
     if note:
         typer.echo(note)
