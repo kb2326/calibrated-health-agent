@@ -1,6 +1,6 @@
 # Phase 5: web front end (design)
 
-Status: draft for the owner's approval, 2026-10-30.
+Status: **approved by the owner 2026-10-30**, with the visual-direction requirement in §7a.
 Research: `docs/research/10-ag-ui-frontend.md` (AG-UI, ag-ui-adk, CopilotKit, IAP, PWA).
 Builds on: Phase 3 agent (`health_agents.cli.Session`, `workflow.build_workflow`), Phase 4
 evals and tracing.
@@ -121,6 +121,30 @@ health.db (read-only, pulled from the GCS bucket) + agent.db (receipts, usage, m
    the same rounding rules as the public board).
 5. **Errors:** budget reached, quota, network, and signed out, each with plain text that says
    what happened and what to do.
+
+## 7a. Visual direction (owner requirement, 2026-10-30)
+
+Screenshots of this front end will be published on Medium and LinkedIn, so it must not look
+like a basic chat template. The owner asked for a **sporty** feel.
+
+- **Direction:** athletic performance data, the visual world of race telemetry, training logs
+  and sports-watch faces, not a generic chat app. Bold condensed display type for numbers and
+  headings, tabular numerals everywhere, a high-energy accent used sparingly, and a dark theme
+  that looks right in a screenshot (with a real light theme too). Motion is limited to the
+  stream itself and small, purposeful transitions (respecting reduced motion).
+- **Generative UI is the showcase.** This is where AG-UI earns its place on screen. When a
+  turn's tool result is a time series, the answer carries an inline **metric card**: a small
+  chart such as a sleep bar chart or a resting-heart-rate trend, plus the headline number and
+  its receipt chip. Tool steps render as a live **"agent at work"** timeline. The data for a
+  card loads through `GET /api/receipts/{id}` (call 2 in §12 still holds).
+- **Use Claude's `frontend-design` skill** during implementation for the visual system
+  (tokens, type pairing, layout, components), and avoid templated looks.
+- **Pick a direction before building screens:** the builder produces two or three static
+  mockups of the chat screen with a metric card and an open receipt panel (on the synthetic
+  fixture). The owner picks one before the components are built.
+- **Demo mode for publishing:** `cha-web --demo` serves the synthetic eval fixture, so every
+  public screenshot and GIF shows synthetic data, never the owner's real health data. The
+  page shows a small "demo data" badge in this mode.
 
 ## 8. Quality bar (standard practices)
 
