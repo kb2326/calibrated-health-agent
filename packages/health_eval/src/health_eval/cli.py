@@ -14,7 +14,7 @@ from typing import Annotated
 
 import typer
 
-from . import cases, questions
+from . import cases, questions, review
 
 app = typer.Typer(add_completion=False, help="Evals for the Calibrated Health Agent.")
 
@@ -44,3 +44,10 @@ def build_cmd() -> None:
     """Generate ADK evalsets from the YAML cases."""
     for path in cases.write_evalsets():
         typer.echo(f"wrote {path}")
+
+
+@app.command("review")
+def review_cmd(file: Path,
+               port: Annotated[int, typer.Option("--port")] = review.PORT) -> None:
+    """Label transcripts Pass / Fail on a local page (127.0.0.1 only)."""
+    review.serve(file, port)
