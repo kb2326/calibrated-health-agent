@@ -36,7 +36,7 @@ def test_truth_sql_reads_the_fixture(path, monkeypatch):
 
 
 def test_truth_sql_is_read_only(path):
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         fixture.truth(path, "DELETE FROM daily_metrics")
 
 

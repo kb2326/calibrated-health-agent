@@ -49,9 +49,9 @@ def test_evalset_matches_adk_schema(tmp_path):
     data = to_evalset(load_cases("regression", _root(tmp_path, GOOD)), "regression")
     parsed = EvalSet.model_validate(data)
     assert parsed.eval_set_id == "regression" and len(parsed.eval_cases) == 2
-    first = parsed.eval_cases[0].conversation[0]
-    assert first.user_content.parts[0].text == "Average sleep last 30 days?"
-    assert [t.name for t in first.intermediate_data.tool_uses] == ["run_sql"]
+    first = data["eval_cases"][0]["conversation"][0]
+    assert first["user_content"]["parts"][0]["text"] == "Average sleep last 30 days?"
+    assert [t["name"] for t in first["intermediate_data"]["tool_uses"]] == ["run_sql"]
 
 
 def test_multi_turn_question_becomes_several_invocations(tmp_path):
