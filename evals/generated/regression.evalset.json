@@ -17,24 +17,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -58,24 +41,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -99,24 +65,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -140,24 +89,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -181,24 +113,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -222,24 +137,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -263,24 +161,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -304,24 +185,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -345,24 +209,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -386,24 +233,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -427,24 +257,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -468,24 +281,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -509,24 +305,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -550,24 +329,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -591,24 +353,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -632,24 +377,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "compare_periods"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },

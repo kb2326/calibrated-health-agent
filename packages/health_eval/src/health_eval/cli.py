@@ -15,7 +15,7 @@ from typing import Annotated
 
 import typer
 
-from . import ablation, cases, questions, report, review
+from . import ablation, adk_eval, cases, questions, report, review
 
 app = typer.Typer(add_completion=False, help="Evals for the Calibrated Health Agent.")
 
@@ -112,3 +112,15 @@ def gate_cmd(summary: Path,
         typer.echo(m)
     typer.echo("gate: PASS" if ok else "gate: FAIL")
     raise typer.Exit(0 if ok else 1)
+
+
+@app.command("adk")
+def adk_cmd(suite: Annotated[str, typer.Option("--suite")] = "regression",
+            judges: Annotated[bool, typer.Option("--judges/--no-judges")] = False) -> None:
+    """ADK metrics on evals/generated/<suite>.evalset.json (judge metrics: nightly only)."""
+    result = adk_eval.run_adk(Path("evals/generated") / f"{suite}.evalset.json",
+                              judge_metrics=["safety_v1", "hallucinations_v1"] if judges else [])
+    for name in (k for k, v in result.items() if isinstance(v, dict)):
+        r = result[name]
+        mean = f"{r['mean']:.2f}" if r["mean"] is not None else "n/a"
+        typer.echo(f"{name}: {mean} over {r['n']} cases")

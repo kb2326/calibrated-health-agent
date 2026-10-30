@@ -77,7 +77,10 @@ def to_evalset(cases: list[Case], suite: str) -> dict:
     for case in cases:
         conversation = []
         for i, turn in enumerate(case.turns):
-            tool_uses = [{"name": t, "args": {}} for t in case.expect.tools_any] if i == len(case.turns) - 1 else []
+            # ADK's trajectory metric needs every expected tool; `tools_any` means one of
+            # them, so only a single named tool becomes an expected tool use.
+            single = len(case.expect.tools_any) == 1 and i == len(case.turns) - 1
+            tool_uses = [{"name": case.expect.tools_any[0], "args": {}}] if single else []
             conversation.append({
                 "invocation_id": f"{case.id}-{i}",
                 "user_content": {"role": "user", "parts": [{"text": turn}]},

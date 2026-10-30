@@ -881,20 +881,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -918,20 +905,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -955,20 +929,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -992,20 +953,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1029,20 +977,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_correlations"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1066,20 +1001,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_correlations"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1103,20 +1025,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_correlations"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1140,20 +1049,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_correlations"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1177,20 +1073,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_python"
-       },
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_correlations"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1611,16 +1494,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1644,16 +1518,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1677,16 +1542,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1710,16 +1566,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1743,16 +1590,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1776,20 +1614,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "list_devices"
-       },
-       {
-        "args": {},
-        "name": "sources_for_metric"
-       },
-       {
-        "args": {},
-        "name": "get_health_profile"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1813,20 +1638,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "list_devices"
-       },
-       {
-        "args": {},
-        "name": "sources_for_metric"
-       },
-       {
-        "args": {},
-        "name": "get_health_profile"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1850,20 +1662,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "list_devices"
-       },
-       {
-        "args": {},
-        "name": "sources_for_metric"
-       },
-       {
-        "args": {},
-        "name": "get_health_profile"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1887,16 +1686,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "save_fact"
-       },
-       {
-        "args": {},
-        "name": "load_memory"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -1920,16 +1710,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "save_fact"
-       },
-       {
-        "args": {},
-        "name": "load_memory"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
@@ -2083,24 +1864,7 @@
       "role": "user"
      },
      "intermediate_data": {
-      "tool_uses": [
-       {
-        "args": {},
-        "name": "run_sql"
-       },
-       {
-        "args": {},
-        "name": "get_metric_series"
-       },
-       {
-        "args": {},
-        "name": "get_anomalies"
-       },
-       {
-        "args": {},
-        "name": "run_python"
-       }
-      ],
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },
