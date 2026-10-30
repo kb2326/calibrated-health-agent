@@ -14,8 +14,10 @@ CONTENT_VARS = ("ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS",
 @pytest.fixture
 def no_providers(monkeypatch):
     calls = []
-    monkeypatch.setattr(tracing, "_install", lambda hooks: calls.append(hooks))
+    monkeypatch.setattr(tracing, "_install",
+                        lambda hooks, resource=None: calls.append((hooks, resource)))
     monkeypatch.setattr(tracing, "_gcp_hooks", lambda: ["gcp"])
+    monkeypatch.setattr(tracing, "_gcp_resource", lambda: "project-resource")
     for var in (*CONTENT_VARS, "CHA_TRACING", "CHA_TRACE_CONTENT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
         monkeypatch.delenv(var, raising=False)
     return calls
@@ -36,7 +38,8 @@ def test_cloud_mode_never_captures_content(no_providers, monkeypatch):
     assert tracing.setup("cloud") == "cloud"
     assert os.environ["ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"] == "false"
     assert os.environ["OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"] == "NO_CONTENT"
-    assert no_providers and "gcp" in no_providers[-1]
+    assert no_providers and "gcp" in no_providers[-1][0]
+    assert no_providers[-1][1] == "project-resource"  # Telemetry API needs gcp.project_id
     # content is only ever possible locally, and only when asked for
     assert tracing.setup("local") == "local"
     assert os.environ["ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"] == "true"
@@ -97,6 +100,13 @@ def test_job_steps_emit_spans_without_step_output(monkeypatch):
         sync_job._step("push", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
     spans = {s.name: s for s in exporter.get_finished_spans()}
     assert set(spans) >= {"job.journal", "job.push"}
-    assert spans["job.journal"].attributes["cha.step"] == "journal"
+    assert (spans["job.journal"].attributes or {})["cha.step"] == "journal"
     assert not spans["job.push"].status.is_ok
     assert "private_marker" not in json.dumps([dict(s.attributes or {}) for s in spans.values()])
+
+
+def test_gcp_resource_names_the_project(monkeypatch):
+    monkeypatch.setenv("CHA_GCP_PROJECT", "proj-123")
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    attrs = dict(tracing._gcp_resource().attributes)
+    assert attrs["gcp.project_id"] == "proj-123"

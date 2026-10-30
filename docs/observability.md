@@ -40,8 +40,19 @@ Phoenix is a separate container, so it adds no Python dependency.
 ## Cloud: Cloud Trace
 
 The job runs with `CHA_TRACING=cloud`. Its service account holds `roles/cloudtrace.agent`
-and `roles/telemetry.tracesWriter`, and `cloudtrace.googleapis.com` and
-`telemetry.googleapis.com` are enabled (`infra/iam.tf`, `infra/services.tf`, `infra/job.tf`).
+and `roles/telemetry.tracesWriter`. Three APIs are enabled: `cloudtrace.googleapis.com`,
+`telemetry.googleapis.com` (the OTLP endpoint ADK exports to) and
+`observability.googleapis.com` (the `_Trace` storage bucket behind it). See `infra/iam.tf`,
+`infra/services.tf` and `infra/job.tf`.
+
+The Telemetry API rejects spans whose OTel resource does not name the project (HTTP 400, "Failed
+to export span batch"). So cloud mode passes ADK's `get_gcp_resource(project)`, which sets
+`gcp.project_id`, the way ADK's own API server does.
+
+Besides ADK's agent spans, the job writes a `cha.job` root span and one `job.<step>` span per
+step (pull, migrate, sync, journal, lock, settle, retest, investigate, push, publish,
+heartbeat). They carry only the step name, its duration and its status, never the step's
+output.
 The nightly job writes a few hundred spans a month, well inside Cloud Trace's free
 allowance (2.5M spans/month), so it costs $0.
 

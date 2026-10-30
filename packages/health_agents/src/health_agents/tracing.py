@@ -27,10 +27,23 @@ _ADK_CONTENT = "ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"
 _OTEL_CONTENT = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
 
 
-def _install(hooks: list) -> None:
+def _install(hooks: list, resource: Any = None) -> None:
     from google.adk.telemetry.setup import maybe_set_otel_providers
 
-    maybe_set_otel_providers(hooks)
+    maybe_set_otel_providers(hooks, otel_resource=resource)
+
+
+def _gcp_resource() -> Any:
+    """The OTel resource naming the project: telemetry.googleapis.com rejects spans without
+    `gcp.project_id` (HTTP 400), so cloud mode must pass it, as ADK's own server does."""
+    from google.adk.telemetry.google_cloud import get_gcp_resource
+
+    project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("CHA_GCP_PROJECT")
+    if not project:
+        import google.auth
+
+        project = google.auth.default()[1]
+    return get_gcp_resource(project)
 
 
 def _gcp_hooks() -> list:
@@ -54,7 +67,7 @@ def setup(mode: Mode | None = None) -> str:
         os.environ.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", PHOENIX)
         _install([])
     else:
-        _install(_gcp_hooks())
+        _install(_gcp_hooks(), _gcp_resource())
     return mode
 
 
