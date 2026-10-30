@@ -70,16 +70,31 @@ def ablation_cmd(suite: Annotated[str, typer.Option("--suite")] = "ablation",
                    f"diff={c['diff']:+.2f} mdd={c['mdd'] or 0:.2f}")
 
 
+def select_cases(suites: list[str], *, must_pass_only: bool = False, rotate: int = 0,
+                 day: int | None = None, limit: int = 0) -> list[cases.Case]:
+    """Cases from `suites`; `rotate=N` takes a day-dependent window of N (nightly slices that
+    cover every case over a few days within the free tier's daily request limit)."""
+    chosen = [c for s in suites for c in cases.load_cases(s)]
+    if must_pass_only:
+        chosen = [c for c in chosen if c.expect.must_pass]
+    if rotate and len(chosen) > rotate:
+        start = ((date.today().timetuple().tm_yday if day is None else day) * rotate) % len(chosen)
+        chosen = (chosen + chosen)[start:start + rotate]
+    return chosen[:limit] if limit else chosen
+
+
 @app.command("run")
 def run_cmd(suite: Annotated[list[str], typer.Option("--suite")],
             trials: Annotated[int, typer.Option("--trials")] = 1,
             limit: Annotated[int, typer.Option("--limit")] = 0,
+            must_pass_only: Annotated[bool, typer.Option("--must-pass-only")] = False,
+            rotate: Annotated[int, typer.Option("--rotate")] = 0,
+            pace: Annotated[float, typer.Option("--pace", help="seconds between cases")] = 0,
             out_dir: Annotated[Path, typer.Option("--out-dir")] = Path("data/evals/runs")) -> None:
     """Run and grade suites on the synthetic fixture; writes transcripts and summary.json."""
-    chosen = [c for s in suite for c in cases.load_cases(s)]
-    chosen = chosen[:limit] if limit else chosen
+    chosen = select_cases(suite, must_pass_only=must_pass_only, rotate=rotate, limit=limit)
     stamp = date.today().isoformat()
-    transcripts, verdicts = report.run_suite(chosen, trials=trials,
+    transcripts, verdicts = report.run_suite(chosen, trials=trials, pace_s=pace,
                                              out=out_dir / f"{stamp}-transcripts.jsonl")
     summary = report.summarise(transcripts, chosen, verdicts, {})
     path = out_dir / "summary.json"

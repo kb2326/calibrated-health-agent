@@ -1,0 +1,119 @@
+name: evals
+
+# Agent evals on the synthetic fixture with a free-tier AI Studio key (ADR 0002).
+# Real health data never runs here: CHA_DATA_MODE=synthetic refuses real-data runs, and no
+# Google Cloud credentials exist in this workflow.
+#
+# Budget (free tier: 15 requests/min, 500/day, ~3-6 requests per question):
+#   pr-gate   must-pass regression cases only (29), paced 25 s apart  -> <= ~175 requests
+#   baseline  full regression (43) + a rotating 20-case slice of capability/safety/redteam
+#             -> <= ~315 requests; quota errors surface as "not evaluated", never a pass.
+
+on:
+  pull_request:
+    paths:
+      - "packages/**"
+      - "evals/**"
+      - "config/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/evals.yml"
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: evals-free-tier-quota
+  cancel-in-progress: false
+
+env:
+  UV_FROZEN: "1"
+  GOOGLE_GENAI_USE_VERTEXAI: "false"
+  GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  CHA_DATA_MODE: synthetic
+
+jobs:
+  pr-gate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.13"
+      - run: uv sync --all-packages --frozen
+      - name: Check the free-tier key is configured
+        run: |
+          if [ -z "$GOOGLE_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is missing (free-tier AI Studio key)"; exit 1
+          fi
+      - name: Red-team controls that need no model
+        run: uv run pytest tests/test_eval_redteam.py -q
+      - name: Fetch the latest main baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow evals.yml --branch main \
+               --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$id" ]; then
+            gh run download "$id" --repo "$GITHUB_REPOSITORY" --name eval-baseline --dir baseline || true
+          fi
+          ls baseline 2>/dev/null || echo "no baseline yet"
+      - name: Must-pass regression cases (one retry for failures)
+        run: uv run cha-eval run --suite regression --must-pass-only --pace 25 --out-dir data/evals/pr
+      - name: Gate
+        run: uv run cha-eval gate data/evals/pr/summary.json --baseline baseline/eval-baseline.json
+      - if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: eval-pr-transcripts
+          path: data/evals/pr/
+          retention-days: 14
+
+  baseline:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          python-version: "3.13"
+      - run: uv sync --all-packages --frozen
+      - name: Red-team controls that need no model
+        run: uv run pytest tests/test_eval_redteam.py -q
+      - name: Full regression suite
+        run: uv run cha-eval run --suite regression --pace 25 --out-dir data/evals/baseline
+      - name: Rotating slice of capability, safety and red-team cases
+        run: >-
+          uv run cha-eval run --suite capability --suite safety --suite redteam
+          --rotate 20 --pace 25 --out-dir data/evals/nightly
+      - name: Results pages
+        if: always()
+        run: |
+          cp data/evals/baseline/summary.json data/evals/baseline/eval-baseline.json
+          uv run cha-eval report data/evals/baseline/summary.json --out data/evals/results
+          uv run cha-eval report data/evals/nightly/summary.json --out data/evals/results || true
+      - name: Gate (informational on main)
+        run: uv run cha-eval gate data/evals/baseline/summary.json
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: eval-baseline
+          path: data/evals/baseline/eval-baseline.json
+          retention-days: 90
+      - if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: eval-results
+          path: |
+            data/evals/results/
+            data/evals/baseline/
+            data/evals/nightly/
+          retention-days: 30

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import time
@@ -117,11 +118,20 @@ def _run_one(case_id: str, turns: list[str], tags: dict, *, model_factory, varia
 
 def collect(items: Sequence[Case | dict], *, topology: str = "single", trials: int = 1,
             variant: Variant = "full", model_factory: Callable[[], Any] | None = None,
-            commit: str = "", fixture_hash: str = "") -> list[Transcript]:
-    """Run every item `trials` times against whatever database is active (no fixture setup)."""
-    return [_run_one(case_id, turns, tags, model_factory=model_factory, variant=variant,
-                     topology=topology, trial=trial, commit=commit, fixture_hash=fixture_hash)
-            for case_id, turns, tags in _items(items) for trial in range(trials)]
+            commit: str = "", fixture_hash: str = "", pace_s: float = 0) -> list[Transcript]:
+    """Run every item `trials` times against whatever database is active (no fixture setup).
+
+    `pace_s` waits between runs so a rate-limited key (free tier: 15 requests a minute)
+    is not exhausted by a burst; a quota error would make the run not evaluated."""
+    out: list[Transcript] = []
+    for case_id, turns, tags in _items(items):
+        for trial in range(trials):
+            if out and pace_s:
+                time.sleep(pace_s)
+            out.append(_run_one(case_id, turns, tags, model_factory=model_factory,
+                                variant=variant, topology=topology, trial=trial, commit=commit,
+                                fixture_hash=fixture_hash))
+    return out
 
 
 def write(transcripts: list[Transcript], out: Path) -> Path:
@@ -148,6 +158,8 @@ def run(items: Sequence[Case | dict], *, topology: str = "single", trials: int =
         variant: Variant = "full", model_factory: Callable[[], Any] | None = None,
         real: bool = False, out: Path, workdir: Path | None = None) -> list[Transcript]:
     out = Path(out)
+    if real and os.environ.get("CHA_DATA_MODE") == "synthetic":
+        raise ValueError("CHA_DATA_MODE=synthetic (CI, free-tier key): real-data runs are refused")
     if real and not out.resolve().is_relative_to(REAL_ROOT.resolve()):
         raise ValueError("real-data transcripts must be written under data/evals/")
     kw = {"topology": topology, "trials": trials, "variant": variant,

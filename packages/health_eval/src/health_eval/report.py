@@ -36,7 +36,7 @@ Outcomes = dict[tuple[str, int], list[graders.Verdict]]
 
 def run_suite(cases: Sequence[Case], *, trials: int = 1, retry_must_pass: bool = True,
               model_factory: Callable[[], Any] | None = None, workdir: Path | None = None,
-              out: Path) -> tuple[list[runner.Transcript], Outcomes]:
+              pace_s: float = 0, out: Path) -> tuple[list[runner.Transcript], Outcomes]:
     """Run, grade inside the fixture (receipts re-run there), retry failed must-pass cases once."""
     by_id = {c.id: c for c in cases}
     commit = runner._commit()
@@ -46,7 +46,7 @@ def run_suite(cases: Sequence[Case], *, trials: int = 1, retry_must_pass: bool =
         try:
             def go(chosen: Sequence[Case], first_trial: int, n: int) -> list[runner.Transcript]:
                 ts = runner.collect(chosen, trials=n, model_factory=model_factory,
-                                    commit=commit, fixture_hash=digest)
+                                    commit=commit, fixture_hash=digest, pace_s=pace_s)
                 for t in ts:
                     t.trial += first_trial
                     verdicts[(t.case_id, t.trial)] = graders.grade(t, by_id[t.case_id], conn)
