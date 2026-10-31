@@ -6,8 +6,9 @@ name: evals
 #
 # Budget (free tier: 15 requests/min, 500/day, ~3-6 requests per question):
 #   pr-gate   must-pass regression cases only (29), paced 25 s apart  -> <= ~175 requests
-#   baseline  full regression (43) + a rotating 20-case slice of capability/safety/redteam
-#             -> <= ~315 requests; quota errors surface as "not evaluated", never a pass.
+#   baseline  nightly (and on demand): full regression (43) + a rotating 20-case slice of
+#             capability/safety/redteam -> <= ~315 requests. No push trigger: a merge day
+#             (PR + push + nightly) would exceed 500. Quota errors are "not evaluated", never a pass.
 
 on:
   pull_request:
@@ -18,8 +19,6 @@ on:
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/evals.yml"
-  push:
-    branches: [main]
   schedule:
     - cron: "30 3 * * *"
   workflow_dispatch:
@@ -102,6 +101,7 @@ jobs:
           uv run cha-eval report data/evals/baseline/summary.json --out data/evals/results
           uv run cha-eval report data/evals/nightly/summary.json --out data/evals/results || true
       - name: Gate (informational on main)
+        continue-on-error: true  # a red gate here must not stop the baseline from being saved
         run: uv run cha-eval gate data/evals/baseline/summary.json
       - uses: actions/upload-artifact@v7.0.2
         with:

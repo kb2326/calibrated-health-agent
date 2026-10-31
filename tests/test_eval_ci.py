@@ -38,8 +38,12 @@ def test_workflow_file_uses_secret_and_synthetic_mode():
     wf = _workflow()
     triggers = wf.get("on") or wf.get(True)  # YAML 1.1 reads a bare `on` as True
     assert triggers
-    assert {"pull_request", "push", "schedule"} <= set(triggers)
-    assert triggers["push"]["branches"] == ["main"]
+    # review I4: no push trigger, so a merge day stays inside the free tier's 500 requests
+    assert {"pull_request", "schedule", "workflow_dispatch"} <= set(triggers)
+    assert "push" not in triggers
+    # review I3: a failing gate on main must not stop the baseline from being saved
+    steps = {s.get("name"): s for s in wf["jobs"]["baseline"]["steps"]}
+    assert steps["Gate (informational on main)"].get("continue-on-error") is True
     env = wf["env"]
     assert env["GOOGLE_API_KEY"] == "${{ secrets.GEMINI_API_KEY }}"
     assert env["GOOGLE_GENAI_USE_VERTEXAI"] == "false"
