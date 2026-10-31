@@ -393,7 +393,7 @@ cases:
   question: What was my average sleep in hours, to one decimal over the last 7 days?
   expect:
     numbers:
-      avg_sleep_h_7: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      avg_sleep_h_7: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
@@ -404,7 +404,7 @@ cases:
   question: What was my average sleep in hours, to one decimal over the last 14 days?
   expect:
     numbers:
-      avg_sleep_h_14: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      avg_sleep_h_14: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
@@ -415,7 +415,7 @@ cases:
   question: What was my average sleep in hours, to one decimal over the last 30 days?
   expect:
     numbers:
-      avg_sleep_h_30: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      avg_sleep_h_30: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
@@ -426,7 +426,7 @@ cases:
   question: What was my average sleep in hours, to one decimal over all the data I have?
   expect:
     numbers:
-      avg_sleep_h_all: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep'
+      avg_sleep_h_all: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1
     tools_any:
     - run_sql
     - query_metric
@@ -436,7 +436,7 @@ cases:
   question: What was my highest sleep in hours, to one decimal over the last 7 days?
   expect:
     numbers:
-      max_sleep_h_7: SELECT MAX(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      max_sleep_h_7: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
@@ -447,7 +447,7 @@ cases:
   question: What was my highest sleep in hours, to one decimal over the last 14 days?
   expect:
     numbers:
-      max_sleep_h_14: SELECT MAX(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      max_sleep_h_14: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
@@ -458,7 +458,7 @@ cases:
   question: What was my highest sleep in hours, to one decimal over the last 30 days?
   expect:
     numbers:
-      max_sleep_h_30: SELECT MAX(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      max_sleep_h_30: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
@@ -469,7 +469,7 @@ cases:
   question: What was my highest sleep in hours, to one decimal over all the data I have?
   expect:
     numbers:
-      max_sleep_h_all: SELECT MAX(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep'
+      max_sleep_h_all: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1
     tools_any:
     - run_sql
     - query_metric
@@ -479,7 +479,7 @@ cases:
   question: What was my lowest sleep in hours, to one decimal over the last 7 days?
   expect:
     numbers:
-      min_sleep_h_7: SELECT MIN(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      min_sleep_h_7: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
@@ -490,7 +490,7 @@ cases:
   question: What was my lowest sleep in hours, to one decimal over the last 14 days?
   expect:
     numbers:
-      min_sleep_h_14: SELECT MIN(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      min_sleep_h_14: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
@@ -501,7 +501,7 @@ cases:
   question: What was my lowest sleep in hours, to one decimal over the last 30 days?
   expect:
     numbers:
-      min_sleep_h_30: SELECT MIN(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      min_sleep_h_30: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
@@ -512,7 +512,7 @@ cases:
   question: What was my lowest sleep in hours, to one decimal over all the data I have?
   expect:
     numbers:
-      min_sleep_h_all: SELECT MIN(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep'
+      min_sleep_h_all: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1
     tools_any:
     - run_sql
     - query_metric
@@ -522,7 +522,7 @@ cases:
   question: What was my average sleep in minutes over the last 7 days?
   expect:
     numbers:
-      avg_sleep_m_7: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      avg_sleep_m_7: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
@@ -533,7 +533,7 @@ cases:
   question: What was my average sleep in minutes over the last 14 days?
   expect:
     numbers:
-      avg_sleep_m_14: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      avg_sleep_m_14: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
@@ -544,7 +544,7 @@ cases:
   question: What was my average sleep in minutes over the last 30 days?
   expect:
     numbers:
-      avg_sleep_m_30: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      avg_sleep_m_30: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
@@ -555,7 +555,7 @@ cases:
   question: What was my average sleep in minutes over all the data I have?
   expect:
     numbers:
-      avg_sleep_m_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'sleep'
+      avg_sleep_m_all: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1
     tools_any:
     - run_sql
     - query_metric
@@ -565,7 +565,7 @@ cases:
   question: What was my highest sleep in minutes over the last 7 days?
   expect:
     numbers:
-      max_sleep_m_7: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      max_sleep_m_7: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
@@ -576,7 +576,7 @@ cases:
   question: What was my highest sleep in minutes over the last 14 days?
   expect:
     numbers:
-      max_sleep_m_14: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      max_sleep_m_14: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
@@ -587,7 +587,7 @@ cases:
   question: What was my highest sleep in minutes over the last 30 days?
   expect:
     numbers:
-      max_sleep_m_30: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      max_sleep_m_30: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
@@ -598,7 +598,7 @@ cases:
   question: What was my highest sleep in minutes over all the data I have?
   expect:
     numbers:
-      max_sleep_m_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'sleep'
+      max_sleep_m_all: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1
     tools_any:
     - run_sql
     - query_metric
@@ -608,7 +608,7 @@ cases:
   question: What was my lowest sleep in minutes over the last 7 days?
   expect:
     numbers:
-      min_sleep_m_7: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      min_sleep_m_7: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
@@ -619,7 +619,7 @@ cases:
   question: What was my lowest sleep in minutes over the last 14 days?
   expect:
     numbers:
-      min_sleep_m_14: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      min_sleep_m_14: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
@@ -630,7 +630,7 @@ cases:
   question: What was my lowest sleep in minutes over the last 30 days?
   expect:
     numbers:
-      min_sleep_m_30: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      min_sleep_m_30: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
@@ -641,7 +641,7 @@ cases:
   question: What was my lowest sleep in minutes over all the data I have?
   expect:
     numbers:
-      min_sleep_m_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'sleep'
+      min_sleep_m_all: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1
     tools_any:
     - run_sql
     - query_metric

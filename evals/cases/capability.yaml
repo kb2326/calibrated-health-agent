@@ -100,9 +100,9 @@ cases:
     days before that?
   expect:
     numbers:
-      recent: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      recent: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-7 day')
-      before: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      before: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-14 day') AND date <= date((SELECT MAX(date) FROM daily_metrics),
         '-7 day')
 - id: cap-011
@@ -111,9 +111,9 @@ cases:
     days before that?
   expect:
     numbers:
-      recent: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      recent: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-14 day')
-      before: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      before: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-28 day') AND date <= date((SELECT MAX(date) FROM daily_metrics),
         '-14 day')
 - id: cap-012
@@ -122,9 +122,9 @@ cases:
     days before that?
   expect:
     numbers:
-      recent: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      recent: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-30 day')
-      before: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      before: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-60 day') AND date <= date((SELECT MAX(date) FROM daily_metrics),
         '-30 day')
 - id: cap-013
@@ -153,7 +153,7 @@ cases:
   question: longest sleep in minutes, last 30 days
   expect:
     numbers:
-      max_sleep_m: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      max_sleep_m: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-30 day')
 - id: cap-017
   category: numbers_persona
@@ -167,7 +167,7 @@ cases:
   question: how many hours have i been sleeping on average, last 2 weeks?
   expect:
     numbers:
-      avg_sleep_h: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      avg_sleep_h: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
 - id: cap-019
   category: numbers_persona
@@ -194,7 +194,7 @@ cases:
   question: Average sleep in minutes across everything you have?
   expect:
     numbers:
-      avg_sleep_m: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'sleep'
+      avg_sleep_m: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1
 - id: cap-023
   category: numbers_persona
   question: lowest resting HR in the last fortnight (14 days)?
@@ -221,7 +221,7 @@ cases:
   question: shortest night in hours last 7 days, one decimal
   expect:
     numbers:
-      min_sleep_h: SELECT MIN(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date
+      min_sleep_h: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
 - id: cap-027
   category: numbers_persona
@@ -403,7 +403,7 @@ cases:
   - And over the last 30?
   expect:
     numbers:
-      avg30: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep' AND date > date((SELECT
+      avg30: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
         MAX(date) FROM daily_metrics), '-30 day')
 - id: cap-051
   category: gap
