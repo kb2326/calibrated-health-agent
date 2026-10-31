@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+import yaml
 
-from . import ablation, adk_eval, cases, questions, report, review
+from . import ablation, adk_eval, cases, questions, report, review, runner
 
 app = typer.Typer(add_completion=False, help="Evals for the Calibrated Health Agent.")
 
@@ -139,3 +140,30 @@ def adk_cmd(suite: Annotated[str, typer.Option("--suite")] = "regression",
         r = result[name]
         mean = f"{r['mean']:.2f}" if r["mean"] is not None else "n/a"
         typer.echo(f"{name}: {mean} over {r['n']} cases")
+
+
+def _model_factory():
+    """None: each run uses the configured model (Vertex on the laptop). Tests swap in fakes."""
+    return None
+
+
+@app.command("transcripts")
+def transcripts_cmd(batch: Path,
+                    topology: Annotated[str, typer.Option("--topology")] = "single",
+                    real: Annotated[bool, typer.Option("--real")] = False,
+                    pace: Annotated[float, typer.Option("--pace")] = 0,
+                    out: Annotated[Path, typer.Option("--out")] = Path("data/evals/transcripts.jsonl"),
+                    workdir: Annotated[Path | None, typer.Option("--workdir")] = None) -> None:
+    """Run a question batch through the agent (synthetic fixture, or --real) for labelling."""
+    items = yaml.safe_load(batch.read_text(encoding="utf-8"))["questions"]
+    factory = _model_factory()
+    if pace:
+        rows = []
+        for item in items:  # one by one so the pacing applies between questions
+            rows += runner.run([item], topology=topology, model_factory=factory, real=real,
+                               out=out, workdir=workdir)
+    else:
+        rows = runner.run(items, topology=topology, model_factory=factory, real=real, out=out,
+                          workdir=workdir)
+    bad = [r for r in rows if r.status != "ok"]
+    typer.echo(f"{len(rows)} transcripts -> {out} ({len(bad)} not evaluated)")
