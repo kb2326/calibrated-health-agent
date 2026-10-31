@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Saira, Saira_Condensed } from "next/font/google";
+import { RegisterSW } from "@/components/RegisterSW";
 import "./globals.css";
 
 // Self-hosted at build time: no request to Google at runtime, so the CSP stays 'self'.
@@ -22,7 +23,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sairaCondensed.variable} ${saira.variable} ${jetbrains.variable}`}>
-      <body>{children}</body>
+      <head>
+        {/* use-credentials: behind IAP the manifest request must carry the sign-in cookie */}
+        <link rel="manifest" href="/manifest.webmanifest" crossOrigin="use-credentials" />
+        <link rel="icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+      </head>
+      <body>
+        {children}
+        <RegisterSW />
+      </body>
     </html>
   );
 }

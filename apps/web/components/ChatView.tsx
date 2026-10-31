@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 import type { RunState } from "@/lib/types";
 import { AgentTimeline } from "./AgentTimeline";
@@ -44,10 +45,15 @@ export function ChatView({ state, demo, onAsk, onOpenReceipt, locationOn, onTogg
           <h1 className="font-display text-[22px] font-extrabold uppercase italic tracking-[.01em]">Calibrated</h1>
           {demo ? <DemoBadge /> : null}
         </div>
-        <button type="button" onClick={onToggleLocation} aria-pressed={locationOn}
-          className="rounded-tele border border-line px-2.5 py-1.5 text-[12.5px] text-muted hover:text-fg">
-          {locationOn ? "Weather: your location" : "Use my location for weather"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/scoreboard/" className="rounded-tele border border-line px-2.5 py-1.5 text-[12.5px] text-muted hover:text-fg">
+            Scoreboard
+          </Link>
+          <button type="button" onClick={onToggleLocation} aria-pressed={locationOn}
+            className="rounded-tele border border-line px-2.5 py-1.5 text-[12.5px] text-muted hover:text-fg">
+            {locationOn ? "Weather: your location" : "Use my location for weather"}
+          </button>
+        </div>
       </header>
       {locationNote ? <p className="text-[12.5px] text-muted">{locationNote}</p> : null}
       <p className="text-[12.5px] text-muted">{DISCLOSURE}</p>
