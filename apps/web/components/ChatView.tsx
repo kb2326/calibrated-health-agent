@@ -78,7 +78,7 @@ export function ChatView({ state, demo, onAsk, onOpenReceipt, locationOn, onTogg
             ) : (
               <>
                 <Answer message={m} onOpenReceipt={onOpenReceipt} />
-                {m.receipts[0] && !m.incomplete ? <MetricCard id={m.receipts[0]} onOpenReceipt={onOpenReceipt} /> : null}
+                {m.receipts.length > 0 && !m.incomplete ? <MetricCard ids={m.receipts} onOpenReceipt={onOpenReceipt} /> : null}
               </>
             )}
             {i === lastUser ? <AgentTimeline steps={state.steps} /> : null}

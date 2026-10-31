@@ -54,14 +54,23 @@ export function SeriesChart({ series }: { series: Series }) {
   );
 }
 
-export function MetricCard({ id, onOpenReceipt }: { id: string; onOpenReceipt: (id: string) => void }) {
-  const [series, setSeries] = useState<Series | null>(null);
+/** Charts the first of the answer's receipts whose output is a date series (in cited order). */
+export function MetricCard({ ids, onOpenReceipt }: { ids: string[]; onOpenReceipt: (id: string) => void }) {
+  const [found, setFound] = useState<{ key: string; id: string; series: Series } | null>(null);
+  const key = ids.slice(0, 4).join(",");
   useEffect(() => {
     let live = true;
-    fetchReceipt(id).then((r) => { if (live && r.ok) setSeries(asSeries(r.receipt.output)); });
+    (async () => {
+      for (const id of key.split(",").filter(Boolean)) {
+        const r = await fetchReceipt(id);
+        const series = r.ok ? asSeries(r.receipt.output) : null;
+        if (series) { if (live) setFound({ key, id, series }); return; }
+      }
+    })();
     return () => { live = false; };
-  }, [id]);
-  if (!series) return null;
+  }, [key]);
+  if (!found || found.key !== key) return null; // never draw a chart for an older answer
+  const { id, series } = found;
   const values = series.points.map((p) => p.value);
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   return (

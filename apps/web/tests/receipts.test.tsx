@@ -65,7 +65,7 @@ describe("metric card", () => {
   it("recognises a date series and skips anything else", () => {
     expect(asSeries(RECEIPT.output)?.key).toBe("minutes_asleep");
     expect(asSeries([{ m: 61.2, n: 7 }])).toBeNull();
-    expect(asSeries([{ date: "2026-10-01", a: 1, b: 2 }, { date: "2026-10-02", a: 1, b: 2 }])).toBeNull();
+    expect(asSeries([{ date: "2026-10-01", a: "x" }, { date: "2026-10-02", a: "y" }])).toBeNull(); // no numeric column
     expect(asSeries("text")).toBeNull();
   });
 
@@ -79,12 +79,12 @@ describe("metric card", () => {
     expect(bars[0]!.getAttribute("fill")).toBe("var(--c-best)");
   });
 
-  it("renders from the receipt route and skips non-series receipts", async () => {
+  it("charts the first cited receipt that is a series, skipping the rest", async () => {
     mockFetch({ "GET /api/receipts/r-4f2a9c1e07": { body: RECEIPT },
                 "GET /api/receipts/r-1111111111": { body: { ...RECEIPT, id: "r-1111111111", output: [{ m: 1 }] } } });
-    const { rerender } = render(<MetricCard id="r-4f2a9c1e07" onOpenReceipt={() => {}} />);
+    const { rerender } = render(<MetricCard ids={["r-1111111111", "r-4f2a9c1e07"]} onOpenReceipt={() => {}} />);
     expect(await screen.findByTestId("metric-card")).toHaveTextContent("424.7");
-    rerender(<MetricCard id="r-1111111111" onOpenReceipt={() => {}} />);
+    rerender(<MetricCard ids={["r-1111111111"]} onOpenReceipt={() => {}} />);
     await waitFor(() => expect(screen.queryByTestId("metric-card")).toBeNull());
   });
 });
@@ -128,5 +128,16 @@ describe("panel visibility", () => {
     const panel = screen.getByRole("complementary", { name: "Receipt" });
     expect(panel.className).not.toMatch(/(^|\s)hidden(\s|$)/);
     expect(screen.getByRole("group", { name: "Save a memory?" })).toBeInTheDocument();
+  });
+});
+
+describe("series with several numeric columns", () => {
+  it("charts the most meaningful column (minutes asleep over deep, light, efficiency)", () => {
+    const rows = [
+      { date: "2026-10-24", deep_min: 80, efficiency: 0.87, light_min: 279, minutes_asleep: 440, rem_min: 81 },
+      { date: "2026-10-25", deep_min: 70, efficiency: 0.91, light_min: 250, minutes_asleep: 410, rem_min: 90 },
+    ];
+    expect(asSeries(rows)?.key).toBe("minutes_asleep");
+    expect(asSeries([{ date: "2026-10-24", a: 1, b: 2 }, { date: "2026-10-25", a: 3, b: 4 }])?.key).toBe("a");
   });
 });
