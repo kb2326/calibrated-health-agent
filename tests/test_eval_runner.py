@@ -43,7 +43,7 @@ def test_transcript_has_tool_calls_and_receipts(tmp_path):
 def test_no_code_variant_has_no_run_python(tmp_path):
     names = runner.variant_tools("no_code")
     assert names is not None and all(getattr(t, "name", getattr(t, "__name__", "")) != "run_python" for t in names)
-    assert len(names) == 14
+    assert len(names) == 17
     assert runner.variant_tools("no_tools") == [] and runner.variant_tools("full") is None
 
 

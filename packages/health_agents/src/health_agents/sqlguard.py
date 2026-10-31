@@ -28,6 +28,9 @@ TIME_LIMIT_S = 2.0
 ALLOWED_TABLES = frozenset({
     "daily_metrics", "raw_points", "journal_submissions", "anomalies", "correlations",
     "sync_state", "devices", "sqlite_master", "sqlite_schema", "sqlite_temp_master",
+    # schema v5 (Phase 4.5): derived detail and weather; not blinded
+    "sleep_sessions", "exercise_sessions", "night_vitals", "activity_breakdown",
+    "hr_zone_thresholds", "weather_daily",
 })
 BLINDED = frozenset({
     "forecasts", "snapshots", "scores", "ledger", "lock_notes", "receipts", "hypotheses",

@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from . import api_tools, instructions, memory, tools, tracing
 from .verify import numbers_without_receipts
 
-Topology = Literal["single", "multi"]
+Topology = Literal["single", "team", "multi"]
 SPECIALISTS = ("data_scientist", "domain_expert", "health_coach")
 TURN_OUTPUTS = "turn_outputs"
 MAX_QUESTION = 2000
@@ -53,6 +53,7 @@ def _note_output(tool: Any, args: dict, tool_context: Any, tool_response: Any) -
 
 
 ALL_TOOLS = [
+    tools.data_catalog, tools.query_metric, tools.weather,
     tools.list_metrics, tools.describe_substrate, tools.get_metric_series, tools.compare_periods,
     tools.get_anomalies, tools.get_correlations, tools.get_journal, tools.run_sql,
     tools.run_python, tools.get_scoreboard, api_tools.sources_for_metric, api_tools.list_devices,
