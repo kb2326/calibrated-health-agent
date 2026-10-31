@@ -55,3 +55,19 @@ def test_ablation_reports_mdd(result):
     for name in ("full_vs_no_code", "full_vs_no_tools", "single_vs_multi"):
         assert res["comparisons"][name]["mdd"] == pytest.approx(stats.min_detectable_diff(3))
     assert json.loads((out / "ablation.json").read_text(encoding="utf-8")) == res
+
+
+def test_arms_are_compared_on_numbers_only(monkeypatch):
+    # final review I8: the no-tools arm must not fail by construction on tools_any
+    from health_eval import graders
+    from health_eval.runner import Transcript
+
+    def fake_grade(t, case, conn, rerun=None):
+        return [graders.Verdict("numbers", True, ""), graders.Verdict("tools_any", False, ""),
+                graders.Verdict("no_unverified", False, "")]
+
+    monkeypatch.setattr(graders, "grade", fake_grade)
+    case = Case("a", "ablation", "numbers", "q",
+                Expect(numbers={"n": COUNT}, tools_any=["run_sql"]))
+    out = ablation._outcomes([Transcript(case_id="a", question="q")], {"a": case}, None)
+    assert out == {"a": True}

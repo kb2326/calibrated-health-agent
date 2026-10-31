@@ -28,11 +28,17 @@ COMPARISONS = {"full_vs_no_code": ("full", "no_code"), "full_vs_no_tools": ("ful
                "single_vs_multi": ("full", "multi")}
 
 
+# Arms are compared on answer accuracy only: tool-use and unverified checks would fail the
+# no-tools arm by construction and make every comparison with it meaningless.
+ARM_CHECKS = ("numbers", "status")
+
+
 def _outcomes(transcripts: list[runner.Transcript], cases: dict[str, Case],
               conn: Any) -> dict[str, bool | None]:
     per_case: dict[str, list[bool | None]] = defaultdict(list)
     for t in transcripts:
-        per_case[t.case_id].append(graders.case_passed(graders.grade(t, cases[t.case_id], conn)))
+        verdicts = [v for v in graders.grade(t, cases[t.case_id], conn) if v.check in ARM_CHECKS]
+        per_case[t.case_id].append(graders.case_passed(verdicts))
     return {cid: None if None in results else all(results) for cid, results in per_case.items()}
 
 
