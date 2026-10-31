@@ -21,6 +21,8 @@ from health_agents import memory
 from health_agents.cli import APP_NAME
 from health_agents.workflow import build_workflow
 
+from .stream import StreamFilter
+
 PLACE_MAX = 60
 
 
@@ -53,8 +55,11 @@ class HealthAgent(ADKAgent):
 
     async def run(self, input: RunAgentInput, *args: Any, **kwargs: Any) -> AsyncGenerator:  # type: ignore[override]
         clean = input.model_copy(update={"state": sanitise_state(input.state)})
+        keep = StreamFilter()  # raw tool rows never reach the browser
         async for event in super().run(clean, *args, **kwargs):
-            yield event
+            out = keep(event)
+            if out is not None:
+                yield out
 
 
 def build_agent(*, topology: str | None = None, model: BaseLlm | str | None = None,
