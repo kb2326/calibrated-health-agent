@@ -108,7 +108,8 @@ def summarise(transcripts: list[runner.Transcript], cases: Sequence[Case], verdi
                          "not_evaluated": len(first) - len(graded),
                          "trials": max((len(trials[c.id]) for c in members), default=0),
                          "pass_hat_k": stats.pass_hat_k(repeated) if repeated else None,  # type: ignore[arg-type]
-                         "categories": cats}
+                         "categories": cats,
+                         "cases": {c.id: r for c, r in first}}
 
     def outcomes(cid: str) -> list[bool | None]:
         return list(trials[cid].values())
@@ -129,6 +130,18 @@ def summarise(transcripts: list[runner.Transcript], cases: Sequence[Case], verdi
     }
 
 
+def _shared_rates(base: dict, cur: dict) -> tuple[float | None, float | None]:
+    """Rates over the cases both runs evaluated (a PR runs the must-pass subset only)."""
+    b, c = base.get("cases"), cur.get("cases")
+    if not b or not c:
+        return base.get("rate"), cur.get("rate")
+    shared = [cid for cid in c if c[cid] is not None and b.get(cid) is not None]
+    if not shared:
+        return None, None
+    return (sum(bool(b[cid]) for cid in shared) / len(shared),
+            sum(bool(c[cid]) for cid in shared) / len(shared))
+
+
 def gate(current: dict, baseline: dict | None) -> tuple[bool, list[str]]:
     messages = []
     for cid in current.get("must_pass_failed", []):
@@ -142,12 +155,15 @@ def gate(current: dict, baseline: dict | None) -> tuple[bool, list[str]]:
         noise = baseline.get("noise_sd") or {}
         for suite, cur in current.get("suites", {}).items():
             base = baseline.get("suites", {}).get(suite)
-            if not base or base.get("rate") is None or cur.get("rate") is None:
+            if not base:
+                continue
+            base_rate, cur_rate = _shared_rates(base, cur)
+            if base_rate is None or cur_rate is None:
                 continue
             band = max(MIN_BAND, 2 * float(noise.get(suite, 0)))
-            drop = base["rate"] - cur["rate"]
+            drop = base_rate - cur_rate
             if drop > band + 1e-9:
-                messages.append(f"FAIL {suite} regression: {base['rate']:.2f} -> {cur['rate']:.2f}"
+                messages.append(f"FAIL {suite} regression: {base_rate:.2f} -> {cur_rate:.2f}"
                                 f" (drop {drop:.2f} > band {band:.2f})")
     for cid in current.get("flaky", []):
         messages.append(f"note: {cid} is flaky (failed, then passed on retry)")

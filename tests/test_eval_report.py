@@ -143,3 +143,15 @@ def test_pass_hat_k_needs_every_case_repeated():
     summary = _summary({("m1", 0): False, ("m1", 1): True, ("m2", 0): True}, cases)
     assert summary["suites"]["regression"]["pass_hat_k"] is None
     assert "–" in report.readme_block(summary)
+
+
+def test_gate_compares_the_same_cases():
+    # final review I2: PR runs only must-pass cases; the baseline ran all of them
+    must = [_case(f"m{i}", must_pass=True) for i in range(10)]
+    hard = [_case(f"h{i}") for i in range(10)]
+    base = _summary({**{(c.id, 0): True for c in must}, **{(c.id, 0): False for c in hard}},
+                    must + hard)                                   # 10/20 = 0.50 overall
+    current = _summary({(c.id, 0): c.id != "m0" for c in must}, must)  # 9/10 on the shared cases
+    assert current["suites"]["regression"]["cases"]["m0"] is False
+    ok, messages = report.gate(current, base)
+    assert not ok and any("regression" in m and "1.00" in m and "0.90" in m for m in messages)
