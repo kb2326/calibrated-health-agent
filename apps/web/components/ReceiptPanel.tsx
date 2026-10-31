@@ -76,8 +76,8 @@ export function ReceiptPanel({ id, onClose, pending, onApprove, onDeny }: {
   const open = Boolean(id) || Boolean(pending); // on phones the sheet also opens for an approval
   return (
     <aside aria-label="Receipt"
-      className={`flex min-w-0 flex-col gap-3 border-line bg-panel p-5 md:static md:border-l ${
-        open ? "fixed inset-x-0 bottom-0 z-20 max-h-[80dvh] overflow-y-auto border-t pb-[max(20px,env(safe-area-inset-bottom))]" : "hidden md:flex"}`}>
+      className={`flex min-w-0 flex-col gap-3 border-line bg-panel p-5 md:sticky md:top-0 md:max-h-dvh md:self-start md:overflow-y-auto md:border-l ${
+        open ? "fixed inset-x-0 bottom-0 z-20 max-h-[80dvh] overflow-y-auto border-t md:min-h-dvh pb-[max(20px,env(safe-area-inset-bottom))]" : "hidden md:flex"}`}>
       {pending ? <ApproveCard pending={pending} onApprove={onApprove} onDeny={onDeny} /> : null}
       {id ? (
         <>

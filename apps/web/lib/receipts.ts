@@ -38,6 +38,7 @@ export async function rerunReceipt(id: string): Promise<{ status: RerunStatus; d
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const PREFERRED = /asleep|resting|steps|value|avg|mean|total|hrv|duration|minutes$/i;
 
 export interface Series {
   key: string;
@@ -53,8 +54,9 @@ export function asSeries(output: unknown): Series | null {
   const dateKey = keys.find((k) => typeof (first as Record<string, unknown>)[k] === "string" &&
                                    DAY.test(String((first as Record<string, unknown>)[k])));
   const numKeys = keys.filter((k) => k !== dateKey && typeof (first as Record<string, unknown>)[k] === "number");
-  if (!dateKey || numKeys.length !== 1) return null;
-  const key = numKeys[0] as string;
+  if (!dateKey || numKeys.length === 0) return null;
+  // Several numeric columns: chart the headline measure, else the first column.
+  const key = numKeys.find((k) => PREFERRED.test(k)) ?? (numKeys[0] as string);
   const points: Series["points"] = [];
   for (const row of output as Record<string, unknown>[]) {
     const date = row[dateKey], value = row[key];

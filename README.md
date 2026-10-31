@@ -24,6 +24,19 @@ local weather. Not a medical device, and not a replacement for any health produc
 
 ## What it does
 
+<p align="center">
+  <a href="docs/images/brag.mp4"><img src="docs/images/web-desktop-dark.png" alt="The web app: the agent's steps, an answer whose every number has a receipt chip, a sleep chart drawn from the receipt, and a receipt that re-ran to Matches" width="100%"/></a>
+  <br/><sub>The real agent on synthetic demo data. <a href="docs/images/brag.mp4">Watch the 21-second video</a>.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/web-phone-dark.png" alt="The same answer on a phone" width="30%"/>
+  &nbsp;
+  <img src="docs/images/web-phone-dark-receipt.png" alt="A receipt on a phone: the SQL, its output and Re-run" width="30%"/>
+  &nbsp;
+  <img src="docs/images/web-desktop-light.png" alt="The light theme" width="36%"/>
+</p>
+
 Ask a question in plain language. The agent works out the answer the way a data analyst
 would:
 
@@ -322,8 +335,8 @@ is capped in code, and CI evals run on a free tier. A $1 budget alerts at $0.25 
 | 4 | Evals, red team, CI gate, tracing | Live |
 | 4.5 | Capable agent: modern architecture, full data layer, weather | Live |
 | 5 | Web front end: Next.js + AG-UI, streaming answers with tappable receipts, live location, phone-installable, Cloud Run behind IAP | Built |
-| 6 | GCP expansion (agent API behind IAP, Workflows, keyless CI) | Planned |
-| 7 | Publish: write-ups and demo | Planned |
+| 6 | GCP expansion (agent API behind IAP, Workflows, keyless CI) | Not needed: the API behind IAP shipped in Phase 5, and CI holds no cloud credentials |
+| 7 | Publish: open source, screenshots, demo video, write-ups | In progress |
 
 ## Limitations
 
