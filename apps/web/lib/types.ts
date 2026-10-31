@@ -39,6 +39,8 @@ export interface RunState {
   status: RunStatus;
   error?: UiError;
   pending?: PendingApproval;
+  /** The grounding check's revision count for this turn (from STATE_DELTA). */
+  verifyAttempts?: number;
 }
 
 /** The filtered TOOL_CALL_RESULT content the server sends. */

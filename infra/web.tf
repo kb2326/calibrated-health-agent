@@ -21,7 +21,7 @@ resource "google_storage_bucket_iam_member" "web_read" {
 # ...and write only agent.db (the shared chat state). health.db stays the job's alone.
 resource "google_storage_bucket_iam_member" "web_agent_db" {
   bucket = google_storage_bucket.health_db.name
-  role   = "roles/storage.objectAdmin"
+  role   = "roles/storage.objectUser"
   member = "serviceAccount:${google_service_account.web.email}"
   condition {
     title      = "agent-db-only"

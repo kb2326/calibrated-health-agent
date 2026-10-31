@@ -126,3 +126,68 @@ def test_cli_turn_pulls_and_pushes_when_bucket_set(tmp_path, monkeypatch):
     result = session.ask("Hi")
     assert result.saved == "pushed"
     assert "agent.db" in client.b.objects  # first push creates the shared copy
+
+
+def _bucket_rows(client, tmp_path, table="chat_usage") -> int:
+    f = tmp_path / "bucket-copy.db"
+    f.write_bytes(client.b.objects["agent.db"][0])
+    return _rows(f, table)
+
+
+def _other_writer_pushes(client, tmp_path, n=1):
+    other = tmp_path / "other.db"
+    other.write_bytes(client.b.objects["agent.db"][0])
+    conn = sqlite3.connect(other)
+    for _ in range(n):
+        conn.execute("INSERT INTO chat_usage (month, input_tokens, output_tokens, usd, created_at)"
+                     " VALUES ('2026-10', 1, 1, 0.001, 'phone')")
+    conn.commit()
+    conn.close()
+    _, gen = client.b.objects["agent.db"]
+    client.b.objects["agent.db"] = (other.read_bytes(), gen + 1)
+
+
+def _bucket_settings(monkeypatch, tmp_path):
+    from health_core.settings import Settings
+
+    s = Settings.model_validate({"data_dir": tmp_path, "db_bucket": "b"})
+    monkeypatch.setattr(agent_db, "get_settings", lambda: s)
+    monkeypatch.setattr(agent_db_sync, "get_settings", lambda: s)
+
+
+def test_offline_turn_rows_survive_the_next_pull(tmp_path, monkeypatch):
+    """Review I4: a turn that couldn't push must not be erased when the next turn pulls."""
+    client = FakeClient()
+    _bucket_settings(monkeypatch, tmp_path)
+    path = _local()
+    agent_db_sync.seed("b", "agent.db", path, client=client)
+    real_push = agent_db_sync.push_agent_db
+
+    def offline(*a, **k):
+        raise OSError("network down")
+
+    monkeypatch.setattr(agent_db_sync, "push_agent_db", offline)
+    with agent_db_sync.shared_turn(client=client) as info:
+        costs.record_chat(10, 10)  # the offline turn's row
+    assert info["result"] == "offline"
+    monkeypatch.setattr(agent_db_sync, "push_agent_db", real_push)
+    _other_writer_pushes(client, tmp_path)  # the phone pushed meanwhile
+    with agent_db_sync.shared_turn(client=client) as info:
+        costs.record_chat(20, 20)  # the next turn
+    assert info["result"] == "pushed"
+    assert _bucket_rows(client, tmp_path) == 3  # phone + offline turn + this turn
+    assert _rows(path) == 3
+
+
+def test_turn_after_a_clean_push_does_not_duplicate_rows(tmp_path, monkeypatch):
+    client = FakeClient()
+    _bucket_settings(monkeypatch, tmp_path)
+    path = _local()
+    agent_db_sync.seed("b", "agent.db", path, client=client)
+    for _ in range(2):
+        with agent_db_sync.shared_turn(client=client):
+            costs.record_chat(10, 10)
+    _other_writer_pushes(client, tmp_path)
+    with agent_db_sync.shared_turn(client=client):
+        costs.record_chat(10, 10)
+    assert _bucket_rows(client, tmp_path) == 4  # 3 turns + phone, nothing doubled

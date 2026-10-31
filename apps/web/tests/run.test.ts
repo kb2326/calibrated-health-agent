@@ -91,3 +91,24 @@ describe("run reducer", () => {
     expect(next.steps).toEqual([]);
   });
 });
+
+describe("revision after the number check", () => {
+  it("drops the unverified draft when the check sends it back, keeps the revised answer", () => {
+    const s = play([
+      { type: "STATE_DELTA", delta: [{ op: "add", path: "/verify_attempts", value: 0 }] },
+      ...answer("d1", "Your average was 77.3 bpm."),
+      { type: "STATE_DELTA", delta: [{ op: "replace", path: "/verify_attempts", value: 1 }] },
+      ...answer("a2", "Your average was 61 bpm [r-0123456789]."),
+      { type: "RUN_FINISHED" },
+    ]);
+    const answers = s.messages.filter((m) => m.role === "assistant");
+    expect(answers.map((m) => m.text)).toEqual(["Your average was 61 bpm [r-0123456789]."]);
+    expect(s.steps.at(-1)?.label).toMatch(/Rechecking/);
+  });
+
+  it("a new turn's reset to zero does not drop anything", () => {
+    const first = play([...answer("a1", "Fine."), { type: "RUN_FINISHED" }]);
+    const s = reduce(first, { type: "STATE_DELTA", delta: [{ op: "add", path: "/verify_attempts", value: 0 }] });
+    expect(s.messages.filter((m) => m.role === "assistant")).toHaveLength(1);
+  });
+});

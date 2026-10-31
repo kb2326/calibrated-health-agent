@@ -83,3 +83,11 @@ def test_external_scripts_are_not_hashed_as_inline(tmp_path):
     empty = base64.b64encode(hashlib.sha256(b"").digest()).decode()
     assert f"'sha256-{empty}'" not in csp  # the src tag's empty body is not an inline script
     assert csp.count("'sha256-") == 1
+
+
+def test_ag_ui_adk_state_route_is_not_exposed(tmp_path):
+    """Review I1: ag_ui_adk also mounts POST /agents/state, which returns the raw session."""
+    client = local_client(create_app("local", model=FakeLlm([text("x")]), static_dir=_static(tmp_path)))
+    assert client.post("/agents/state", json={"threadId": "t"}).status_code in (404, 405)
+    paths = {getattr(r, "path", "") for r in client.app.router.routes}  # type: ignore[attr-defined]
+    assert paths & {"/agents/state"} == set()

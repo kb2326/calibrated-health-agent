@@ -8,10 +8,17 @@ reported as "not_saved", never retried in a loop.
 Only inserts happen during a turn (receipts, chat usage, facts, episodes), so "this turn's
 rows" are the rows with a rowid above the snapshot taken before the turn.
 
-The generation record lives in its own folder so it never touches health.db's records.
+A watermark ("pushed", the rowids of the last copy that reached the bucket) marks which
+local rows are not in the bucket yet. Before a pull replaces the local file, those rows are
+read and appended onto the fresh copy, so a turn that was "offline" or "not_saved" is pushed
+by the next one instead of being erased.
+
+The generation record and the watermark live in their own folder, apart from health.db's.
 """
 from __future__ import annotations
 
+import json
+import shutil
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -32,6 +39,23 @@ def gen_path(db_path: Path | None = None) -> Path:
     return base / "generation"
 
 
+def _mark_path(db_path: Path) -> Path:
+    return gen_path(db_path).with_name("pushed.json")
+
+
+def _load_mark(db_path: Path) -> dict[str, int] | None:
+    try:
+        return {k: int(v) for k, v in json.loads(_mark_path(db_path).read_text()).items()}
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _save_mark(db_path: Path, rowids: dict[str, int]) -> None:
+    path = _mark_path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rowids))
+
+
 def snapshot_rowids(path: Path) -> dict[str, int]:
     conn = sqlite3.connect(path)
     try:
@@ -42,12 +66,23 @@ def snapshot_rowids(path: Path) -> dict[str, int]:
 
 
 def pull_agent_db(bucket: str, obj: str, dest: Path, *, client: Any | None = None) -> int | None:
-    """Download only when the bucket copy moved since our last pull or push."""
+    """Download only when the bucket copy moved since our last pull or push.
+
+    Local rows above the watermark (not yet in the bucket) are carried onto the fresh copy,
+    and the watermark moves to the fresh copy's rowids, so they stay "to push"."""
     gp = gen_path(dest)
     remote = store.remote_generation(bucket, obj, client=client)
-    if remote is not None and remote == store.recorded_generation(gp) and dest.exists():
+    if remote is None or (remote == store.recorded_generation(gp) and dest.exists()):
         return remote
-    return store.pull_db(bucket, obj, dest, client=client, gen_path=gp)
+    mark = _load_mark(dest)
+    keep = _turn_rows(dest, mark) if dest.exists() and mark is not None else None
+    if dest.exists() and mark is None and any(snapshot_rowids(dest).values()):
+        shutil.copyfile(dest, dest.with_name(dest.name + ".before-first-pull"))  # never lose history
+    generation = store.pull_db(bucket, obj, dest, client=client, gen_path=gp)
+    _save_mark(dest, snapshot_rowids(dest))
+    if keep:
+        _append(dest, keep)
+    return generation
 
 
 def _turn_rows(path: Path, since: dict[str, int]) -> dict[str, tuple[list[str], list[tuple]]]:
@@ -90,17 +125,21 @@ def push_agent_db(bucket: str, obj: str, src: Path, *, since: dict[str, int],
                   client: Any | None = None) -> PushResult:
     try:
         _push(bucket, obj, src, client)
+        _save_mark(src, snapshot_rowids(src))
         return "pushed"
     except store.ConcurrentUpdateError:
         pass
-    rows = _turn_rows(src, since)  # held in memory across the re-pull
+    # Another writer pushed first: the re-pull below carries every unpushed row (this turn's
+    # and any earlier unsaved ones) onto the fresh copy via the watermark.
+    if _load_mark(src) is None:
+        _save_mark(src, since)
     try:
         pull_agent_db(bucket, obj, src, client=client)
-        _append(src, rows)  # the local copy keeps them even if the next push loses again
         _push(bucket, obj, src, client)
+        _save_mark(src, snapshot_rowids(src))
         return "reappended"
     except store.ConcurrentUpdateError:
-        return "not_saved"
+        return "not_saved"  # the rows stay local, above the watermark, for the next turn
 
 
 @contextmanager
@@ -146,6 +185,7 @@ def seed(bucket: str, obj: str, src: Path, *, client: Any | None = None) -> Lite
     """Upload the laptop's agent.db once; refuse if the bucket already has one."""
     try:
         store.push_db(bucket, obj, src, 0, client=client, gen_path=gen_path(src))
+        _save_mark(src, snapshot_rowids(src))
         return "seeded"
     except store.ConcurrentUpdateError:
         return "exists"

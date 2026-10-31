@@ -22,7 +22,7 @@ def test_scales_to_zero_with_one_instance_and_long_streams():
 
 def test_web_writes_only_agent_db():
     admin = TF.split('resource "google_storage_bucket_iam_member" "web_agent_db"')[1].split("resource ")[0]
-    assert "roles/storage.objectAdmin" in admin and "objects/agent.db" in admin
+    assert "roles/storage.objectUser" in admin and "objects/agent.db" in admin
     read = TF.split('resource "google_storage_bucket_iam_member" "web_read"')[1].split("resource ")[0]
     assert "roles/storage.objectViewer" in read
 

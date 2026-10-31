@@ -130,6 +130,21 @@ export function reduce(state: RunState, event: AgUiEvent): RunState {
                  m.text ? { ...finish(m), incomplete: true } : m),
                steps: state.steps.map((s) => (s.status === "running" ? { ...s, status: "error" } : s)) };
     }
+    case "STATE_DELTA": {
+      const ops = Array.isArray(event.delta) ? (event.delta as { path?: unknown; value?: unknown }[]) : [];
+      const op = ops.find((o) => o.path === "/verify_attempts" && typeof o.value === "number");
+      if (!op) return state;
+      const n = op.value as number;
+      if (n <= (state.verifyAttempts ?? 0)) return { ...state, verifyAttempts: n };
+      // The number check sent the draft back: it held a figure no tool computed. Drop it;
+      // the revised answer streams next.
+      const lastUser = state.messages.findLastIndex((m) => m.role === "user");
+      const i = state.messages.findLastIndex((m) => m.role === "assistant");
+      const messages = i > lastUser ? state.messages.filter((_, j) => j !== i) : state.messages;
+      const step: AgentStep = { id: `verify-${n}`, tool: "verify", status: "ok",
+                                label: "Rechecking a number that wasn't computed by a tool" };
+      return { ...state, messages, verifyAttempts: n, steps: [...state.steps, step] };
+    }
     case "RUN_FINISHED":
       return { ...state, status: state.pending ? "awaiting_approval" : "done" };
     default:

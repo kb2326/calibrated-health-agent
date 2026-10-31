@@ -28,6 +28,7 @@ from health_core.settings import get_settings
 from .stream import StreamFilter
 
 PLACE_MAX = 60
+_TURN_LOCK = asyncio.Lock()
 
 
 def _coord(value: Any, limit: float) -> float | None:
@@ -62,6 +63,8 @@ class ChatBudget(BasePlugin):
 
     async def after_model_callback(self, *, callback_context: Any,
                                    llm_response: LlmResponse) -> LlmResponse | None:
+        if llm_response.partial:  # streaming: chunks repeat the usage the final response carries
+            return None
         u = llm_response.usage_metadata
         if u is not None:
             costs.record_chat(u.prompt_token_count or 0,
@@ -80,23 +83,26 @@ class HealthAgent(ADKAgent):
     """ADKAgent whose runs carry only sanitised client state, inside the chat budget."""
 
     async def run(self, input: RunAgentInput, *args: Any, **kwargs: Any) -> AsyncGenerator:  # type: ignore[override]
-        refused = budget_message()
-        if refused:
-            yield RunStartedEvent(type=EventType.RUN_STARTED, thread_id=input.thread_id,
-                                  run_id=input.run_id)
-            yield RunErrorEvent(type=EventType.RUN_ERROR, message=refused, code="BUDGET")
-            return
-        clean = input.model_copy(update={"state": sanitise_state(input.state)})
-        keep = StreamFilter()  # raw tool rows never reach the browser
-        shared = agent_db_sync.shared_turn()  # same agent.db as the CLI when a bucket is set
-        await asyncio.to_thread(shared.__enter__)
-        try:
-            async for event in super().run(clean, *args, **kwargs):
-                out = keep(event)
-                if out is not None:
-                    yield out
-        finally:
-            await asyncio.to_thread(shared.__exit__, None, None, None)
+        # One turn at a time: a turn pulls, writes and pushes agent.db, and a second turn's
+        # pull must not replace the file under the first. One owner, so this costs nothing.
+        async with _TURN_LOCK:
+            shared = agent_db_sync.shared_turn()  # same agent.db as the CLI when a bucket is set
+            await asyncio.to_thread(shared.__enter__)
+            try:
+                refused = await asyncio.to_thread(budget_message)  # after the pull: current spend
+                if refused:
+                    yield RunStartedEvent(type=EventType.RUN_STARTED, thread_id=input.thread_id,
+                                          run_id=input.run_id)
+                    yield RunErrorEvent(type=EventType.RUN_ERROR, message=refused, code="BUDGET")
+                    return
+                clean = input.model_copy(update={"state": sanitise_state(input.state)})
+                keep = StreamFilter()  # raw tool rows never reach the browser
+                async for event in super().run(clean, *args, **kwargs):
+                    out = keep(event)
+                    if out is not None:
+                        yield out
+            finally:
+                await asyncio.to_thread(shared.__exit__, None, None, None)
 
 
 def build_agent(*, topology: str | None = None, model: BaseLlm | str | None = None,

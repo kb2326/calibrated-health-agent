@@ -275,12 +275,17 @@ def memory_list(ctx: typer.Context) -> None:
 
 @memory_app.command("forget")
 def memory_forget(item_id: str) -> None:
-    """Delete one fact or episode."""
-    if memory.forget(item_id):
-        typer.echo(f"{item_id} forgotten")
-    else:
+    """Delete one fact or episode (also from the shared copy when a bucket is set)."""
+    with agent_db_sync.shared_turn() as shared:  # pull first, so the delete lands on the latest copy
+        found = memory.forget(item_id)
+    if not found:
         typer.echo(f"nothing called {item_id}")
         raise typer.Exit(1)
+    typer.echo(f"{item_id} forgotten")
+    if shared["result"] in ("reappended", "not_saved", "offline"):
+        # A delete can't be replayed onto another device's copy: say so, never pretend.
+        typer.echo("note: the shared copy changed or was unreachable; run this again to make "
+                   "sure it is forgotten everywhere")
 
 
 def _persist(fn: Callable[[], object]) -> object:

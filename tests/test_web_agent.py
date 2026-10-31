@@ -162,3 +162,20 @@ def test_save_fact_needs_approval_and_resume_saves_only_on_approve(confirmed, sa
          "content": json.dumps({"confirmed": confirmed})}]}
     stream(client, resume)
     assert _facts() == saved
+
+
+def test_streamed_chunks_count_once_against_the_budget():
+    """Review I3: ADK calls after_model_callback for every partial chunk while streaming."""
+    import asyncio
+
+    from google.adk.models.llm_response import LlmResponse
+    from google.genai import types
+    from health_agents import costs
+    from health_web.agent import ChatBudget
+
+    usage = types.GenerateContentResponseUsageMetadata(prompt_token_count=1000, candidates_token_count=100)
+    plugin, before = ChatBudget(), costs.chat_month_spend()
+    for partial in (True, True, False):
+        resp = LlmResponse(partial=partial, usage_metadata=usage)
+        asyncio.run(plugin.after_model_callback(callback_context=None, llm_response=resp))
+    assert costs.chat_month_spend() - before == pytest.approx(costs.usd(1000, 100))

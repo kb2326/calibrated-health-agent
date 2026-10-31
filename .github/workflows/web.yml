@@ -8,6 +8,9 @@ on:
     paths:
       - "apps/web/**"
       - "packages/health_web/**"
+      - "packages/health_agents/**"
+      - "packages/health_core/**"
+      - "uv.lock"
       - ".github/workflows/web.yml"
   workflow_dispatch:
 

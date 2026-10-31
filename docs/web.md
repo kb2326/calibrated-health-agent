@@ -63,6 +63,8 @@ listen on `127.0.0.1:8780` only.
 
 ## Deploy (Cloud Run behind IAP)
 
+0. Once, before the first deploy: `CHA_DB_BUCKET=<bucket> uv run cha agentdb seed` (the laptop's
+   receipts and memory become the shared `agent.db`).
 1. `docker build -f apps/webservice/Dockerfile -t us-central1-docker.pkg.dev/<project>/cha/web:<sha> .`
    and `docker push` it.
 2. Set `web_image` in `infra/terraform.tfvars`, then `terraform plan -out tfplan` and

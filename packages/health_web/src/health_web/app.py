@@ -12,6 +12,7 @@ import base64
 import hashlib
 import os
 import re
+import threading
 from collections.abc import AsyncIterator
 from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path
@@ -74,6 +75,7 @@ def _host(request: Request) -> str:
     return host.rsplit(":", 1)[0]
 
 
+_REFRESH_LOCK = threading.Lock()
 IAP_USER = "x-goog-authenticated-user-email"
 
 
@@ -91,6 +93,11 @@ def refresh_health_db(settings: Settings) -> None:
 
     if not settings.db_bucket:
         return
+    with _REFRESH_LOCK:  # concurrent requests share one download
+        _refresh(settings, db, store)
+
+
+def _refresh(settings: Settings, db, store) -> None:
     gen_path = settings.data_dir / ".web_health_generation"
     remote = store.remote_generation(settings.db_bucket, settings.db_object)
     if remote is not None and remote == store.recorded_generation(gen_path=gen_path) and db.DB_PATH.exists():
@@ -136,7 +143,7 @@ def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str 
             if iap_email(request) != owner:
                 return JSONResponse({"error": "Sign in with the owner's Google account."},
                                     status_code=403)
-            if request.url.path == "/api/agent" or request.url.path.startswith("/api/receipts"):
+            if request.url.path.startswith(("/api/agent", "/api/receipts", "/api/scoreboard")):
                 import asyncio
 
                 await asyncio.to_thread(refresh_health_db, settings)
@@ -164,6 +171,9 @@ def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str 
     api.include_router(routes.router)
     add_adk_fastapi_endpoint(api, build_agent(topology=topology, model=model, models=models),
                              path="/api/agent")
+    # ag_ui_adk also mounts POST /agents/state, which returns the raw session (tool rows,
+    # drafts). The page never needs it, and it would bypass the stream filter.
+    api.router.routes = [r for r in api.router.routes if getattr(r, "path", "") != "/agents/state"]
     if (static / "index.html").exists():  # mounted last, so /api/* always wins
         api.mount("/", StaticFiles(directory=static, html=True), name="web")
     else:
