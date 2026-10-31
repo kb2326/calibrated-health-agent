@@ -106,6 +106,31 @@ def _step(name: str, fn: Callable[[], dict[str, Any] | None]) -> dict[str, Any]:
     return extra
 
 
+def _weather(settings: Settings) -> dict[str, Any]:
+    """Recent daily weather for the home location; the first run backfills history.
+
+    Context, not data the run depends on: an outage is reported as skipped, never an ERROR
+    (which would page the owner)."""
+    from datetime import timedelta
+
+    from health_data import civil, weather
+
+    where = {"place": settings.home_place, "latitude": settings.home_latitude,
+             "longitude": settings.home_longitude}
+    try:
+        with db.connect() as conn:
+            empty = conn.execute("SELECT COUNT(*) FROM weather_daily").fetchone()[0] == 0
+            first = conn.execute("SELECT MIN(date) FROM daily_metrics").fetchone()[0]
+            backfilled = 0
+            if empty and first:
+                end = (civil.today() - timedelta(days=6)).isoformat()
+                if first < end:
+                    backfilled = weather.backfill(conn, first, end, **where)
+            return {"days": weather.sync_recent(conn, **where), "backfilled": backfilled}
+    except weather.WeatherError as exc:
+        return {"result": "skipped (weather unavailable)", "error": str(exc)}
+
+
 def _derive() -> dict[str, Any]:
     from health_data import derive
 
@@ -289,6 +314,7 @@ def _run(settings: Settings, dry_run: bool) -> int:
             _step("derive", _derive)
         except _Abort:
             failed = True
+        _step("weather", lambda: _weather(settings))  # never fails the run
 
         if sync_result:
             sync_rows = sync_result["changed_rows"]
