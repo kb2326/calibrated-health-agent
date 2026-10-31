@@ -56,6 +56,7 @@ def test_workflow_file_uses_secret_and_synthetic_mode():
 
 
 def test_synthetic_mode_refuses_real_runs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # never touch the real data/evals/
     monkeypatch.setenv("CHA_DATA_MODE", "synthetic")
     with pytest.raises(ValueError, match="synthetic"):
         runner.run([], real=True, out=Path("data/evals/x.jsonl"))

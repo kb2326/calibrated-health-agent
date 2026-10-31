@@ -57,6 +57,7 @@ def test_quota_error_becomes_not_evaluated(tmp_path):
     assert row["status"] == "not_evaluated" and row["reason"] == "quota"
 
 
-def test_real_runs_refuse_committable_paths(tmp_path):
+def test_real_runs_refuse_committable_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError, match="data/evals"):
         runner.run(CASES, topology="single", real=True, out=runner.Path("evals/x.jsonl"))
