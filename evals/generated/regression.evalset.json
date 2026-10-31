@@ -515,7 +515,7 @@
      "user_content": {
       "parts": [
        {
-        "text": "What was my VO2 max last month?"
+        "text": "What was my blood glucose last month?"
        }
       ],
       "role": "user"
@@ -1031,6 +1031,78 @@
         "name": "get_scoreboard"
        }
       ],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "reg-044",
+   "conversation": [
+    {
+     "invocation_id": "reg-044-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "How many minutes of deep sleep did I get on average over the last 7 nights?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "reg-045",
+   "conversation": [
+    {
+     "invocation_id": "reg-045-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "How many tennis sessions did I play in the last 30 days?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "reg-046",
+   "conversation": [
+    {
+     "invocation_id": "reg-046-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What was my lowest night-time blood oxygen over the last 14 nights?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
       "tool_responses": [],
       "intermediate_responses": []
      },

@@ -297,7 +297,7 @@ cases:
     - admits_gap
 - id: reg-022
   category: gap
-  question: What was my VO2 max last month?
+  question: What was my blood glucose last month?
   expect:
     behaviour:
     - admits_gap
@@ -446,3 +446,42 @@ cases:
   expect:
     tools_any:
     - get_scoreboard
+- id: reg-044
+  category: sleep_detail
+  question: How many minutes of deep sleep did I get on average over the last 7 nights?
+  expect:
+    numbers:
+      deep: SELECT AVG(deep_min) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT MAX(date)
+        FROM daily_metrics), '-7 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+    must_pass: true
+    behaviour:
+    - cites_receipt
+- id: reg-045
+  category: workouts
+  question: How many tennis sessions did I play in the last 30 days?
+  expect:
+    numbers:
+      n: SELECT COUNT(*) FROM exercise_sessions WHERE type = 'TENNIS' AND date > date((SELECT MAX(date)
+        FROM daily_metrics), '-30 day')
+    tools_any:
+    - query_metric
+    - run_sql
+    - run_python
+    must_pass: true
+- id: reg-046
+  category: night_vitals
+  question: What was my lowest night-time blood oxygen over the last 14 nights?
+  expect:
+    numbers:
+      low: SELECT MIN(spo2_low) FROM night_vitals WHERE date > date((SELECT MAX(date) FROM daily_metrics),
+        '-14 day')
+    tools_any:
+    - query_metric
+    - run_sql
+    - run_python
+    must_pass: true

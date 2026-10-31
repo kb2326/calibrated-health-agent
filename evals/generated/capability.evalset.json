@@ -1296,7 +1296,7 @@
      "user_content": {
       "parts": [
        {
-        "text": "What were my SpO2 readings last week?"
+        "text": "What was my blood glucose after meals last week?"
        }
       ],
       "role": "user"
@@ -1320,7 +1320,7 @@
      "user_content": {
       "parts": [
        {
-        "text": "How many calories did I burn yesterday?"
+        "text": "How much water did I drink yesterday?"
        }
       ],
       "role": "user"
@@ -1859,6 +1859,395 @@
       "parts": [
        {
         "text": "What stands out in my last 30 days of data?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-01",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-01-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What was my average sleep efficiency over the last 14 nights, as a percentage?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-02",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-02-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "How many hours was I actually asleep on average over the last 7 nights, to one decimal?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-03",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-03-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "How much REM sleep did I average over the last 14 nights, in minutes?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-04",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-04-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What was my average heart rate during tennis over the last 30 days, in bpm?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-05",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-05-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "How many calories did I burn in workouts over the last 14 days?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-06",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-06-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What was my average nightly blood oxygen over the last 7 nights?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-07",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-07-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What was my average breathing rate during sleep over the last 7 nights?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-08",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-08-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What's my latest VO2 max?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-09",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-09-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "How many cardio zone minutes did I get over the last 7 days?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-10",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-10-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What was the hottest day in Erode over the last 14 days, in \u00b0C?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-11",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-11-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "Do I sleep less on days hotter than 33\u00b0C? Compare my average minutes asleep over the last 30 days."
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-12",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-12-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What's the weather forecast for tomorrow?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [
+       {
+        "args": {},
+        "name": "weather"
+       }
+      ],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-13",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-13-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "What were my average daily steps over the last 30 days, and how many days had no data?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-14",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-14-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "Average minutes asleep over the last 30 nights, and how many nights are missing?"
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-15",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-15-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "Compare my resting heart rate on days after tennis with other days over the last 30 days."
+       }
+      ],
+      "role": "user"
+     },
+     "intermediate_data": {
+      "tool_uses": [],
+      "tool_responses": [],
+      "intermediate_responses": []
+     },
+     "creation_timestamp": 0.0
+    }
+   ],
+   "creation_timestamp": 0.0,
+   "final_session_state": {}
+  },
+  {
+   "eval_id": "cap-v5-16",
+   "conversation": [
+    {
+     "invocation_id": "cap-v5-16-0",
+     "user_content": {
+      "parts": [
+       {
+        "text": "I played tennis three times this week. Should I do a hard workout today?"
        }
       ],
       "role": "user"

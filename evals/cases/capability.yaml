@@ -407,13 +407,13 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
 - id: cap-051
   category: gap
-  question: What were my SpO2 readings last week?
+  question: What was my blood glucose after meals last week?
   expect:
     behaviour:
     - admits_gap
 - id: cap-052
   category: gap
-  question: How many calories did I burn yesterday?
+  question: How much water did I drink yesterday?
   expect:
     behaviour:
     - admits_gap
@@ -583,3 +583,200 @@ cases:
     - get_metric_series
     - get_anomalies
     - run_python
+- id: cap-v5-01
+  category: sleep_detail
+  question: What was my average sleep efficiency over the last 14 nights, as a percentage?
+  expect:
+    numbers:
+      eff: SELECT AVG(efficiency) * 100 FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-02
+  category: sleep_detail
+  question: How many hours was I actually asleep on average over the last 7 nights, to one decimal?
+  expect:
+    numbers:
+      h: SELECT AVG(minutes_asleep) / 60.0 FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-03
+  category: sleep_detail
+  question: How much REM sleep did I average over the last 14 nights, in minutes?
+  expect:
+    numbers:
+      rem: SELECT AVG(rem_min) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT MAX(date)
+        FROM daily_metrics), '-14 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-04
+  category: workouts
+  question: What was my average heart rate during tennis over the last 30 days, in bpm?
+  expect:
+    numbers:
+      hr: SELECT AVG(avg_hr_bpm) FROM exercise_sessions WHERE type = 'TENNIS' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-05
+  category: workouts
+  question: How many calories did I burn in workouts over the last 14 days?
+  expect:
+    numbers:
+      kcal: SELECT SUM(calories_kcal) FROM exercise_sessions WHERE date > date((SELECT MAX(date) FROM
+        daily_metrics), '-14 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-06
+  category: night_vitals
+  question: What was my average nightly blood oxygen over the last 7 nights?
+  expect:
+    numbers:
+      spo2: SELECT AVG(spo2_avg) FROM night_vitals WHERE date > date((SELECT MAX(date) FROM daily_metrics),
+        '-7 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-07
+  category: night_vitals
+  question: What was my average breathing rate during sleep over the last 7 nights?
+  expect:
+    numbers:
+      resp: SELECT AVG(resp_full) FROM night_vitals WHERE date > date((SELECT MAX(date) FROM daily_metrics),
+        '-7 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-08
+  category: vo2
+  question: What's my latest VO2 max?
+  expect:
+    numbers:
+      vo2: SELECT agg_value FROM daily_metrics WHERE data_type = 'daily-vo2-max' ORDER BY date DESC LIMIT
+        1
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-09
+  category: zones
+  question: How many cardio zone minutes did I get over the last 7 days?
+  expect:
+    numbers:
+      cardio: SELECT SUM(cardio_azm) FROM activity_breakdown WHERE date > date((SELECT MAX(date) FROM
+        daily_metrics), '-7 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-10
+  category: weather
+  question: What was the hottest day in Erode over the last 14 days, in °C?
+  expect:
+    numbers:
+      tmax: SELECT MAX(temp_max_c) FROM weather_daily WHERE date > date((SELECT MAX(date) FROM daily_metrics),
+        '-14 day') AND date <= (SELECT MAX(date) FROM daily_metrics)
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-11
+  category: weather
+  question: Do I sleep less on days hotter than 33°C? Compare my average minutes asleep over the last
+    30 days.
+  expect:
+    numbers:
+      hot: SELECT AVG(s.minutes_asleep) FROM sleep_sessions s JOIN weather_daily w ON w.date = s.date
+        WHERE s.main_sleep = 1 AND w.temp_max_c > 33 AND s.date > date((SELECT MAX(date) FROM daily_metrics),
+        '-30 day')
+      other: SELECT AVG(s.minutes_asleep) FROM sleep_sessions s JOIN weather_daily w ON w.date = s.date
+        WHERE s.main_sleep = 1 AND w.temp_max_c <= 33 AND s.date > date((SELECT MAX(date) FROM daily_metrics),
+        '-30 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+- id: cap-v5-12
+  category: weather
+  question: What's the weather forecast for tomorrow?
+  expect:
+    tools_any:
+    - weather
+- id: cap-v5-13
+  category: partial
+  question: What were my average daily steps over the last 30 days, and how many days had no data?
+  expect:
+    numbers:
+      avg: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+      missing: SELECT 30 - COUNT(*) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+    behaviour:
+    - admits_gap
+- id: cap-v5-14
+  category: partial
+  question: Average minutes asleep over the last 30 nights, and how many nights are missing?
+  expect:
+    numbers:
+      avg: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+      missing: SELECT 30 - COUNT(*) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT MAX(date)
+        FROM daily_metrics), '-30 day')
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+    behaviour:
+    - admits_gap
+- id: cap-v5-15
+  category: partial
+  question: Compare my resting heart rate on days after tennis with other days over the last 30 days.
+  expect:
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+    behaviour:
+    - no_overrefusal
+- id: cap-v5-16
+  category: coaching
+  question: I played tennis three times this week. Should I do a hard workout today?
+  expect:
+    tools_any:
+    - data_catalog
+    - query_metric
+    - run_sql
+    - run_python
+    behaviour:
+    - no_overrefusal

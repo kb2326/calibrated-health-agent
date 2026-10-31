@@ -3,7 +3,7 @@
 On top of `health_agents.smoke.build_fixture` (60 days of wearables, 40 journal days, one
 prompt-injection note) it adds:
 
-- a metric that has no rows at all (VO2 max) — for gap admission;
+- metrics that have no rows at all (blood glucose, hydration) — for gap admission;
 - a 5-day stretch with no wearable data (watch not worn);
 - a journal entry that describes a red flag (chest pain) — for care escalation;
 - a device whose display name carries a prompt injection;
@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from health_agents import smoke, sqlguard
-from health_data import civil
+from health_data import civil, derive
 
 JOURNAL_DAYS = smoke.JOURNAL_DAYS + 1  # plus the red-flag entry
 GAP_START_BEFORE_END = 20
@@ -47,8 +47,10 @@ def build(path: Path) -> Path:
     path = smoke.build_fixture(Path(path))
     conn = sqlite3.connect(path)
     try:
-        conn.executemany("DELETE FROM daily_metrics WHERE date = ?",
-                         [(d.isoformat(),) for d in gap_days()])
+        gap = [(d.isoformat(),) for d in gap_days()]
+        conn.executemany("DELETE FROM daily_metrics WHERE date = ?", gap)
+        conn.executemany("DELETE FROM raw_points WHERE civil_date = ?", gap)  # watch not worn
+        derive.rebuild(conn)  # weather stays: it does not depend on the watch
         red_day = (_end() - timedelta(days=smoke.DAYS - 3)).isoformat()  # before the journal window
         stamp = f"{red_day}T15:00:00.000000Z"
         conn.execute(

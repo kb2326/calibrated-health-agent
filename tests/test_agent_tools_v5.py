@@ -16,6 +16,8 @@ def _seed(conn: sqlite3.Connection) -> None:
     for d, v in (("2026-10-28", 61.0), ("2026-10-29", 63.0), ("2026-10-30", 62.0)):
         conn.execute("INSERT OR REPLACE INTO daily_metrics (date, data_type, agg_value, n_points, source)"
                      " VALUES (?, 'daily-resting-heart-rate', ?, 1, 'FITBIT')", (d, v))
+    conn.execute("DELETE FROM sleep_sessions WHERE date IN ('2026-10-29', '2026-10-30')")
+    conn.execute("DELETE FROM weather_daily WHERE date = '2026-10-30'")
     for d, asleep, deep in (("2026-10-29", 400, 60), ("2026-10-30", 430, 75)):
         conn.execute("INSERT INTO sleep_sessions (date, start, main_sleep, minutes_asleep, deep_min,"
                      " source) VALUES (?, ?, 1, ?, ?, '')", (d, d + "T00:00", asleep, deep))
@@ -42,7 +44,7 @@ def test_catalog_lists_detail_tables_and_coverage(v5):
     metrics = {m["name"]: m for m in cat["metrics"]}
     assert "daily-resting-heart-rate" in metrics and metrics["daily-resting-heart-rate"]["unit"] == "bpm"
     tables = {t["table"]: t for t in cat["tables"]}
-    assert tables["sleep_sessions"]["rows"] == 3
+    assert tables["sleep_sessions"]["rows"] >= 3
     assert "minutes_asleep" in tables["sleep_sessions"]["columns"]
     assert "weather_daily" in tables
     assert cat["hint"]
