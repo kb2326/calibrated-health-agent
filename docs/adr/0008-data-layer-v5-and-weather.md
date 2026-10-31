@@ -7,8 +7,8 @@
 A crawl of the Google Health API documentation (research 11) found 44 data types, of which
 we synced 21. Each synced type was also flattened to one number a day:
 
-- **Sleep** was stored as time in bed, including time awake. Over 7 nights that was
-  7.4 hours, against 6.8 hours actually asleep.
+- **Sleep** was stored as time in bed, including time awake, which overstated sleep by
+  over half an hour a night.
 - **Workouts** kept only their total minutes.
 - **Heart-rate zones** were summed into roughly the time the watch was worn.
 - **Nightly vitals** lost their sub-fields (blood-oxygen lows, deep-sleep HRV, breathing per

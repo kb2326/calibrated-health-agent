@@ -63,8 +63,7 @@ prices against primary pages before committing (several were fast-moving).
 2. Publish the OAuth consent screen to "In Production" (Cloud Console).
 3. GitHub: push as `kb2326` (currently inactive `gh` account; git identity is
    "Karth <karth@users.noreply.github.com>").
-4. A personal GCP project (current gcloud project `grant-capture-agent` under a
-   work account looks unrelated) with billing + spend cap.
+4. A personal GCP project with billing and a spend cap.
 
 ## 6. Cleanup implied
 
