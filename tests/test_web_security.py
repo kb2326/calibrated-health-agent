@@ -71,3 +71,15 @@ def test_request_span_has_route_and_status_but_no_body(tmp_path, monkeypatch):
     assert span["http.route"] == "/api/receipts/{receipt_id}"
     assert span["http.status_code"] == 404
     assert "ask-about-my-sleep" not in repr(span) and "r-0000000000" not in repr(span)
+
+
+def test_external_scripts_are_not_hashed_as_inline(tmp_path):
+    from health_web.app import content_security_policy
+
+    out = tmp_path / "o"
+    out.mkdir()
+    (out / "index.html").write_text('<script src="/a.js"></script><script>x()</script>')
+    csp = content_security_policy(out)
+    empty = base64.b64encode(hashlib.sha256(b"").digest()).decode()
+    assert f"'sha256-{empty}'" not in csp  # the src tag's empty body is not an inline script
+    assert csp.count("'sha256-") == 1

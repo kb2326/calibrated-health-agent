@@ -43,7 +43,7 @@ SECURITY_HEADERS = {
     "Cross-Origin-Opener-Policy": "same-origin",
     "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=()",
 }
-_INLINE_SCRIPT = re.compile(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", re.S | re.I)
+_INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.S | re.I)
 
 
 def content_security_policy(static: Path) -> str:
