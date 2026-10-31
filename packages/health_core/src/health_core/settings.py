@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     db_bucket: str | None = None
     db_object: str = "health.db"
     agent_db_object: str = "agent.db"  # shared chat state (Phase 5): receipts, memory, spend
+    web_owner_email: str | None = None  # cloud web app: the only account IAP may let through
     token_secret: str | None = None
     client_secret_secret: str | None = None
     forms_token_secret: str | None = None

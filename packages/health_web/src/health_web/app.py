@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from google.adk.models import BaseLlm
 from health_agents import tracing
+from health_core.settings import Settings, get_settings
 
 from . import routes
 from .agent import build_agent
@@ -73,9 +74,37 @@ def _host(request: Request) -> str:
     return host.rsplit(":", 1)[0]
 
 
+IAP_USER = "x-goog-authenticated-user-email"
+
+
+def iap_email(request: Request) -> str | None:
+    """The account IAP signed in, from its header ("accounts.google.com:me@example.com")."""
+    value = request.headers.get(IAP_USER, "")
+    prefix = "accounts.google.com:"
+    return value[len(prefix):].lower() if value.startswith(prefix) else None
+
+
+def refresh_health_db(settings: Settings) -> None:
+    """Cloud mode reads health.db from the bucket; download only when the job published a
+    new generation since the last pull. The web never pushes health.db."""
+    from health_data import db, store
+
+    if not settings.db_bucket:
+        return
+    gen_path = settings.data_dir / ".web_health_generation"
+    remote = store.remote_generation(settings.db_bucket, settings.db_object)
+    if remote is not None and remote == store.recorded_generation(gen_path=gen_path) and db.DB_PATH.exists():
+        return
+    store.pull_db(settings.db_bucket, settings.db_object, db.DB_PATH, gen_path=gen_path)
+
+
 def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str | None = None,
                models: dict[str, BaseLlm | str] | None = None,
                static_dir: Path | None = None) -> FastAPI:
+    settings = get_settings()
+    owner = (settings.web_owner_email or "").strip().lower()
+    if mode == "cloud" and not owner:
+        raise ValueError("cloud mode needs CHA_WEB_OWNER_EMAIL: the one owner account IAP may let in")
     stack = ExitStack()
     if mode == "demo":  # point every tool at the synthetic fixture for the app's lifetime
         from health_eval.runner import eval_fixture
@@ -99,6 +128,18 @@ def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str 
             if _host(request) not in LOCAL_HOSTS:
                 return JSONResponse({"error": "This server answers only on localhost."},
                                     status_code=403)
+            return await call_next(request)
+    else:
+        @api.middleware("http")
+        async def owner_only(request: Request, call_next):
+            # IAP already refuses everyone else; this is the second lock, in our own code.
+            if iap_email(request) != owner:
+                return JSONResponse({"error": "Sign in with the owner's Google account."},
+                                    status_code=403)
+            if request.url.path == "/api/agent" or request.url.path.startswith("/api/receipts"):
+                import asyncio
+
+                await asyncio.to_thread(refresh_health_db, settings)
             return await call_next(request)
 
     static = static_dir or DEFAULT_STATIC

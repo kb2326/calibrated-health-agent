@@ -18,6 +18,8 @@ def uses_vertex() -> bool:
 def serve(demo: bool = typer.Option(False, help="Serve the synthetic eval fixture (screenshots)."),
           port: int = typer.Option(8780, help="Port on 127.0.0.1."),
           host: str = typer.Option("127.0.0.1", help="Laptop and demo modes bind localhost only."),
+          cloud: bool = typer.Option(False, help="Cloud Run behind IAP: bind 0.0.0.0 on $PORT, "
+                                                 "owner-only, health.db read from the bucket."),
           test_model: bool = typer.Option(
               False, help="Replay the script in CHA_WEB_FAKE_SCRIPT instead of Gemini (end-to-end "
                           "tests; demo mode only).")
@@ -27,7 +29,11 @@ def serve(demo: bool = typer.Option(False, help="Serve the synthetic eval fixtur
 
     from .app import create_app
 
-    if host not in ("127.0.0.1", "localhost"):
+    if cloud:
+        if demo or test_model:
+            raise typer.BadParameter("--cloud serves real data; it can't be combined with --demo")
+        host, port = "0.0.0.0", int(os.environ.get("PORT", port))
+    elif host not in ("127.0.0.1", "localhost"):
         raise typer.BadParameter("laptop and demo modes bind 127.0.0.1 only")
     if test_model and not demo:
         raise typer.BadParameter("--test-model works only with --demo (synthetic data)")
@@ -50,7 +56,7 @@ def serve(demo: bool = typer.Option(False, help="Serve the synthetic eval fixtur
             raise typer.BadParameter("Real data goes to Gemini only through Vertex AI: unset "
                                      "GOOGLE_API_KEY and use GOOGLE_GENAI_USE_VERTEXAI=true "
                                      "(or run with --demo).")
-        api = create_app("local")
+        api = create_app("cloud" if cloud else "local")
     typer.echo(f"Calibrated Health Agent on http://{host}:{port}" + ("  (demo data)" if demo else ""))
     uvicorn.run(api, host=host, port=port, log_level="warning")
 
