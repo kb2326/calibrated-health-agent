@@ -155,3 +155,14 @@ def test_gate_compares_the_same_cases():
     assert current["suites"]["regression"]["cases"]["m0"] is False
     ok, messages = report.gate(current, base)
     assert not ok and any("regression" in m and "1.00" in m and "0.90" in m for m in messages)
+
+
+def test_compare_runs_against_owner_labels():
+    old = [_t("q1"), _t("q2"), _t("q3")]
+    new = [_t("q1"), _t("q2"), _t("q3")]
+    labels = {0: {"verdict": "fail"}, 1: {"verdict": "fail"}, 2: {"verdict": "pass"}}
+    verdicts = {"q1": "new", "q2": "old", "q3": "tie"}
+    out = report.compare_runs(old, new, labels, lambda o, n: verdicts[o.case_id])
+    assert out["labelled_fail"] == 2 and out["fail_now_better"] == 1 and out["fail_not_better"] == 1
+    assert out["pass_now_worse"] == 0 and out["pass_kept"] == 1
+    assert out["preference"] == {"new": 1, "old": 1, "tie": 1, "unknown": 0}

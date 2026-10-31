@@ -252,3 +252,31 @@ def write_results(summary: dict, out: Path = RESULTS) -> Path:
     path.write_text(render(summary), encoding="utf-8")
     path.with_suffix(".json").write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
     return path
+
+
+def compare_runs(old: list[runner.Transcript], new: list[runner.Transcript],
+                 labels: dict[int, dict], judge: Callable[[runner.Transcript, runner.Transcript], str]
+                 ) -> dict:
+    """Old vs new answers to the owner's labelled questions (matched by case id).
+
+    For each labelled fail: did the new answer win the blind pairwise judge? For each
+    labelled pass: did the new answer get worse? Aggregates only."""
+    by_id = {t.case_id: t for t in new}
+    pref = {"new": 0, "old": 0, "tie": 0, "unknown": 0}
+    out: dict[str, Any] = {"compared": 0, "labelled_fail": 0, "fail_now_better": 0, "fail_not_better": 0,
+           "labelled_pass": 0, "pass_kept": 0, "pass_now_worse": 0}
+    for i, o in enumerate(old):
+        n, label = by_id.get(o.case_id), labels.get(i, {}).get("verdict")
+        if n is None or label not in ("pass", "fail"):
+            continue
+        verdict = judge(o, n)
+        pref[verdict if verdict in pref else "unknown"] += 1
+        out["compared"] += 1
+        if label == "fail":
+            out["labelled_fail"] += 1
+            out["fail_now_better" if verdict == "new" else "fail_not_better"] += 1
+        else:
+            out["labelled_pass"] += 1
+            out["pass_now_worse" if verdict == "old" else "pass_kept"] += 1
+    out["preference"] = pref
+    return out

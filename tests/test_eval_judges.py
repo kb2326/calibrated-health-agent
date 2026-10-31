@@ -119,3 +119,20 @@ def test_judge_refuses_real_transcripts_without_vertex(tmp_path, monkeypatch):
         judges.judge("answers_question", t, cache=tmp_path / "c.jsonl")
     # a test model (no network) is fine
     assert judges.judge("answers_question", t, model=Fake(), cache=tmp_path / "c.jsonl") == "pass"
+
+
+def test_pairwise_is_blind_seeded_and_maps_back(tmp_path):
+    seen = []
+
+    def model(prompt):
+        seen.append(prompt)
+        return '{"winner": "A", "reason": "more complete"}'
+
+    old = _t("Your SpO2 is not stored.", question="blood oxygen last week?")
+    new = _t("Your SpO2 averaged 96.1% [r-aaaaaaaaaa].", question="blood oxygen last week?")
+    first = judges.pairwise(old, new, model=model, cache=tmp_path / "p.jsonl")
+    again = judges.pairwise(old, new, model=model, cache=tmp_path / "p.jsonl")
+    assert first == again and len(seen) == 1  # cached
+    assert first in ("old", "new")  # "A" mapped back through the seeded order
+    assert '<untrusted source="answer_a">' in seen[0] and "old" not in seen[0].lower().split("answer a")[0][-20:]
+    assert judges.pairwise(old, new, model=lambda p: "nonsense", cache=tmp_path / "q.jsonl") == "unknown"

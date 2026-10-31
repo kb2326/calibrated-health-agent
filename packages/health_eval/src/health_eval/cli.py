@@ -161,3 +161,19 @@ def transcripts_cmd(batch: Path,
                       out=out, workdir=workdir, pace_s=pace)
     bad = [r for r in rows if r.status != "ok"]
     typer.echo(f"{len(rows)} transcripts -> {out} ({len(bad)} not evaluated)")
+
+
+@app.command("compare")
+def compare_cmd(old: Path, new: Path,
+                cache: Annotated[Path, typer.Option("--cache")] = Path("data/evals/pairwise-cache.jsonl"),
+                out: Annotated[Path | None, typer.Option("--out")] = None) -> None:
+    """Blind pairwise judge: new answers vs the owner-labelled old ones (aggregates only)."""
+    from . import judges
+
+    labels = review.current_labels(old)
+    result = report.compare_runs(runner.load(old), runner.load(new), labels,
+                                 lambda o, n: judges.pairwise(o, n, cache=cache))
+    text = json.dumps(result, indent=1)
+    typer.echo(text)
+    if out:
+        out.write_text(text + "\n", encoding="utf-8")

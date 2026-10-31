@@ -143,3 +143,46 @@ def calibrate(name: str, labelled: list[tuple[Transcript, str]], *, model: Model
             "tnr": tnr, "tnr_ci": list(stats.wilson(tn, len(neg))),
             "unknown_rate": sum(j == "unknown" for j, _ in pairs) / len(pairs) if pairs else 0.0,
             "gates": tpr is not None and tnr is not None and tpr >= THRESHOLD and tnr >= THRESHOLD}
+
+
+_PAIR_REPLY = ('Reply with JSON only: {"winner": "A" | "B" | "tie", "reason": "<one sentence>"}.')
+
+
+def pairwise(old: Transcript, new: Transcript, *, model: Model | None = None, cache: Path,
+             root: Path = ROOT) -> str:
+    """Blind A/B comparison of two answers to the same question: "old", "new", "tie" or
+    "unknown". Which answer is A is decided by a hash of the question, so position bias
+    averages out across questions and a rerun gives the same order."""
+    rubric = (Path(root) / "pairwise.md").read_text(encoding="utf-8").strip()
+    flip = int(_sha(old.question)[:2], 16) % 2 == 1
+    a, b = (new, old) if flip else (old, new)
+    prompt = (f"{rubric}\n\n{UNTRUSTED_RULE}\n\nQuestion: {wrap('question', old.question)}\n\n"
+              f"Answer A: {wrap('answer_a', a.answer)}\n\nAnswer B: {wrap('answer_b', b.answer)}"
+              f"\n\n{_PAIR_REPLY}")
+    key = _sha(f"pairwise|{_sha(rubric)}|{_sha(old.answer)}|{_sha(new.answer)}|{_sha(old.question)}")
+    cache = Path(cache)
+    hit = _cache_get(cache, key)
+    if hit is not None:
+        return hit
+    if (old.fixture_hash == "real" or new.fixture_hash == "real") and model is None:
+        from .runner import uses_vertex
+
+        if not uses_vertex():
+            raise ValueError("Judging real-data transcripts must use Vertex AI")
+    try:
+        reply = (model or _default_model())(prompt)
+    except Exception:
+        return "unknown"
+    match = re.search(r"\{.*\}", reply, re.S)
+    try:
+        winner = json.loads(match.group(0)).get("winner") if match else None
+    except (json.JSONDecodeError, AttributeError):
+        winner = None
+    verdict = {"A": "new" if flip else "old", "B": "old" if flip else "new",
+               "tie": "tie"}.get(str(winner), "unknown")
+    if verdict != "unknown":
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        with cache.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"key": key, "judge": "pairwise", "case_id": old.case_id,
+                                 "verdict": verdict}) + "\n")
+    return verdict
