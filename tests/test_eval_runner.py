@@ -61,3 +61,34 @@ def test_real_runs_refuse_committable_paths(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with pytest.raises(ValueError, match="data/evals"):
         runner.run(CASES, topology="single", real=True, out=runner.Path("evals/x.jsonl"))
+
+
+def test_fixture_rebuilds_into_a_reused_workdir(tmp_path):
+    # final review I5: a second build into the same health.db crashed on UNIQUE
+    from health_eval import fixture
+
+    first = fixture.build(tmp_path / "health.db")
+    again = fixture.build(tmp_path / "health.db")
+    assert first == again and again.exists()
+
+
+def test_run_paces_between_items(tmp_path, monkeypatch):
+    slept = []
+    monkeypatch.setattr(runner.time, "sleep", slept.append)
+    runner.run(CASES, topology="single", model_factory=_llm, out=tmp_path / "t.jsonl",
+               workdir=tmp_path / "w", pace_s=7)
+    assert slept == [7]
+
+
+@pytest.mark.parametrize("env", [
+    {"GOOGLE_GENAI_USE_VERTEXAI": "false", "GOOGLE_API_KEY": "k"},
+    {"GOOGLE_GENAI_USE_VERTEXAI": "true", "GOOGLE_API_KEY": "k"}])
+def test_real_runs_require_vertex(tmp_path, monkeypatch, env):
+    # final review I6: real health data must never go to the free-tier key
+    monkeypatch.chdir(tmp_path)
+    for var in ("GOOGLE_GENAI_USE_VERTEXAI", "GOOGLE_API_KEY", "CHA_DATA_MODE"):
+        monkeypatch.delenv(var, raising=False)
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    with pytest.raises(ValueError, match="Vertex"):
+        runner.run([], real=True, out=runner.Path("data/evals/r.jsonl"))

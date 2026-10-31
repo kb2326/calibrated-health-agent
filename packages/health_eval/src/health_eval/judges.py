@@ -90,6 +90,12 @@ def _cache_get(cache: Path, key: str) -> Verdict | None:
 
 def judge(name: str, transcript: Transcript, *, model: Model | None = None, cache: Path,
           root: Path = ROOT) -> Verdict:
+    if transcript.fixture_hash == "real" and model is None:
+        from .runner import uses_vertex
+
+        if not uses_vertex():
+            raise ValueError("Judging real-data transcripts must use Vertex AI, never a "
+                             "free-tier key")
     prompt = prompt_for(name, transcript, root)
     rubric_sha = _sha((Path(root) / f"{name}.md").read_text(encoding="utf-8"))
     key = _sha(f"{name}|{rubric_sha}|{_sha(_transcript_text(transcript))}")

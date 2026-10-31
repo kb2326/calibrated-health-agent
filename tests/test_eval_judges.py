@@ -108,3 +108,14 @@ def test_calibration_gates_only_above_threshold(tmp_path):
     unknown = judges.calibrate("answers_question", _labelled(5, 5),
                                model=Fake('{"verdict": "unknown"}'), cache=tmp_path / "d.jsonl")
     assert unknown["unknown_rate"] == 1.0 and unknown["gates"] is False
+
+
+def test_judge_refuses_real_transcripts_without_vertex(tmp_path, monkeypatch):
+    # final review I6
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "false")
+    t = _t("You slept 7 hours.")
+    t.fixture_hash = "real"
+    with pytest.raises(ValueError, match="Vertex"):
+        judges.judge("answers_question", t, cache=tmp_path / "c.jsonl")
+    # a test model (no network) is fine
+    assert judges.judge("answers_question", t, model=Fake(), cache=tmp_path / "c.jsonl") == "pass"

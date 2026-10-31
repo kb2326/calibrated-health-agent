@@ -157,14 +157,7 @@ def transcripts_cmd(batch: Path,
                     workdir: Annotated[Path | None, typer.Option("--workdir")] = None) -> None:
     """Run a question batch through the agent (synthetic fixture, or --real) for labelling."""
     items = yaml.safe_load(batch.read_text(encoding="utf-8"))["questions"]
-    factory = _model_factory()
-    if pace:
-        rows = []
-        for item in items:  # one by one so the pacing applies between questions
-            rows += runner.run([item], topology=topology, model_factory=factory, real=real,
-                               out=out, workdir=workdir)
-    else:
-        rows = runner.run(items, topology=topology, model_factory=factory, real=real, out=out,
-                          workdir=workdir)
+    rows = runner.run(items, topology=topology, model_factory=_model_factory(), real=real,
+                      out=out, workdir=workdir, pace_s=pace)
     bad = [r for r in rows if r.status != "ok"]
     typer.echo(f"{len(rows)} transcripts -> {out} ({len(bad)} not evaluated)")

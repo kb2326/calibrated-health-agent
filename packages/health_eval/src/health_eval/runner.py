@@ -154,16 +154,31 @@ def eval_fixture(workdir: Path | None = None) -> Iterator[tuple[Path, str]]:
         yield path, digest
 
 
+def uses_vertex() -> bool:
+    """True when the GenAI client will go to Vertex AI (never a free-tier API key)."""
+    flag = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower() in ("1", "true")
+    return flag and not os.environ.get("GOOGLE_API_KEY")
+
+
 def run(items: Sequence[Case | dict], *, topology: str = "single", trials: int = 1,
         variant: Variant = "full", model_factory: Callable[[], Any] | None = None,
-        real: bool = False, out: Path, workdir: Path | None = None) -> list[Transcript]:
+        real: bool = False, out: Path, workdir: Path | None = None,
+        pace_s: float = 0) -> list[Transcript]:
     out = Path(out)
     if real and os.environ.get("CHA_DATA_MODE") == "synthetic":
         raise ValueError("CHA_DATA_MODE=synthetic (CI, free-tier key): real-data runs are refused")
+    if real and model_factory is None:
+        from health_agents import vertex
+
+        vertex.configure()  # sets Vertex defaults only where the environment is silent
+    if real and model_factory is None and not uses_vertex():
+        raise ValueError("Real-data runs must use Vertex AI (free-tier traffic may be used to "
+                         "improve Google products): set GOOGLE_GENAI_USE_VERTEXAI=true and "
+                         "unset GOOGLE_API_KEY")
     if real and not out.resolve().is_relative_to(REAL_ROOT.resolve()):
         raise ValueError("real-data transcripts must be written under data/evals/")
     kw = {"topology": topology, "trials": trials, "variant": variant,
-          "model_factory": model_factory, "commit": _commit()}
+          "model_factory": model_factory, "commit": _commit(), "pace_s": pace_s}
     if real:
         transcripts = collect(items, fixture_hash="real", **kw)
     else:

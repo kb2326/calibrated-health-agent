@@ -42,6 +42,8 @@ def gap_days() -> list[date]:
 
 
 def build(path: Path) -> Path:
+    for stale in (Path(path), Path(f"{path}-wal"), Path(f"{path}-shm")):
+        stale.unlink(missing_ok=True)  # a reused workdir: always rebuild from scratch
     path = smoke.build_fixture(Path(path))
     conn = sqlite3.connect(path)
     try:
