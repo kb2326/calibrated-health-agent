@@ -15,7 +15,7 @@ type Load = { state: "loading" } | { state: "ok"; receipt: Receipt } | { state: 
 
 function Output({ value }: { value: unknown }) {
   const text = JSON.stringify(value, null, 1) ?? "";
-  return <pre className="max-h-56 overflow-auto bg-code p-3 font-mono text-[12px] leading-relaxed">{text.length > 4000 ? text.slice(0, 4000) + "\n…" : text}</pre>;
+  return <pre tabIndex={0} aria-label="Output" className="max-h-56 overflow-auto bg-code p-3 font-mono text-[12px] leading-relaxed">{text.length > 4000 ? text.slice(0, 4000) + "\n…" : text}</pre>;
 }
 
 export function ReceiptView({ id }: { id: string }) {
@@ -73,7 +73,7 @@ export function ReceiptPanel({ id, onClose, pending, onApprove, onDeny }: {
     return () => window.removeEventListener("keydown", onKey);
   }, [id, onClose]);
 
-  const open = Boolean(id);
+  const open = Boolean(id) || Boolean(pending); // on phones the sheet also opens for an approval
   return (
     <aside aria-label="Receipt"
       className={`flex min-w-0 flex-col gap-3 border-line bg-panel p-5 md:static md:border-l ${

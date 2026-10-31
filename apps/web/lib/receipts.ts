@@ -61,5 +61,6 @@ export function asSeries(output: unknown): Series | null {
     if (typeof date !== "string" || !DAY.test(date) || typeof value !== "number" || !Number.isFinite(value)) return null;
     points.push({ date, value });
   }
+  points.sort((a, b) => a.date.localeCompare(b.date)); // oldest first, left to right
   return { key, points };
 }

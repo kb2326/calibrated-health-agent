@@ -138,3 +138,27 @@ def test_budget_reached_refuses_the_run_in_plain_words(monkeypatch):
     events = stream(local_client(create_app("local", model=llm)), run_input("Hi"))
     err = next(e for e in events if e["type"] == "RUN_ERROR")
     assert "budget" in err["message"].lower() and llm.calls == 0
+
+
+def _facts() -> int:
+    from health_agents import agent_db
+
+    with agent_db.connect() as conn:
+        return conn.execute("SELECT COUNT(*) FROM facts").fetchone()[0]
+
+
+@pytest.mark.parametrize(("confirmed", "saved"), [(False, 0), (True, 1)])
+def test_save_fact_needs_approval_and_resume_saves_only_on_approve(confirmed, saved):
+    llm = FakeLlm([call("save_fact", text="I train on Tuesdays"), text("Done.")])
+    client = local_client(create_app("local", model=llm))
+    thread = uuid.uuid4().hex
+    first = run_input("Remember that I train on Tuesdays", thread=thread)
+    events = stream(client, first)
+    confirm = next(e for e in events if e["type"] == "TOOL_CALL_START"
+                   and e["toolCallName"] == "adk_request_confirmation")
+    assert _facts() == 0  # nothing saved before the answer
+    resume = {**first, "runId": uuid.uuid4().hex, "messages": first["messages"] + [
+        {"id": uuid.uuid4().hex, "role": "tool", "toolCallId": confirm["toolCallId"],
+         "content": json.dumps({"confirmed": confirmed})}]}
+    stream(client, resume)
+    assert _facts() == saved

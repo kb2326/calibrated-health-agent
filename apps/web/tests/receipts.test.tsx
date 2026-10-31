@@ -108,3 +108,25 @@ describe("approve card", () => {
     expect(screen.getByText("This conversation expired. Ask again.")).toBeInTheDocument();
   });
 });
+
+describe("chart scale", () => {
+  it("orders days oldest first and keeps every bar inside the axis", () => {
+    const s = asSeries([{ date: "2026-10-30", v: 66 }, { date: "2026-10-29", v: 61 }, { date: "2026-10-28", v: 63 }])!;
+    expect(s.points.map((p) => p.date)).toEqual(["2026-10-28", "2026-10-29", "2026-10-30"]);
+    const { container } = render(<SeriesChart series={s} />);
+    const ys = [...container.querySelectorAll("rect")].map((r) => Number(r.getAttribute("y")));
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(12); // the top padding: nothing above the highest tick
+    const labels = [...container.querySelectorAll("text")].map((t) => Number(t.textContent)).filter(Number.isFinite);
+    expect(Math.max(...labels)).toBeGreaterThanOrEqual(66);
+  });
+});
+
+describe("panel visibility", () => {
+  it("opens for a pending approval even with no receipt (phones hide it otherwise)", () => {
+    const pending = { toolCallId: "k1", action: "save a memory", detail: "{}" };
+    render(<ReceiptPanel id={null} onClose={() => {}} pending={pending} onApprove={() => {}} onDeny={() => {}} />);
+    const panel = screen.getByRole("complementary", { name: "Receipt" });
+    expect(panel.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    expect(screen.getByRole("group", { name: "Save a memory?" })).toBeInTheDocument();
+  });
+});

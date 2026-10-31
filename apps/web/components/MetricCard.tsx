@@ -11,8 +11,8 @@ function niceTicks(lo: number, hi: number): number[] {
   const unit = [1, 2, 5, 10].map((m) => m * step).find((s) => span / s <= 5) ?? step * 10;
   const start = Math.floor(lo / unit) * unit;
   const ticks: number[] = [];
-  for (let t = start; t <= hi + unit / 2; t += unit) ticks.push(Number(t.toFixed(6)));
-  return ticks;
+  for (let t = start; ticks.length < 2 || (ticks.at(-1) ?? 0) < hi; t += unit) ticks.push(Number(t.toFixed(6)));
+  return ticks; // the last tick is at or above the largest value
 }
 
 function label(key: string): string {

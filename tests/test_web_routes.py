@@ -126,3 +126,34 @@ def test_missing_front_end_explains_how_to_build_it(tmp_path):
     client = local_client(create_app("local", model=FakeLlm([text("x")]), static_dir=tmp_path / "nope"))
     r = client.get("/")
     assert r.status_code == 200 and "npm run build" in r.text
+
+
+def test_test_model_is_refused_outside_demo(monkeypatch):
+    from health_web import cli
+    from typer.testing import CliRunner
+
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: None)
+    result = CliRunner().invoke(cli.app, ["--test-model"])
+    assert result.exit_code != 0 and "demo" in result.output
+
+
+def test_scripted_model_fills_the_newest_receipt():
+    import asyncio
+
+    from google.adk.models.llm_request import LlmRequest
+    from google.genai import types
+    from health_web.scripted import ScriptedLlm
+
+    llm = ScriptedLlm([{"match": "sleep", "steps": [{"call": "run_sql", "args": {}}, {"text": "See [{receipt}]."}]}])
+    req = LlmRequest(contents=[
+        types.Content(role="user", parts=[types.Part(text="How did I sleep?")]),
+        types.Content(role="user", parts=[types.Part(function_response=types.FunctionResponse(
+            name="run_sql", response={"rows": [], "receipt": "r-0123456789"}))])])
+
+    async def first():
+        async for r in llm.generate_content_async(req):
+            return r
+
+    out = asyncio.run(first())
+    assert out is not None and out.content is not None and out.content.parts is not None
+    assert out.content.parts[0].text == "See [r-0123456789]."

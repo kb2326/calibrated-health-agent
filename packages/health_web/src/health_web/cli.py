@@ -17,22 +17,33 @@ def uses_vertex() -> bool:
 @app.command()
 def serve(demo: bool = typer.Option(False, help="Serve the synthetic eval fixture (screenshots)."),
           port: int = typer.Option(8780, help="Port on 127.0.0.1."),
-          host: str = typer.Option("127.0.0.1", help="Laptop and demo modes bind localhost only.")
+          host: str = typer.Option("127.0.0.1", help="Laptop and demo modes bind localhost only."),
+          test_model: bool = typer.Option(
+              False, help="Replay the script in CHA_WEB_FAKE_SCRIPT instead of Gemini (end-to-end "
+                          "tests; demo mode only).")
           ) -> None:
     import uvicorn
     from health_agents import tracing
 
+    from .app import create_app
+
     if host not in ("127.0.0.1", "localhost"):
         raise typer.BadParameter("laptop and demo modes bind 127.0.0.1 only")
+    if test_model and not demo:
+        raise typer.BadParameter("--test-model works only with --demo (synthetic data)")
     tracing.setup()
     if demo:
-        from .app import create_app
+        model = None
+        if test_model:
+            from .scripted import ScriptedLlm
 
-        api = create_app("demo")
+            script = os.environ.get("CHA_WEB_FAKE_SCRIPT")
+            if not script:
+                raise typer.BadParameter("set CHA_WEB_FAKE_SCRIPT to a JSON script file")
+            model = ScriptedLlm.from_file(script)
+        api = create_app("demo", model=model)
     else:
         from health_agents import vertex
-
-        from .app import create_app
 
         vertex.configure()  # real data goes to Gemini only through Vertex AI
         if not uses_vertex():
