@@ -59,7 +59,7 @@ advice.
 
 | Risk | Control |
 |---|---|
-| Made-up numbers | Every number must come from a tool result this turn. A verify node retries once, then marks anything unbacked as `unverified:`. Receipts re-run on demand (ADR 0003). |
+| Made-up numbers | Every number must come from a tool result this turn. A verify node retries once, then adds a quiet note naming any figure not computed by a tool. Receipts re-run on demand (ADR 0003). |
 | Prompt injection via journal notes, device names or code output | Untrusted text reaches the model only inside `<untrusted>` wrappers. SQL returns those columns as NULL. Red-team canaries measure success. |
 | Data exfiltration | No tool can send data anywhere. The sandbox blocks network, processes and file writes (ADR 0004). |
 | Destructive or blinded queries | Read-only SQLite behind an authorizer; the forecast ledger tables are refused. |

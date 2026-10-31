@@ -1,278 +1,328 @@
 # Calibrated Health Agent
 
-**Talk to your own health data with an agent that does the analysis itself: it plans, writes and runs code, proves every number, and is measured like production software.**
+**Talk to your own health data with an AI agent that does the analysis itself. It plans, writes and runs code, proves every number with a receipt, and is measured like production software.**
 
 [![ci](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml)
 [![evals](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml/badge.svg)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml)
-![license](https://img.shields.io/badge/license-Apache--2.0-lightgrey)
 ![python](https://img.shields.io/badge/python-3.13-blue)
+![adk](https://img.shields.io/badge/Google%20ADK-2.12-4285F4)
+![gemini](https://img.shields.io/badge/Gemini-3.5%20Flash--Lite-8E75B2)
 ![terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC)
 ![cost](https://img.shields.io/badge/run%20cost-under%20%241%2Fmonth-brightgreen)
-![status](https://img.shields.io/badge/status-phase%204%20of%207-blue)
+![license](https://img.shields.io/badge/license-Apache--2.0-lightgrey)
 
-I ask questions about my own Fitbit / Pixel Watch data and daily journal in plain language:
-"How did I sleep this week compared with last month?", "Do late meals hurt my HRV the next
-day?", "What changed before my worst days?" The agent doesn't look up an answer or summarise a
-dashboard. It works the question out the way an analyst would:
+A personal, single-user portfolio project built on my own Fitbit Air data, daily journal and
+local weather. Not a medical device, and not a replacement for any health product.
 
-1. Decides what has to be computed.
-2. Picks the tools and writes the SQL or Python to compute it.
-3. Runs that code over the raw data in a locked-down sandbox.
-4. Checks its own draft before replying, so every number in the answer comes with a receipt
-   you can re-run.
+**Contents:** [What it does](#what-it-does) · [Why it's built this way](#why-its-built-this-way) ·
+[Architecture](#architecture) · [Results](#results) · [Evaluation](#evaluation) ·
+[Security](#security) · [The forecasting experiment](#the-forecasting-experiment) ·
+[Tech stack](#tech-stack) · [Run it](#run-it) · [Repository](#repository) ·
+[Decisions](#engineering-decisions) · [Roadmap](#roadmap)
 
-Around that agent sits the engineering that real agent products need and most demos skip: an
-evaluation harness with a CI gate, a red team and threat model, guarded tools, consented
-memory, tracing with no health data in it, and infrastructure as code. The whole thing costs
-under $1 a month.
+---
 
-A one-person portfolio project, not a medical device and not a replacement for any health
-product.
+## What it does
 
-## Not a chatbot on top of two APIs
-
-The Google Health and Forms APIs are just where the data comes from. Everything that makes
-this an agent happens after the data lands:
-
-| A typical "chat with your data" bot | This agent |
-|---|---|
-| Pastes a summary into the prompt and lets the model answer from it | **Plans and acts.** An ADK graph workflow gives Gemini 15 tools (read-only SQL, a Python sandbox, metrics, journal, devices, memory, scoreboard) and lets it decide what to compute |
-| Numbers you have to take on trust | **Every number is proven.** A deterministic verify step rejects any figure not produced by code this turn, retries once, and otherwise labels it `unverified:`. Every receipt re-runs on demand |
-| Treats any text it reads as instructions | **Untrusted input stays data.** Journal notes, device names and code output are wrapped as untrusted, SQL returns them as NULL, and no tool can send data out |
-| Forgets, or remembers everything | **Consented memory.** Facts are saved only after an explicit yes, with validity windows |
-| Never checks itself | **Self-review.** A nightly investigator agent studies its own worst forecast misses in sandboxed code and files hypotheses that are tested only on later days |
-| "It seems to work" | **Measured.** 246 eval cases, code graders, LLM judges calibrated against my labels, ablations (no tools / no code / full / multi-agent), a red team with 8 attack families, and a CI gate on every pull request |
-| One prompt, one model call | **Designed and compared.** A single agent and a multi-agent team (router → data scientist / domain expert / coach → synthesizer) face the same evals; the team becomes the default only if it wins a paired test |
-
-## Why build it this way
-
-- **In health, a confident wrong number is the failure that matters.** In Google's PHIA study
-  (*Nature Communications*, 2026), a plain LLM answered personal-health data questions
-  correctly about 22% of the time, and an agent that wrote and ran code reached 84%. So this
-  agent computes, and shows its work.
-- **Agents are judged by evidence, not demos.** The project follows the practice of teams
-  shipping agents (error analysis, calibrated judges, regression gates, red teaming,
-  observability) at a scale one person can run for free.
-- **Private data deserves a real security model.** The agent reads private data and untrusted
-  text, so the design removes the third leg of the "lethal trifecta": it has no way to
-  communicate externally.
-- **An agent should know how good it is.** A second experiment locks a forecast of my day every
-  morning and publishes how it scores against simple rules, including when it loses.
-
-## Ask it
+Ask a question in plain language. The agent works out the answer the way a data analyst
+would:
 
 ```text
-$ cha ask "What was my average resting heart rate over the last 7 days?"
+$ cha ask "How much deep sleep did I get on average over the last 7 nights?"
 AI agent (Gemini) answering from your own data. It can be wrong and is not medical advice;
 every number has a receipt you can re-run.
-Your average resting heart rate over the last 7 days was 63.4 bpm across 7 days [r-bdffc453d3].
+Over the last 7 nights (October 24–30) you got an average of 77.3 minutes of deep sleep
+[r-…], across 7 nights with data.
 
-receipts: r-bdffc453d3
-tokens 10793 in / 124 out · $0.0035
-
-$ cha receipt r-bdffc453d3 --rerun
-r-bdffc453d3 · sql · sqlite-ro/1 · as of 2026-10-30 · chat
-SELECT AVG(agg_value) AS avg_rhr, COUNT(*) AS n FROM daily_metrics
-  WHERE data_type = 'daily-resting-heart-rate' AND date >= date('2026-10-30', '-7 days')
-output: [{"avg_rhr": 63.42857142857143, "n": 7}]
+$ cha receipt r-… --rerun          # the exact SQL/Python behind the number, re-executed
 re-run: matches
 ```
 
-*(Run on the synthetic fixture with the free-tier key. My real data stays in my own cloud project.)*
+*(Synthetic demo data. My real data stays in my own Google Cloud project.)*
 
-Also: `cha chat` for a conversation, `cha notes` for the investigator's findings on its
-forecast misses, and `cha memory` to see what it remembers. It runs on the laptop today; a
-web front end (Next.js + AG-UI) is next (Phase 5).
+| You can ask about | Because the agent can see |
+|---|---|
+| Sleep: minutes asleep, deep / REM / light, efficiency, naps | `sleep_sessions` (derived from the raw sleep payloads) |
+| Workouts: "how was my tennis this month?" | `exercise_sessions`: type, duration, calories, heart rate, zones |
+| Night vitals: blood-oxygen lows, skin temperature vs baseline, breathing | `night_vitals` |
+| Recovery and fitness: resting HR, HRV, VO2 max, zone minutes | daily metrics and `activity_breakdown` |
+| How you felt | the daily journal (mood, energy, soreness, tags) |
+| Weather: "do I sleep worse on hot nights?" | daily weather for my city and a live forecast (Open-Meteo) |
 
-## Scorecard
+It answers with what exists. If days are missing, it computes on the days it has, says how
+many that is, and names the gap.
 
-<!-- scorecard:start -->
-Pending the first full run on the synthetic fixture. It runs on the free tier over several
-days (500 requests a day), and every number will carry its n, a Wilson 95% interval and the
-commit. Until then: 652 offline tests pass, and the
-[eval gate](.github/workflows/evals.yml) runs the 29 must-pass cases on every pull request.
-<!-- scorecard:end -->
+## Why it's built this way
 
-How these numbers are made: [eval methodology](docs/evals/methodology.md). Full results:
-[`docs/evals/results/`](docs/evals/results/).
+- **In health, a confident wrong number is the failure that matters.** In Google's PHIA
+  study (*Nature Communications*, 2026), a plain LLM answered personal-health data questions
+  correctly about 22% of the time; an agent that wrote and ran code reached 84%. So this
+  agent computes, and every number carries a re-runnable receipt.
+- **An agent, not a chatbot over two APIs.** The Google Health and Forms APIs are only where
+  the data comes from:
 
-## How it works
+  | A typical "chat with your data" bot | This agent |
+  |---|---|
+  | Answers from a summary pasted into the prompt | Plans, then acts with 13 tools (read-only SQL, a Python sandbox, a data map, weather, journal, memory) |
+  | Numbers you have to trust | A code check rejects any figure not computed this turn |
+  | Treats text it reads as instructions | Untrusted text is wrapped as data; no tool can send data out |
+  | Never checks itself | A nightly investigator studies its own forecast misses |
+  | "It seems to work" | 265 eval cases, calibrated judges, a red team and a CI gate on every PR |
+
+- **Measured, then improved.** I labelled 110 of its answers myself. Error analysis showed
+  rigid design choices, and Phase 4.5 rebuilt the agent around them: **29 of my 32 failures
+  are now answered better** (blind pairwise judge; see [Results](#results)).
+
+## Architecture
+
+### System overview
 
 ```mermaid
 flowchart LR
-  q(["Question"]) --> screen["screen<br/>(deterministic)"]
-  screen --> agent["Gemini agent<br/>(ADK graph Workflow)"]
-  agent <-->|"tools"| tools["run_sql (read-only, authorizer)<br/>run_python (sandbox)<br/>metrics, journal, devices,<br/>scoreboard, memory"]
-  tools --> rec[("receipts<br/>code + data hash + output")]
-  agent --> verify["verify_receipts<br/>(deterministic)"]
-  verify -->|"unbacked number: retry once"| agent
-  verify --> a(["Answer + receipt ids<br/>or an 'unverified:' footer"])
+  subgraph sources["Sources (read-only)"]
+    watch["Fitbit Air<br/>Google Health API<br/>33 data types"]
+    form["Daily journal<br/>Google Forms API"]
+    meteo["Weather<br/>Open-Meteo"]
+  end
+  subgraph cloud["Google Cloud (scale to zero)"]
+    job["Cloud Run job<br/>sync · derive · weather<br/>lock · settle · investigate"]
+    db[("health.db<br/>private GCS bucket")]
+    vertex["Vertex AI<br/>Gemini 3.5 Flash-Lite"]
+    trace["Cloud Trace<br/>(no message content)"]
+  end
+  subgraph use["Use"]
+    cli["cha ask / chat<br/>(laptop)"]
+    web["Web app: Next.js + AG-UI<br/>(Phase 5)"]
+    pub["Public ledger log<br/>+ scoreboard"]
+  end
+  watch --> job
+  form --> job
+  meteo --> job
+  job <--> db
+  job --> vertex
+  job --> trace
+  db --> cli
+  db -.-> web
+  cli --> vertex
+  job --> pub
 ```
 
-- **Deterministic guards around the model.** `screen` and `verify_receipts` are plain code
-  nodes in the graph, so the rules that matter don't depend on the model obeying a prompt
-  ([ADR 0001](docs/adr/0001-phase3-workflow.md), [ADR 0003](docs/adr/0003-receipts.md)).
-- **Swappable topology.** `CHA_TOPOLOGY=single|multi`; the multi-agent team is modelled on
-  Google Research's Personal Health Agent, and routing is a graph edge rather than LLM-to-LLM
-  hand-off ([ADR 0005](docs/adr/0005-topology-default.md)).
-- **One sandbox, two callers.** The chat agent and the nightly investigator share the
-  sandbox, the receipts and the guarded SQL
-  ([ADR 0004](docs/adr/0004-sandbox.md)).
+### The agent
+
+```mermaid
+flowchart LR
+  q(["Question"]) --> screen["screen<br/>(code)"]
+  screen --> agent["Gemini agent<br/>ADK tool loop · thinking on"]
+  agent <-->|"plans, calls tools"| tools["data_catalog · query_metric<br/>run_sql (read-only) · run_python (sandbox)<br/>weather · journal · memory · scoreboard"]
+  agent <-.->|"optional, team mode"| spec["coach · domain expert<br/>(agents as tools)"]
+  tools --> rec[("receipts<br/>code + data hash + output")]
+  agent --> check["grounding check<br/>(code)"]
+  check -->|"unbacked number:<br/>one revision"| agent
+  check --> a(["Answer + receipt ids"])
+```
+
+- **One capable agent in a ReAct tool loop**, the pattern Anthropic, Google and OpenAI
+  recommend for open-ended Q&A, with Gemini's built-in thinking so it plans before it
+  computes ([ADR 0007](docs/adr/0007-agent-architecture.md)).
+- **A data map (semantic layer).** `data_catalog` tells the agent what exists, with units,
+  coverage and gaps, so it never claims data is missing without checking.
+- **Code nodes guard the model.** `screen` and the grounding check are deterministic. A figure
+  not computed this turn gets one revision, then a visible note
+  ([ADR 0003](docs/adr/0003-receipts.md)).
+- **Specialists as tools, not a pipeline.** A coach and a domain expert the main agent *may*
+  consult. A fixed router pipeline failed in evaluation and was retired.
+
+### Data pipeline
+
+```mermaid
+flowchart TB
+  api["Google Health API<br/>33 types, read-only"] --> raw[("raw_points<br/>every payload as received")]
+  raw --> daily[("daily_metrics<br/>one value per type per day")]
+  raw --> detail[("detail tables<br/>sleep_sessions · exercise_sessions<br/>night_vitals · activity_breakdown")]
+  meteo["Open-Meteo"] --> weather[("weather_daily")]
+  journal["Google Form"] --> jt[("journal_submissions<br/>append-only")]
+  daily --> agent["Agent tools<br/>SQL · sandbox · catalog"]
+  detail --> agent
+  weather --> agent
+  jt --> agent
+  daily --> ledger["Forecast ledger<br/>(frozen inputs)"]
+```
+
+Raw first, refined second: every payload is stored as received, so detail such as sleep stages
+was added later without re-downloading anything
+([ADR 0008](docs/adr/0008-data-layer-v5-and-weather.md)). One SQLite file in a private,
+versioned bucket, with optimistic-concurrency uploads, is the right size for one person's data;
+BigQuery is the upgrade path.
+
+### Cloud
+
+A scale-to-zero **modular monolith**:
+- one Cloud Run job on a schedule, Secret Manager, a versioned GCS bucket, Vertex AI and BigQuery
+  (TimesFM);
+- Cloud Trace and Monitoring alerts;
+- everything in Terraform (44 resources, state in a versioned bucket).
+
+Details: [architecture](docs/architecture.md) · [cloud design](docs/cloud-design.md) ·
+[runbook](infra/README.md).
+
+## Results
+
+<!-- scorecard:start -->
+Scorecard pending the post-4.5 regression re-run; the latest full results are in
+[docs/evals/results/2026-10-31-phase-4-5.md](docs/evals/results/2026-10-31-phase-4-5.md).
+<!-- scorecard:end -->
+
+**Before → after Phase 4.5**, measured on my own labelled questions with a blind pairwise
+judge:
+
+| | Before | After |
+|---|---|---|
+| My 32 labelled failures | failed | **29 answered better** |
+| Judge preference over 110 questions | 14 | **92** (4 ties) |
+| Safety suite | 70% | **73%** |
+| Red team (attacks resisted) | 90% | **92%** |
+| Cost per question | ~$0.004 | ~$0.007 (it plans and checks its work) |
+
+Full write-up, including the one real regression found:
+[Phase 4.5 results](docs/evals/results/2026-10-31-phase-4-5.md).
 
 ## Evaluation
 
-| Piece | What |
-|---|---|
-| Error analysis | Grid-generated questions, labelled Pass / Fail by me on a local review page, then grouped into a failure taxonomy |
-| Suites | regression 43 (29 must-pass), capability 74, safety 30, red team 39, ablation 60. YAML is the source, generated into ADK evalsets |
-| Code graders | truth SQL at the answer's precision, receipt re-runs, tool use, blinded-table access, no `unverified:`, gap / diagnosis / escalation markers |
-| Judges | binary, temperature 0, transcript wrapped as untrusted. Each gates only once TPR and TNR ≥ 0.8 against my labels |
-| Statistics | Wilson intervals, pass^k, exact McNemar, paired bootstrap, minimum detectable difference |
-| Ablation | no tools vs no code vs full vs multi-agent, paired by case |
-| CI gate | free-tier key, synthetic data only. Fails on a must-pass failure confirmed by retry, on anything not evaluated (such as quota), or on a drop beyond the noise band |
+```mermaid
+flowchart LR
+  grid["Question grid"] --> run["Runner<br/>synthetic fixture"]
+  run --> tx["Transcripts"]
+  tx --> code["Code graders<br/>truth SQL · receipt re-runs<br/>tools · safety markers"]
+  tx --> judge["LLM judges<br/>gate only once calibrated"]
+  tx --> label["My labels<br/>review page"]
+  label --> tax["Failure taxonomy"] --> cases["Eval cases<br/>265 in 5 suites"] --> run
+  label --> judge
+  code --> gate{"CI gate<br/>every PR"}
+  judge --> gate
+```
+
+- **Error analysis first:** I label answers on a local review page, and the failures become
+  cases. This follows Hamel Husain and Shreya Shankar, and the eval guides from Anthropic,
+  OpenAI and Google.
+- **Suites:** regression 46 (32 must-pass), capability 90, safety 30, red team 39, ablation 60.
+  YAML is the source, generated into ADK evalsets.
+- **Code graders first.** LLM judges are binary, and a judge gates CI only after it agrees with
+  my labels (TPR and TNR ≥ 0.8).
+- **Honest small-sample statistics:** Wilson intervals, exact McNemar, paired bootstrap,
+  pass^k, and the minimum detectable difference.
+- **CI gate** on a free-tier key with synthetic data only. It fails on a must-pass failure
+  confirmed by retry, on anything not evaluated, or on a drop beyond the noise band.
 
 Details: [methodology](docs/evals/methodology.md) · [system card](docs/system-card.md).
 
 ## Security
 
-The agent reads private data and untrusted text, so the design cuts the third leg of the
-**lethal trifecta**: it has no way to send data anywhere. No tool reaches the network, and the
-sandbox blocks sockets, processes and file writes ([ADR 0004](docs/adr/0004-sandbox.md)). SQL
-is read-only behind an authorizer, and the forecast ledger tables are refused. The red team
-covers 8 attack families (note, device-name and code-output injection, memory hijack, SQL
-abuse, sandbox escape, unbounded consumption, prompt leak). Injected text carries canary
-words, so attack success is a string check, and success rates are reported AgentDojo-style
-alongside utility under attack. Mapped to the OWASP LLM Top 10 (2025) and Agentic Top 10 (2026)
-in the [threat model](docs/threat-model.md).
+The agent reads private data and untrusted text, so the design removes the third leg of the
+**lethal trifecta**: it has no way to send health data out.
+- **No outbound tools for data.** No tool reaches the network except weather, whose
+  coordinates come from trusted context, never from the model.
+- **Sandbox.** Model-written Python runs in a sandbox that blocks sockets, processes and file
+  writes.
+- **Read-only SQL** behind an authorizer; the forecast ledger tables are refused.
+- **Untrusted text stays data.** Journal notes, device names and code output are wrapped.
+- **Consented memory.** Saving a memory needs my explicit yes.
+- **Red team:** 8 attack families with canary-word detectors, mapped to OWASP LLM 2025 and
+  Agentic 2026 in the [threat model](docs/threat-model.md).
 
 ## The forecasting experiment
 
-Every morning, seven forecasters bet on my evening mood, energy and soreness (1–10):
-climatology, persistence, seasonal naive, a statistical model, TimesFM, a Gemini agent, and the
-same agent reading its investigator's hypotheses. The bets are locked before the outcome
-exists, hidden from me until the day settles, and hash-chained. The chain hashes go to a
-public log ([kb2326/cha-ledger-log](https://github.com/kb2326/cha-ledger-log)), and the plan
-was fixed before the first lock ([pre-registration](docs/ledger/analysis-plan.md); its hash is
-the chain's first entry).
+The second act. Every morning, seven forecasters bet on my evening mood, energy and
+soreness: simple baselines, a statistical model, TimesFM, a Gemini agent, and the same agent
+reading its investigator's hypotheses. Bets are locked before the outcome exists, hidden from
+me, hash-chained, and published to a public log
+([kb2326/cha-ledger-log](https://github.com/kb2326/cha-ledger-log)) under a
+[pre-registered plan](docs/ledger/analysis-plan.md). Nothing is reported below 10 paired days:
+[protocol](docs/forecasting/protocol.md) · [results](docs/forecasting/results.md).
 
-The question it answers: can an agent predict one person better than "same as yesterday", and
-does reading its own notes on past misses help? Scored with RPS, block-bootstrap skill
-intervals, DM-HLN tests and reliability diagrams. Nothing is reported below 10 paired days:
-[protocol](docs/forecasting/protocol.md) · [results](docs/forecasting/results.md) ·
-[public scoreboard](https://kb2326.github.io/cha-ledger-log/).
+## Tech stack
 
-## Observability
+| Layer | Tools |
+|---|---|
+| Agent | Google ADK 2.12 (graph Workflow, BuiltInPlanner, AgentTool), Gemini 3.5 Flash-Lite on Vertex AI |
+| Data | Google Health API (33 types), Google Forms API, Open-Meteo, SQLite, pandas, numpy |
+| Evals | Custom harness (`cha-eval`), ADK eval metrics, LLM judges, red team |
+| Forecasting | Proper scoring rules (RPS), block bootstrap, DM-HLN, BigQuery `AI.FORECAST` (TimesFM) |
+| Cloud | Cloud Run jobs, Scheduler, GCS, Secret Manager, Vertex AI, BigQuery, Cloud Trace, Monitoring |
+| Engineering | Python 3.13, uv workspace, ruff, pyright, about 715 tests, Terraform, GitHub Actions, OpenTelemetry |
+| Next | Next.js + AG-UI web front end (Phase 5) |
 
-ADK's OpenTelemetry spans go to Phoenix on the laptop or to Cloud Trace from the job. Message
-content is forced off in the cloud ([ADR 0006](docs/adr/0006-trace-content-off.md)). Tool
-spans carry receipt ids and an argument hash, never the arguments themselves. See
-[observability](docs/observability.md).
-
-## Architecture
-
-```mermaid
-flowchart TB
-  subgraph sources["Sources (read-only)"]
-    watch["Fitbit / Pixel Watch<br/>Google Health API"]
-    form["Daily Google Form<br/>Forms API"]
-  end
-  subgraph gcp["Google Cloud project (scale to zero)"]
-    sched["Cloud Scheduler"] --> job["Cloud Run job<br/>sync · lock · settle · investigate · publish"]
-    job <--> bucket[("Private GCS bucket<br/>health.db, versioned")]
-    job --> vertex["Vertex AI Gemini<br/>forecasters 6 and 7, investigator"]
-    job --> bq["BigQuery AI.FORECAST<br/>(TimesFM)"]
-    job --> trace["Cloud Trace<br/>(no content)"]
-    job --> sm[("Secret Manager")]
-  end
-  laptop["Laptop: cha ask / chat<br/>Vertex AI, receipts in agent.db"] <--> bucket
-  watch --> job
-  form --> job
-  job --> log["Public log: chain hashes<br/>+ rounded scoreboard"]
-  ci["GitHub Actions: lint, types, 652 tests,<br/>eval gate on a free-tier key (synthetic only)"]
-```
-
-Everything is Terraform (44 resources, state in a versioned bucket). Details:
-[architecture](docs/architecture.md) · [cloud design](docs/cloud-design.md) ·
-[runbook](infra/README.md).
-
-## Run it yourself
+## Run it
 
 ```bash
-uv sync --all-packages                 # Python 3.13 workspace
-uv run pytest -q                       # 652 tests on synthetic fixtures; no credentials needed
-uv run cha smoke                       # the agent on a synthetic database (needs a Gemini backend)
-uv run cha-eval run --suite regression --must-pass-only --pace 25   # the PR gate, locally
+uv sync --all-packages     # Python 3.13 workspace
+uv run pytest -q           # about 715 tests on synthetic fixtures; no credentials needed
+uv run cha smoke           # the agent on a synthetic database (needs a Gemini backend)
+uv run cha-eval run --suite regression --must-pass-only --pace 25   # the CI gate locally
 ```
 
-To run the evals on a free-tier key, set `GOOGLE_GENAI_USE_VERTEXAI=false` and
-`GOOGLE_API_KEY=<AI Studio key from a project with no billing>`, and use synthetic data only.
-Owner-only commands (my Google account and GCP project): `cha-data auth login`,
-`cha-data db pull`, `cha-data sync`, `cha ask` on real data. See the [runbook](infra/README.md).
+On a free-tier key (synthetic data only): `GOOGLE_GENAI_USE_VERTEXAI=false` and
+`GOOGLE_API_KEY=<key from a project with no billing>`. Real-data runs refuse anything but
+Vertex AI. Owner-only commands are in the [runbook](infra/README.md).
 
-## Cost
-
-| Item | Monthly |
-|---|---|
-| Cloud Run job, Scheduler, Secret Manager, GCS, Logging, Monitoring, Cloud Trace | $0 (free tiers) |
-| Artifact Registry (last 3 images) | about $0.03 |
-| Gemini Flash-Lite: forecasters 6 and 7 | about $0.05 |
-| Gemini Flash-Lite: nightly investigator (capped in code) | up to $0.30 |
-| Laptop chat (about $0.01 a question, capped in code) | up to $0.30 |
-| CI evals (free-tier AI Studio key, synthetic data) | $0 |
-| **Total** | **about $0.10 typical, under $0.70 worst case** |
-
-A $1 budget emails at $0.25 and $0.50 spent and when the month's forecast reaches $1. The real
-guard is the design: nothing scales up on its own, and the agent's spend is capped in code.
-
-## Limitations
-
-- **One person, small n.** Every rate has a wide interval, and the forecasting needs weeks of
-  journaling before any comparison is reported.
-- **Synthetic evals are not real life.** Real transcripts are labelled privately, and only
-  synthetic restatements enter the suites.
-- **Lexicon graders under-count.** The first CI run found phrasings they missed (fixed). Judges
-  gate only after calibration.
-- **The laptop sandbox is defence in depth, not a VM.**
-- More in the [system card](docs/system-card.md).
-
-## Status
-
-| Phase | What | State |
-|---|---|---|
-| 1 | Foundation: ingestion, journal, scale-to-zero sync, Terraform, CI | Live |
-| 2 | Honest statistics and the forecast ledger | Live (first lock 2026-10-23) |
-| 3 | Agent core: ADK workflow, sandbox, receipts, guarded SQL, memory, investigator | Live (2026-10-24) |
-| 4 | Evals, red team, CI gate, tracing | In progress: built and deployed; first full scorecard and owner labelling under way |
-| 5 | Web front end: Next.js + AG-UI, streaming answers with clickable receipts, phone-installable, Google sign-in | Next |
-| 6 | GCP expansion as code (agent API on Cloud Run behind IAP, Workflows) | Planned |
-| 7 | Publish: write-ups and demo | Planned |
-
-A read-only MCP server was in the original plan. It was dropped: I have already built MCP in
-another project, several Google Health MCP servers exist, and a new door into private health
-data isn't worth the attack surface. That effort goes to the front end.
-
-## Repository layout
+## Repository
 
 ```text
 packages/
   health_core/     settings
-  health_data/     Health and Forms API clients, SQLite store, GCS sync (cha-data)
+  health_data/     Health / Forms clients, SQLite store, derive (detail tables), weather (cha-data)
   health_ledger/   statistics, forecasters, lock, hash chain, scoring, results (cha-ledger)
-  health_agents/   ADK workflow, sandbox, receipts, guarded tools, memory, investigator,
-                   tracing (cha)
-  health_eval/     cases, fixture, runner, graders, judges, stats, ablation, red team,
-                   review page, report and gate (cha-eval)
-apps/jobs/         the Cloud Run job and its Dockerfile
-infra/             Terraform and the runbook
+  health_agents/   ADK workflow, tools, sandbox, receipts, memory, investigator, tracing (cha)
+  health_eval/     cases, fixture, runner, graders, judges, stats, ablation, red team (cha-eval)
+apps/jobs/         the Cloud Run job
+infra/             Terraform and runbook
 evals/             cases (YAML), generated ADK evalsets, judge rubrics, question grid
 docs/              architecture, ADRs, evals, forecasting, threat model, system card, research
 ```
 
-## Disclaimer
+## Engineering decisions
 
-Not medical advice and not a medical device. It describes one person's own data and does not
-diagnose. Built with AI assistance. The agent can be wrong, which is why it keeps score.
+| ADR | Decision |
+|---|---|
+| [0001](docs/adr/0001-phase3-workflow.md) | ADK graph workflow with deterministic guard nodes |
+| [0002](docs/adr/0002-ci-model-backend.md) | CI evals on a free-tier key, synthetic data only |
+| [0003](docs/adr/0003-receipts.md) | Every number has a re-runnable receipt |
+| [0004](docs/adr/0004-sandbox.md) | A local subprocess sandbox for model-written Python |
+| [0005](docs/adr/0005-topology-default.md) | Single agent by default until a paired test says otherwise |
+| [0006](docs/adr/0006-trace-content-off.md) | Traces carry no message content outside the laptop |
+| [0007](docs/adr/0007-agent-architecture.md) | One tool-loop agent with thinking; specialists as tools |
+| [0008](docs/adr/0008-data-layer-v5-and-weather.md) | Detail tables from raw payloads, more API types, weather |
 
-## License
+## Cost
 
-Code: Apache-2.0 (see [LICENSE](LICENSE)).
+About $0.10 a month typical and under $1 worst case. Everything scales to zero, Gemini spend
+is capped in code, and CI evals run on a free tier. A $1 budget alerts at $0.25 and $0.50.
+
+## Roadmap
+
+| Phase | What | State |
+|---|---|---|
+| 1–3 | Data foundation, forecast ledger, agent core | Live |
+| 4 | Evals, red team, CI gate, tracing | Built and deployed |
+| 4.5 | Capable agent: modern architecture, full data layer, weather | Built; deploy pending |
+| 5 | Web front end: Next.js + AG-UI, streaming answers with tappable receipts, live location, phone-installable | Next |
+| 6 | GCP expansion (agent API behind IAP, Workflows, keyless CI) | Planned |
+| 7 | Publish: write-ups and demo | Planned |
+
+## Limitations
+
+- **One person, small n.** Rates carry wide intervals, and the forecasting needs weeks of
+  journaling.
+- **Synthetic evals are not real life.** My real transcripts are labelled privately, and only
+  synthetic restatements enter the suites.
+- **Uncalibrated judges are noisy.** The pairwise judge preferred some old "no weather data"
+  answers over correct forecasts, which is why judges gate only after calibration.
+- **The laptop sandbox is defence in depth, not a VM.** See the
+  [system card](docs/system-card.md).
+
+## Disclaimer and credits
+
+Not medical advice and not a medical device; it describes one person's own data and does not
+diagnose. Weather data by [Open-Meteo](https://open-meteo.com/) (CC BY 4.0). Built with AI
+assistance.
+
+License: Apache-2.0 (see [LICENSE](LICENSE)).
