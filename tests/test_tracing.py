@@ -110,3 +110,48 @@ def test_gcp_resource_names_the_project(monkeypatch):
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     attrs = dict(tracing._gcp_resource().attributes)
     assert attrs["gcp.project_id"] == "proj-123"
+
+
+def _memory_provider(monkeypatch, *, scrub: bool):
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    if scrub:
+        provider.add_span_processor(tracing.ScrubExceptions())
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(trace, "_TRACER_PROVIDER", provider)
+    return exporter
+
+
+def test_failing_job_step_puts_no_exception_text_in_spans(monkeypatch):
+    # review C1: journal text in an exception message must not reach Cloud Trace
+    from jobs import sync_job
+
+    exporter = _memory_provider(monkeypatch, scrub=False)  # even without the scrubber
+    with pytest.raises(sync_job._Abort):
+        sync_job._step("journal", lambda: (_ for _ in ()).throw(
+            ValueError("answer: I felt SECRET_MOOD_TEXT")))
+    dumped = json.dumps([[dict(e.attributes or {}) for e in s.events] + [s.status.description]
+                         for s in exporter.get_finished_spans()], default=str)
+    assert "SECRET_MOOD_TEXT" not in dumped
+    assert "ValueError" in dumped or "_Abort" in dumped or "journal" in dumped
+
+
+def test_scrubber_reduces_any_recorded_exception_to_its_type(monkeypatch):
+    # ADK's own tool spans call span.record_exception(error) directly
+    exporter = _memory_provider(monkeypatch, scrub=True)
+    with tracing.tracer().start_as_current_span("adk.tool") as span:
+        span.record_exception(RuntimeError("row value 63.4 SECRET_ROW"))
+    events = exporter.get_finished_spans()[0].events
+    assert [dict(e.attributes or {}) for e in events] == [{"exception.type": "RuntimeError"}]
+
+
+def test_cloud_setup_installs_the_scrubber(no_providers):
+    tracing.setup("cloud")
+    hooks = no_providers[-1][0]
+    assert any(isinstance(p, tracing.ScrubExceptions)
+               for h in hooks if hasattr(h, "span_processors") for p in h.span_processors)

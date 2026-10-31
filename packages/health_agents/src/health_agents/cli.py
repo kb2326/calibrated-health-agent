@@ -154,7 +154,7 @@ class Session:
                     self.memory.refresh_episodes(conn)
             except Exception:
                 pass  # offline or no embeddings yet: memory search falls back to recent episodes
-        with tracing.tracer().start_as_current_span("cha.turn") as span:
+        with tracing.span("cha.turn") as span:
             result = asyncio.run(self._ask(question, confirm))
             result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
             span.set_attribute("cha.usd", result.usd)

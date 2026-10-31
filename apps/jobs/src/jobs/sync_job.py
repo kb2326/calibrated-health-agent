@@ -94,7 +94,7 @@ def _step(name: str, fn: Callable[[], dict[str, Any] | None]) -> dict[str, Any]:
 
     started = time.monotonic()
     # One span per step: name, duration and status only, never the step's output.
-    with tracing.tracer().start_as_current_span(f"job.{name}") as span:
+    with tracing.span(f"job.{name}") as span:
         span.set_attribute("cha.step", name)
         try:
             extra = fn() or {}
@@ -371,7 +371,7 @@ def main(argv: list[str] | None = None) -> int:
     from health_agents import tracing
 
     tracing.setup()  # CHA_TRACING=cloud in the job: Cloud Trace, content forced off
-    with tracing.tracer().start_as_current_span("cha.job"):
+    with tracing.span("cha.job"):
         return _run(get_settings(), args.dry_run)
 
 

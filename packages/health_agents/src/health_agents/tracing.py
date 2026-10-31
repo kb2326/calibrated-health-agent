@@ -19,12 +19,46 @@ import json
 import os
 from typing import Any, Literal
 
+from opentelemetry.sdk.trace import SpanProcessor
+
 Mode = Literal["off", "local", "cloud"]
 MODES = ("off", "local", "cloud")
 PHOENIX = "http://localhost:6006/v1/traces"
 SERVICE = "calibrated-health-agent"
 _ADK_CONTENT = "ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS"
 _OTEL_CONTENT = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
+
+
+class ScrubExceptions(SpanProcessor):
+    """Reduce every recorded exception to its type.
+
+    OTel's `record_exception` stores the message and the full traceback (chained causes
+    included), and ADK's tool spans call it directly, bypassing the content switches. An
+    exception message can carry health data (a journal answer, a row value), so outside local
+    content mode only `exception.type` survives.
+    """
+
+    def on_start(self, span: Any, parent_context: Any = None) -> None:
+        def record_exception(exception: BaseException, attributes: Any = None,
+                             timestamp: int | None = None, escaped: bool = False) -> None:
+            span.add_event("exception", {"exception.type": type(exception).__name__}, timestamp)
+
+        span.record_exception = record_exception
+
+    def on_end(self, span: Any) -> None:
+        return None
+
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return True
+
+
+def _scrub_hooks() -> list:
+    from google.adk.telemetry.setup import OTelHooks
+
+    return [OTelHooks(span_processors=[ScrubExceptions()])]
 
 
 def _install(hooks: list, resource: Any = None) -> None:
@@ -65,9 +99,9 @@ def setup(mode: Mode | None = None) -> str:
     os.environ.setdefault("OTEL_SERVICE_NAME", SERVICE)
     if mode == "local":
         os.environ.setdefault("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", PHOENIX)
-        _install([])
+        _install([] if content else _scrub_hooks())
     else:
-        _install(_gcp_hooks(), _gcp_resource())
+        _install([*_scrub_hooks(), *_gcp_hooks()], _gcp_resource())
     return mode
 
 
@@ -92,6 +126,12 @@ def error_status(description: str) -> Any:
     from opentelemetry.trace import Status, StatusCode
 
     return Status(StatusCode.ERROR, description)
+
+
+def span(name: str) -> Any:
+    """Our own spans: never record exception text, never overwrite our status."""
+    return tracer().start_as_current_span(name, record_exception=False,
+                                          set_status_on_exception=False)
 
 
 def tracer() -> Any:
