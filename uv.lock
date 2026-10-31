@@ -18,7 +18,41 @@ members = [
     "health-data",
     "health-eval",
     "health-ledger",
+    "health-web",
     "jobs",
+]
+
+[[package]]
+name = "a2ui-agent-sdk"
+version = "0.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "a2ui-core" },
+    { name = "antlr4-python3-runtime" },
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/0c/d959c21d4320206b525cf931c60dbd89c799b3f9a972346de122888a0da2/a2ui_agent_sdk-0.9.0.tar.gz", hash = "sha256:3caa48ab0b2d9bc835e2d96976a3698256d6f4bba778ccc03a25a9c654ad6294", size = 305820, upload-time = "2026-10-17T01:03:34.863Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/0c/c9097e6b5eba90a0166020b0c3416fb573d51ca0b9afa6675bfd594a7ef2/a2ui_agent_sdk-0.9.0-py3-none-any.whl", hash = "sha256:d195025e3a88db32957c79295e9f1555a7a2a884ce3077f96722b31fab7f23d9", size = 251596, upload-time = "2026-10-17T01:03:32.367Z" },
+]
+
+[[package]]
+name = "a2ui-core"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "babel" },
+    { name = "jsonschema" },
+    { name = "pydantic" },
+    { name = "referencing" },
+    { name = "regex" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/33/b4/bc9c54a5b19f2aa1548f1791f7f7e0f75888b93668b7c03ede4474c804d9/a2ui_core-0.4.0.tar.gz", hash = "sha256:840749f45c477a1a4958a64a9c521dca13192693d745cbf45caafb34902ed6fc", size = 278287, upload-time = "2026-10-17T01:03:33.709Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/11/30/07a774bccf1d3339c402877753329d3c2d727104fb41ea67e6415c48f0e0/a2ui_core-0.4.0-py3-none-any.whl", hash = "sha256:e9839f96003d731b44e40cf6e8ad251282ded398281067412f08b0bbcd16951d", size = 247823, upload-time = "2026-10-17T01:03:30.985Z" },
 ]
 
 [[package]]
@@ -28,6 +62,49 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/1f/1d/58e2b5a6e4d703ccb2a029943d665974cb3d5a4fb2b3e3675dd03a9df10e/absl_py-2.5.1.tar.gz", hash = "sha256:286e71c82c1a38e75bbcf185f9b37d0305ad7786535107cb49bf4df9ff2e1f95", size = 118387, upload-time = "2026-10-09T08:38:58.037Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/7d/01e62f59e4166af1be6238d9f2b7f3453630c51b8044b412d05b5606532a/absl_py-2.5.1-py3-none-any.whl", hash = "sha256:721200f2f0e9960f2ca9dc3a2a706b201f5f75d812c158f059cbbe29eeafbdb8", size = 137673, upload-time = "2026-10-09T08:38:56.629Z" },
+]
+
+[[package]]
+name = "ag-ui-a2ui-toolkit"
+version = "0.0.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fe/dc/96a776fcac704747bf860fbdd7c4e53ca5d98623baf5fc782e278e3e45f1/ag_ui_a2ui_toolkit-0.0.5.tar.gz", hash = "sha256:ee5fc12282e439a83f3d77f11ff22b79f820cb60cec7ac2b5cb86130fc6a0e57", size = 19056, upload-time = "2026-10-16T08:45:01.817Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/a3/6da8b2311efadf1a68c476e271bc8f2e81bf83f5ae558ddfe9ac66ec5f81/ag_ui_a2ui_toolkit-0.0.5-py3-none-any.whl", hash = "sha256:26084f9e2bc46fdd9c216caec2482731fe687e1bb8c303754f5027353e981bfd", size = 21361, upload-time = "2026-10-16T08:45:00.839Z" },
+]
+
+[[package]]
+name = "ag-ui-adk"
+version = "0.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "a2ui-agent-sdk" },
+    { name = "a2ui-core" },
+    { name = "ag-ui-a2ui-toolkit" },
+    { name = "ag-ui-protocol" },
+    { name = "aiohttp" },
+    { name = "asyncio" },
+    { name = "fastapi" },
+    { name = "google-adk" },
+    { name = "pydantic" },
+    { name = "sse-starlette" },
+    { name = "uvicorn" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/5c/ab1070964e17c1805089709f9e8c660228c132d7ddac256e7fb97c7a0629/ag_ui_adk-0.11.0.tar.gz", hash = "sha256:e27a3d9f2182d44b88964756beaf0c89f75c32d8e0d44077e414d1cae5fd988f", size = 127509, upload-time = "2026-10-21T07:06:06.264Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/60/3764b035346751743dd0dc5cb8b60a3e07516e8ab6431f15805b109289d3/ag_ui_adk-0.11.0-py3-none-any.whl", hash = "sha256:43c43e86f547ef55d399302878a53583d314421cee08be3888d0f3f88c2db7ce", size = 135439, upload-time = "2026-10-21T07:06:04.918Z" },
+]
+
+[[package]]
+name = "ag-ui-protocol"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/57/92/d88fdc7f4648dc38d3d54c595066bb3e63a4c091884ffb2f98272c33eef8/ag_ui_protocol-1.0.0.tar.gz", hash = "sha256:cfebecef2e7bc942cc8a52d908a4ea86a98f631d2ffdc6ec5812bb843eac74fb", size = 30759, upload-time = "2026-09-17T18:31:19.448Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/b0/850be4576e6443dc575daa54188d8136ae2b2eca3f19e098e7a088fc9ebc/ag_ui_protocol-1.0.0-py3-none-any.whl", hash = "sha256:0058eaf0522201089d444e430fc35180bc8ad0222cae39e8568b313e8105d9e6", size = 36842, upload-time = "2026-09-17T18:31:18.471Z" },
 ]
 
 [[package]]
@@ -202,6 +279,15 @@ wheels = [
 ]
 
 [[package]]
+name = "antlr4-python3-runtime"
+version = "4.13.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/5f/2cdf6f7aca3b20d3f316e9f505292e1f256a32089bd702034c29ebde6242/antlr4_python3_runtime-4.13.2.tar.gz", hash = "sha256:909b647e1d2fc2b70180ac586df3933e38919c85f98ccc656a96cd3f25ef3916", size = 117467, upload-time = "2024-08-03T19:00:12.757Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/03/a851e84fcbb85214dc637b6378121ef9a0dd61b4c65264675d8a5c9b1ae7/antlr4_python3_runtime-4.13.2-py3-none-any.whl", hash = "sha256:fe3835eb8d33daece0e799090eda89719dbccee7aa39ef94eed3818cafa5a7e8", size = 144462, upload-time = "2024-08-03T19:00:11.134Z" },
+]
+
+[[package]]
 name = "anyio"
 version = "4.15.1"
 source = { registry = "https://pypi.org/simple" }
@@ -212,6 +298,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a9/d2/f4d173e22df740bc37b1db102b386ba719b66e95b0f0d751f556b387e6d2/anyio-4.15.1.tar.gz", hash = "sha256:9f28306018cbd6d329e64a36d58256edff76dd996fe423bc957326e578b82a94", size = 276966, upload-time = "2026-09-05T10:42:39.44Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b8/4bd346e22b28902df4d651910f5242c28d84e4a5c2435ca5c3f797ed7e2e/anyio-4.15.1-py3-none-any.whl", hash = "sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101", size = 132079, upload-time = "2026-09-05T10:42:37.923Z" },
+]
+
+[[package]]
+name = "asyncio"
+version = "4.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/71/ea/26c489a11f7ca862d5705db67683a7361ce11c23a7b98fc6c2deaeccede2/asyncio-4.0.0.tar.gz", hash = "sha256:570cd9e50db83bc1629152d4d0b7558d6451bb1bfd5dfc2e935d96fc2f40329b", size = 5371, upload-time = "2025-08-05T02:51:46.605Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/64/eff2564783bd650ca25e15938d1c5b459cda997574a510f7de69688cb0b4/asyncio-4.0.0-py3-none-any.whl", hash = "sha256:c1eddb0659231837046809e68103969b2bef8b0400d59cfa6363f6b5ed8cc88b", size = 5555, upload-time = "2025-08-05T02:51:45.767Z" },
 ]
 
 [[package]]
@@ -237,6 +332,15 @@ wheels = [
 ]
 
 [[package]]
+name = "babel"
+version = "2.18.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/b2/51899539b6ceeeb420d40ed3cd4b7a40519404f9baf3d4ac99dc413a834b/babel-2.18.0.tar.gz", hash = "sha256:b80b99a14bd085fcacfa15c9165f651fbb3406e66cc603abf11c5750937c992d", size = 9959554, upload-time = "2026-02-01T12:30:56.078Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/77/f5/21d2de20e8b8b0408f0681956ca2c69f1320a3848ac50e6e7f39c6159675/babel-2.18.0-py3-none-any.whl", hash = "sha256:e2b422b277c2b9a9630c1d7903c2a00d0830c409c59ac8cae9081c92f1aeba35", size = 10196845, upload-time = "2026-02-01T12:30:53.445Z" },
+]
+
+[[package]]
 name = "calibrated-health-agent"
 version = "0.1.0"
 source = { virtual = "." }
@@ -246,6 +350,7 @@ dependencies = [
     { name = "health-data" },
     { name = "health-eval" },
     { name = "health-ledger" },
+    { name = "health-web" },
     { name = "jobs" },
 ]
 
@@ -266,6 +371,7 @@ requires-dist = [
     { name = "health-data", editable = "packages/health_data" },
     { name = "health-eval", editable = "packages/health_eval" },
     { name = "health-ledger", editable = "packages/health_ledger" },
+    { name = "health-web", editable = "packages/health_web" },
     { name = "jobs", editable = "apps/jobs" },
 ]
 
@@ -1311,6 +1417,40 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2" },
     { name = "typer", specifier = ">=0.12" },
 ]
+
+[[package]]
+name = "health-web"
+version = "0.1.0"
+source = { editable = "packages/health_web" }
+dependencies = [
+    { name = "ag-ui-adk" },
+    { name = "fastapi" },
+    { name = "health-agents" },
+    { name = "health-core" },
+    { name = "health-data" },
+    { name = "health-ledger" },
+    { name = "typer" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+demo = [
+    { name = "health-eval" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ag-ui-adk", specifier = "==0.11.0" },
+    { name = "fastapi", specifier = ">=0.115.2" },
+    { name = "health-agents", editable = "packages/health_agents" },
+    { name = "health-core", editable = "packages/health_core" },
+    { name = "health-data", editable = "packages/health_data" },
+    { name = "health-eval", marker = "extra == 'demo'", editable = "packages/health_eval" },
+    { name = "health-ledger", editable = "packages/health_ledger" },
+    { name = "typer", specifier = ">=0.12" },
+    { name = "uvicorn", specifier = ">=0.35.0" },
+]
+provides-extras = ["demo"]
 
 [[package]]
 name = "hf-xet"
@@ -3017,6 +3157,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a2/87/a6771e1546d97e7e041b6ae58d80074f81b7d5121207425c964ddf5cfdbd/sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc", size = 20372, upload-time = "2024-02-25T23:20:04.057Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e9/44/75a9c9421471a6c4805dbf2356f7c181a29c1879239abab1ea2cc8f38b40/sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2", size = 10235, upload-time = "2024-02-25T23:20:01.196Z" },
+]
+
+[[package]]
+name = "sse-starlette"
+version = "3.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "starlette" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/71/7f/3b8ec4f27833f7b8c270a3ef960b6d435e1065439847bc0fcd1e58ae898b/sse_starlette-3.6.0.tar.gz", hash = "sha256:623151d6c20dc0eebf1b3379c27faae91fff883bac7ab6665f16f46440a88b3a", size = 41174, upload-time = "2026-10-25T20:31:59.372Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cf/49/35053078cdfcf639237e8bee6dc6f34f1b3a3cc8d01800a1e213e1660ff6/sse_starlette-3.6.0-py3-none-any.whl", hash = "sha256:e4dfa4d237d2712cb2b4d4918eda9b457cd6b44bbecdc838af75de836565bafd", size = 17985, upload-time = "2026-10-25T20:31:58.134Z" },
 ]
 
 [[package]]
