@@ -11,7 +11,7 @@ dev = ["pytest>=8.0", "ruff>=0.6", "pyright>=1.1.380", "pre-commit>=3.8", "panda
 
 [tool.uv.workspace]
 members = ["packages/*", "apps/*"]
-exclude = ["apps/web"]  # the Next.js front end (npm), not a Python package
+exclude = ["apps/web", "apps/webservice"]  # the Next.js front end and its Dockerfile, not Python packages
 
 [tool.uv.sources]
 health-core = { workspace = true }
