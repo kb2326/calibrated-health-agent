@@ -1,0 +1,10 @@
+[
+  {"match": "resting heart rate",
+   "steps": [
+     {"call": "run_sql", "args": {"query": "SELECT date, agg_value AS resting_hr FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate' ORDER BY date DESC LIMIT 7"}},
+     {"text": "Here is your resting heart rate for the last week [{receipt}]."}]},
+  {"match": "remember",
+   "steps": [
+     {"call": "save_fact", "args": {"text": "I train on Tuesdays"}},
+     {"text": "Done. I'll remember that you train on Tuesdays."}]}
+]

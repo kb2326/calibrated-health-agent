@@ -1,0 +1,268 @@
+<title>Pick a Look</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700;800&family=Saira:wght@400;500;600&family=Anton&family=Work+Sans:wght@400;500;600&family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a decision page. A short brief, three tabs, one large mockup per tab.
+   The page chrome follows the viewer's theme; each mockup is its own visual world with its own
+   dark and light mode, switched inside the frame. */
+:root {
+  --bg: #f1f3f5; --fg: #121a21; --muted: #56626d; --line: #d4dbe1; --surface: #ffffff;
+  --accent: #1f5fd1;
+  --body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f151a; --fg: #e4eaef; --muted: #96a3ae; --line: #25313a;
+    --surface: #161e25; --accent: #7aa7ff; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #0f151a; --fg: #e4eaef; --muted: #96a3ae; --line: #25313a;
+  --surface: #161e25; --accent: #7aa7ff; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 15.5px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.page { max-width: 1240px; margin: 0 auto; padding-block: 32px 72px; }
+h1 { font: 700 30px/1.15 var(--body); margin: 0 0 8px; text-wrap: balance; }
+.brief { color: var(--muted); max-width: 72ch; margin: 0 0 22px; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.tabs button { font: 600 14px/1 var(--body); padding: 11px 16px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.tabs button:focus-visible, .mode:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.about { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; margin-bottom: 14px; }
+.about p { margin: 0; max-width: 78ch; }
+.about b { font-weight: 700; }
+.mode { font: 600 13px/1 var(--body); padding: 9px 13px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); cursor: pointer; white-space: nowrap; }
+.stage { overflow-x: auto; border-radius: 14px; }
+.frame { min-width: 980px; border-radius: 14px; overflow: hidden; }
+.foot { color: var(--muted); font-size: 13.5px; margin-top: 12px; max-width: 80ch; }
+
+/* ---------- shared mockup skeleton ---------- */
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 640px; background: var(--m-bg); color: var(--m-fg); font-family: var(--m-body); }
+.top { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; border-bottom: 1px solid var(--m-line); }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--m-display); }
+.badge { font: 500 11.5px/1 var(--mono); padding: 5px 8px; border-radius: 4px; background: var(--m-soft); color: var(--m-muted); }
+.chat { padding: 22px 26px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.q { align-self: flex-end; max-width: 70%; padding: 10px 14px; background: var(--m-soft); }
+.steps { display: grid; gap: 6px; }
+.step { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13.5px; color: var(--m-muted); }
+.step .dot { width: 14px; height: 14px; }
+.step .meta { font: 400 12px/1 var(--mono); font-variant-numeric: tabular-nums; }
+.ans { font-size: 16px; line-height: 1.6; max-width: 62ch; }
+.chip { font: 500 12px/1 var(--mono); padding: 4px 7px; margin: 0 2px; border: 0; cursor: pointer; vertical-align: 1px; background: var(--m-chip); color: var(--m-chip-fg); }
+.card { padding: 16px 18px 12px; background: var(--m-card); }
+.card .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.big { font-family: var(--m-display); font-variant-numeric: tabular-nums; line-height: 1; }
+.card svg { display: block; width: 100%; height: auto; margin-top: 10px; }
+.ask { margin-top: auto; display: flex; gap: 10px; }
+.ask div { flex: 1; padding: 12px 14px; color: var(--m-muted); background: var(--m-soft); }
+.ask span { padding: 12px 16px; font-weight: 600; background: var(--m-accent); color: var(--m-on-accent); }
+.panel { border-left: 1px solid var(--m-line); padding: 20px 20px; display: flex; flex-direction: column; gap: 12px; background: var(--m-panel); min-width: 0; }
+.panel h3 { margin: 0; font-family: var(--m-display); }
+.panel .desc { font-size: 14px; color: var(--m-fg); }
+.kv { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; font-size: 13px; }
+.kv dt { color: var(--m-muted); } .kv dd { margin: 0; font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+pre.code { margin: 0; padding: 12px; font: 400 12px/1.5 var(--mono); white-space: pre-wrap; background: var(--m-code); color: var(--m-fg); }
+.rerun { display: flex; gap: 10px; align-items: center; }
+.rerun span:first-child { padding: 9px 14px; font-weight: 600; background: var(--m-accent); color: var(--m-on-accent); }
+.ok { font-weight: 600; color: var(--m-good); }
+
+/* ---------- A: race telemetry ---------- */
+.a { --m-display: "Saira Condensed", "Arial Narrow", sans-serif; --m-body: "Saira", system-ui, sans-serif; }
+.a[data-mode="dark"] { --m-bg: #101317; --m-fg: #eef1f4; --m-muted: #8d97a3; --m-line: #232a33; --m-soft: #1a2028; --m-card: #151a21;
+  --m-panel: #0c0f13; --m-code: #161c24; --m-chip: #2a2140; --m-chip-fg: #c9b5ff; --m-accent: #ffd400; --m-on-accent: #121212;
+  --m-good: #3ee08f; --m-purple: #b38cff; --m-bar: #3a4452; --m-grid: #232a33; }
+.a[data-mode="light"] { --m-bg: #f4f5f7; --m-fg: #0f1318; --m-muted: #5b6672; --m-line: #d7dce2; --m-soft: #e7eaee; --m-card: #ffffff;
+  --m-panel: #eceff2; --m-code: #ffffff; --m-chip: #ece5ff; --m-chip-fg: #5a2fd6; --m-accent: #111418; --m-on-accent: #ffd400;
+  --m-good: #0f8a4f; --m-purple: #6b3ee6; --m-bar: #b8c0ca; --m-grid: #e1e5ea; }
+.a .brand b { font-size: 22px; font-weight: 800; letter-spacing: .01em; text-transform: uppercase; font-style: italic; }
+.a .q { border-radius: 2px; border-left: 3px solid var(--m-accent); }
+.a .step .dot { border-radius: 1px; transform: skewX(-12deg); background: var(--m-good); }
+.a .step.run .dot { background: var(--m-accent); }
+.a .chip { border-radius: 2px; }
+.a .card { border-top: 3px solid var(--m-purple); border-radius: 2px; }
+.a .big { font-size: 64px; font-weight: 800; font-style: italic; }
+.a .lbl { font: 600 14px/1.2 var(--m-display); text-transform: uppercase; letter-spacing: .04em; color: var(--m-muted); }
+.a .ask div, .a .ask span, .a .rerun span:first-child { border-radius: 2px; }
+.a .panel h3 { font-size: 24px; font-weight: 700; text-transform: uppercase; font-style: italic; }
+.a .sector { display: flex; gap: 3px; } .a .sector i { flex: 1; height: 5px; background: var(--m-good); }
+.a .sector i.p { background: var(--m-purple); } .a .sector i.y { background: var(--m-accent); }
+
+/* ---------- B: training log ---------- */
+.b { --m-display: "Anton", Impact, "Arial Narrow", sans-serif; --m-body: "Work Sans", system-ui, sans-serif; }
+.b[data-mode="light"] { --m-bg: #f5f2ea; --m-fg: #1b1d22; --m-muted: #6a6658; --m-line: #d9d2c0; --m-soft: #ebe5d6; --m-card: #fbf9f3;
+  --m-panel: #efe9db; --m-code: #fbf9f3; --m-chip: #1b1d22; --m-chip-fg: #f5f2ea; --m-accent: #d23a2a; --m-on-accent: #fff;
+  --m-good: #2c7a3f; --m-hi: #ffe45c; --m-bar: #1b1d22; --m-grid: #ddd5c2; }
+.b[data-mode="dark"] { --m-bg: #1a1b1e; --m-fg: #ece8de; --m-muted: #a39e8e; --m-line: #34332f; --m-soft: #25262a; --m-card: #202125;
+  --m-panel: #16171a; --m-code: #202125; --m-chip: #ece8de; --m-chip-fg: #1a1b1e; --m-accent: #ff5a43; --m-on-accent: #160806;
+  --m-good: #6fd08a; --m-hi: #c9a800; --m-bar: #ece8de; --m-grid: #34332f; }
+.b .app { background-image: repeating-linear-gradient(transparent 0 31px, var(--m-line) 31px 32px); background-position: 0 70px; }
+.b .brand b { font-size: 24px; letter-spacing: .02em; text-transform: uppercase; }
+.b .q { border-radius: 0; background: transparent; border: 2px solid var(--m-fg); font-weight: 500; }
+.b .step { counter-increment: lane; }
+.b .steps { counter-reset: lane; }
+.b .step .dot { width: 20px; height: 20px; border-radius: 50%; background: var(--m-fg); color: var(--m-bg); display: grid; place-items: center; font: 600 11px/1 var(--m-body); }
+.b .step .dot::before { content: counter(lane); }
+.b .chip { border-radius: 0; }
+.b .card { border: 2px solid var(--m-fg); }
+.b .big { font-size: 66px; letter-spacing: .01em; }
+.b .lbl { font: 600 13px/1.2 var(--m-body); color: var(--m-muted); }
+.b mark { background: var(--m-hi); color: #1b1d22; padding: 0 3px; }
+.b .ask div { background: transparent; border-bottom: 2px solid var(--m-fg); }
+.b .panel h3 { font-size: 26px; text-transform: uppercase; letter-spacing: .02em; }
+.b .lanes { display: flex; gap: 0; height: 8px; } .b .lanes i { flex: 1; background: var(--m-accent); border-right: 2px solid var(--m-card); }
+
+/* ---------- C: watch face ---------- */
+.c { --m-display: "Unbounded", "Arial Black", sans-serif; --m-body: "Manrope", system-ui, sans-serif; }
+.c[data-mode="dark"] { --m-bg: #000000; --m-fg: #f2f2f5; --m-muted: #8e8e98; --m-line: #1d1d22; --m-soft: #17171c; --m-card: #111115;
+  --m-panel: #0a0a0d; --m-code: #15151a; --m-chip: #2a1430; --m-chip-fg: #ff8fd8; --m-accent: #ff4d8d; --m-on-accent: #16030a;
+  --m-good: #4fe3c1; --m-z1: #4fe3c1; --m-z2: #ffb340; --m-z3: #ff4d8d; --m-bar: #ff4d8d; --m-grid: #1d1d22; }
+.c[data-mode="light"] { --m-bg: #f4f4f7; --m-fg: #101014; --m-muted: #62626c; --m-line: #e1e1e8; --m-soft: #e9e9ef; --m-card: #ffffff;
+  --m-panel: #ececf2; --m-code: #ffffff; --m-chip: #ffe1ef; --m-chip-fg: #b0135a; --m-accent: #e0136a; --m-on-accent: #fff;
+  --m-good: #0b8f74; --m-z1: #0b8f74; --m-z2: #c77700; --m-z3: #e0136a; --m-bar: #e0136a; --m-grid: #e1e1e8; }
+.c .brand b { font-size: 17px; font-weight: 700; }
+.c .q { border-radius: 22px 22px 6px 22px; }
+.c .step .dot { border-radius: 50%; background: var(--m-good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--m-good) 25%, transparent); }
+.c .step.run .dot { background: var(--m-accent); }
+.c .chip { border-radius: 999px; padding: 4px 9px; }
+.c .card { border-radius: 28px; padding: 20px 22px 14px; }
+.c .big { font-size: 48px; font-weight: 700; letter-spacing: -.02em; }
+.c .lbl { font: 600 13px/1.2 var(--m-body); color: var(--m-muted); }
+.c .ask div { border-radius: 999px; } .c .ask span { border-radius: 999px; }
+.c .rerun span:first-child { border-radius: 999px; }
+.c .panel { border-radius: 0; } .c .panel h3 { font-size: 19px; font-weight: 700; }
+.c pre.code { border-radius: 16px; }
+.c .ringrow { display: flex; gap: 18px; align-items: center; }
+
+@media (max-width: 720px) { .about { grid-template-columns: 1fr; } h1 { font-size: 25px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <h1>Pick a look for the web app</h1>
+  <p class="brief">Three directions for the same screen, all on synthetic data: you ask "How did I sleep this week?", the agent shows its steps, the answer streams in with a sleep chart, and a receipt is open on the right. Each mockup has its own dark and light mode. Tell me A, B or C (or a mix, like "A's layout with C's colours").</p>
+
+  <div class="tabs" role="tablist" aria-label="Visual directions">
+    <button role="tab" id="tab-a" aria-controls="view" aria-selected="true" data-dir="a">A · Race telemetry</button>
+    <button role="tab" id="tab-b" aria-controls="view" aria-selected="false" data-dir="b">B · Training log</button>
+    <button role="tab" id="tab-c" aria-controls="view" aria-selected="false" data-dir="c">C · Watch face</button>
+  </div>
+
+  <div class="about">
+    <p id="about"></p>
+    <button class="mode" id="mode" type="button">Switch to light</button>
+  </div>
+  <div class="stage"><div class="frame" id="view" role="tabpanel"></div></div>
+  <p class="foot">All numbers are synthetic. Average 409 minutes asleep a night = 6 h 49 min; best Tue 458 min (7 h 38 min); shortest Sat 352 min (5 h 52 min). The chart is drawn to scale from those seven values.</p>
+</div>
+
+<script>
+const NIGHTS = [["Fri", 398], ["Sat", 352], ["Sun", 431], ["Mon", 405], ["Tue", 458], ["Wed", 412], ["Thu", 404]];
+const AVG = NIGHTS.reduce((s, n) => s + n[1], 0) / NIGHTS.length; // 408.6
+const R1 = "r-4f2a9c1e07", R2 = "r-9b13d0a6c2";
+const ABOUT = {
+  a: "<b>Race telemetry.</b> A pit-wall timing screen: slanted condensed numbers, sector colours (purple for your best night, yellow for a step in progress), hard edges. Loudest of the three; dark is its natural home.",
+  b: "<b>Training log.</b> A coach's notebook from a track meet: ruled paper, tall poster type, numbered steps like lanes, a highlighter on the key number. Warmest and most editorial; light is its natural home.",
+  c: "<b>Watch face.</b> A sports-watch screen: pure black, round complications, a heart-rate-zone palette (teal, amber, pink) and a ring against an 8-hour goal. Most product-like; looks like it shipped from a wearable brand.",
+};
+const NATURAL = { a: "dark", b: "light", c: "dark" };
+
+function hm(min) { const h = Math.floor(min / 60), m = Math.round(min % 60); return `${h} h ${String(m).padStart(2, "0")}`; }
+
+function bars(dir) {
+  const W = 560, H = 170, padL = 34, padB = 22, top = 10, max = 480, min = 300;
+  const y = (v) => top + (H - padB - top) * (1 - (v - min) / (max - min));
+  const bw = (W - padL - 10) / NIGHTS.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Minutes asleep per night, Friday to Thursday; average ${Math.round(AVG)} minutes">`;
+  for (const t of [300, 360, 420, 480]) {
+    s += `<line x1="${padL}" x2="${W - 6}" y1="${y(t)}" y2="${y(t)}" stroke="var(--m-grid)" stroke-width="1"/>`;
+    s += `<text x="${padL - 6}" y="${y(t) + 4}" text-anchor="end" font-size="10.5" font-family="JetBrains Mono, monospace" fill="var(--m-muted)">${t / 60}h</text>`;
+  }
+  NIGHTS.forEach(([d, v], i) => {
+    const x = padL + i * bw + bw * 0.18, w = bw * 0.64, best = v === 458;
+    let fill = "var(--m-bar)";
+    if (dir === "a") fill = best ? "var(--m-purple)" : "var(--m-bar)";
+    if (dir === "c") fill = v >= 420 ? "var(--m-z1)" : v >= 390 ? "var(--m-z2)" : "var(--m-z3)";
+    const rx = dir === "c" ? w / 2 : 0;
+    const transform = dir === "a" ? ` transform="skewX(-8)" transform-origin="${x + w / 2} ${H - padB}"` : "";
+    s += `<rect x="${x}" y="${y(v)}" width="${w}" height="${H - padB - y(v)}" rx="${rx}" fill="${fill}"${transform}/>`;
+    s += `<text x="${x + w / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--m-muted)">${d}</text>`;
+  });
+  const ay = y(AVG);
+  if (dir === "b") s += `<rect x="${padL}" y="${ay - 4}" width="${W - padL - 6}" height="8" fill="var(--m-hi)" opacity=".75"/>`;
+  s += `<line x1="${padL}" x2="${W - 6}" y1="${ay}" y2="${ay}" stroke="${dir === "a" ? "var(--m-accent)" : "var(--m-fg)"}" stroke-width="1.5" stroke-dasharray="${dir === "b" ? "0" : "5 4"}"/>`;
+  s += `<text x="${W - 8}" y="${ay - 7}" text-anchor="end" font-size="11" font-weight="600" fill="var(--m-fg)">avg ${hm(AVG)}</text>`;
+  return s + "</svg>";
+}
+
+function ring() {
+  const r = 34, c = 2 * Math.PI * r, frac = AVG / 480;
+  return `<svg viewBox="0 0 90 90" width="90" height="90" role="img" aria-label="${Math.round(frac * 100)}% of an 8-hour goal">
+    <circle cx="45" cy="45" r="${r}" fill="none" stroke="var(--m-soft)" stroke-width="9"/>
+    <circle cx="45" cy="45" r="${r}" fill="none" stroke="var(--m-accent)" stroke-width="9" stroke-linecap="round"
+      stroke-dasharray="${(c * frac).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 45 45)"/>
+    <text x="45" y="50" text-anchor="middle" font-family="Unbounded, sans-serif" font-size="15" font-weight="700" fill="var(--m-fg)">${Math.round(frac * 100)}%</text></svg>`;
+}
+
+function chip(id) { return `<button class="chip" type="button" aria-label="Open receipt ${id}">${id}</button>`; }
+
+function view(dir, mode) {
+  const steps = [
+    ["Checking what data exists", "34 metrics · 6 tables", false],
+    ["Running a query", `7 rows · ${R1}`, false],
+    ["Computing in the sandbox", `${R2}`, false],
+    ["Checking every number", "all backed", false],
+  ];
+  const stepHtml = steps.map(([l, m]) => `<div class="step"><span class="dot"></span><span>${l}</span><span class="meta">${m}</span></div>`).join("");
+  const headline = dir === "b" ? `<mark>${hm(AVG)}</mark>` : hm(AVG);
+  const extra = dir === "a" ? `<div class="sector" aria-hidden="true"><i></i><i class="p"></i><i></i><i class="y"></i></div>`
+    : dir === "b" ? `<div class="lanes" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>` : "";
+  const head = dir === "c"
+    ? `<div class="ringrow">${ring()}<div><div class="lbl">Asleep, nightly average</div><div class="big">${hm(AVG)}</div><div class="lbl">7 nights · goal 8 h ${chip(R1)}</div></div></div>`
+    : `<div class="head"><div><div class="lbl">Asleep, nightly average · last 7 nights</div><div class="big">${headline}</div></div><div class="lbl">7 of 7 nights ${chip(R1)}</div></div>`;
+  return `<div class="app ${dir}" data-mode="${mode}">
+    <div class="top"><div class="brand"><b>Calibrated</b><span class="badge">demo data</span></div><span class="badge">Erode · 31°/23°</span></div>
+    <div class="chat">
+      <div class="q">How did I sleep this week?</div>
+      ${extra}
+      <div class="steps" aria-label="Agent at work">${stepHtml}</div>
+      <div class="ans">You slept <b>6 h 49 min</b> a night on average over the last 7 nights (Oct 24–30) ${chip(R1)}. Your best night was Tuesday at 7 h 38 min, after tennis; Saturday was the shortest at 5 h 52 min. Deep sleep averaged 77 minutes ${chip(R2)}.</div>
+      <div class="card">${head}${bars(dir)}</div>
+      <div class="ask"><div>Ask about your sleep, workouts, heart or weather</div><span>Ask</span></div>
+    </div>
+    <aside class="panel" aria-label="Receipt">
+      <h3>Receipt ${R1}</h3>
+      <div class="desc">SQL over your sleep sessions</div>
+      <dl class="kv"><dt>Kind</dt><dd>sql · read-only</dd><dt>As of</dt><dd>2026-10-30</dd><dt>Output</dt><dd>7 rows</dd><dt>Data hash</dt><dd>4f2a9c1e07b3…</dd></dl>
+      <pre class="code">SELECT date, minutes_asleep
+FROM sleep_sessions
+WHERE main_sleep = 1
+  AND date BETWEEN '2026-10-24'
+               AND '2026-10-30'
+ORDER BY date;</pre>
+      <div class="rerun"><span>Re-run</span><span class="ok">Matches</span></div>
+      <div class="desc" style="color:var(--m-muted);font-size:13px">Re-ran the same code on the same data and got the same result.</div>
+    </aside>
+  </div>`;
+}
+
+let dir = "a", mode = "dark";
+const viewEl = document.getElementById("view"), aboutEl = document.getElementById("about"), modeBtn = document.getElementById("mode");
+function render() {
+  viewEl.innerHTML = view(dir, mode);
+  viewEl.setAttribute("aria-labelledby", "tab-" + dir);
+  aboutEl.innerHTML = ABOUT[dir];
+  modeBtn.textContent = mode === "dark" ? "Switch to light" : "Switch to dark";
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.dir === dir)));
+}
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+  dir = b.dataset.dir; mode = NATURAL[dir]; try { location.hash = dir; } catch (e) {} render();
+}));
+modeBtn.addEventListener("click", () => { mode = mode === "dark" ? "light" : "dark"; render(); });
+const start = (location.hash || "").slice(1);
+if (["a", "b", "c"].includes(start)) { dir = start; mode = NATURAL[dir]; }
+render();
+window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (["a","b","c"].includes(h)) { dir = h; mode = NATURAL[dir]; render(); } });
+</script>

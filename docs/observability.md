@@ -22,6 +22,9 @@ the reply and the tool arguments.
   same arguments without seeing what they were.
 - A `cha.turn` span around each chat turn, with `cha.usd` (list-price cost) and
   `cha.receipts` (how many receipts the turn produced).
+- In the web app, a `cha.web.request` span per request with `http.route` (the route
+  template, never path values), `http.method` and `http.status_code`; never the query string
+  or a body (`tests/test_web_security.py`).
 
 `tests/test_tracing.py` runs a real turn into an in-memory exporter. It checks that neither
 the SQL nor the question appears in any span attribute, and that the receipt id does.

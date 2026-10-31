@@ -15,6 +15,7 @@ locals {
     "cloudtrace.googleapis.com",           # traces (free tier: 2.5M spans/month)
     "telemetry.googleapis.com",            # ADK exports OTLP spans here
     "observability.googleapis.com",        # trace storage (the _Trace bucket) behind the Telemetry API
+    "iap.googleapis.com",                  # Google sign-in in front of the web app (Phase 5)
   ]
 }
 

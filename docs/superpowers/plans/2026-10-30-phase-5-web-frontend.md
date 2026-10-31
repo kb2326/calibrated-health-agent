@@ -25,6 +25,28 @@
 - Cloud spend under $1/month in total. Personal accounts only. Deploy needs the owner's yes.
 - No real health data in the repo, CI, fixtures or screenshots.
 
+## Amendments after Phase 4.5 (2026-10-31)
+
+Phase 4.5 changed the agent after this plan was written. These override the tasks below.
+
+- **Topologies.** `multi` is now an alias of `team`: one agent with a coach and a domain expert as `AgentTool`s (ADR 0007). Task 1's multi test becomes `test_team_topology_streams_and_may_call_a_specialist`; there is no router or synthesizer.
+- **Unbacked numbers.** The `unverified:` footer is gone. The answer may end with a quiet note, `_Note: N figure(s) wasn't/weren't computed by a tool: X._`, parsed by `health_agents.verify.unbacked_in`. Task 5 parses that note (and still the legacy footer); Task 7's `UnverifiedNote` shows it as a quiet note, not a warning.
+- **Live location (owner requirement).** The browser asks for the device location once (with the user's permission) and sends `{latitude, longitude, place?}` in the AG-UI run's `state.location`. The server copies only those numeric keys into the ADK session state `location`, which the `weather` tool already reads; the model never sees or sets it. If permission is refused, the home location (Erode) is used. New Task 3a below.
+- **14 tools.** `ALL_TOOLS` has 14 entries (13 plus ADK `load_memory`); the timeline labels each.
+- **Detail tables.** Receipts may be SQL over `sleep_sessions`, `exercise_sessions`, `night_vitals`, `activity_breakdown` or `weather_daily`; `describe_receipt` names them.
+
+### Task 3a: Device location into session state
+
+**Files:** Modify `src/health_web/agent.py` (or `app.py`); Test `tests/test_web_location.py`
+
+- [ ] **Step 1: Failing tests:**
+  - `test_location_from_run_state_reaches_weather_tool`: a run whose `state.location` is `{"latitude": 13.08, "longitude": 80.27, "place": "Chennai"}` makes the `weather` tool request those coordinates (fake `weather.forecast`);
+  - `test_location_is_sanitised`: non-numeric or out-of-range values (|lat| > 90, |lon| > 180), extra keys and a `place` longer than 60 characters are dropped or trimmed; nothing else from client state reaches the session;
+  - `test_no_location_uses_home`.
+- [ ] **Step 2–4:** FAIL → implement → PASS. **Step 5:** Commit `feat(web): device location for the weather tool, from trusted session state`.
+
+In the front end (Task 7), `navigator.geolocation.getCurrentPosition` runs once per session after a visible "Use my location for weather" choice; a refusal is remembered for the session only.
+
 ## Review Focus
 
 1. **A run that errors mid-answer** (quota, budget reached, network) → the partial text stays, marked "incomplete", with the error explained in plain words; never a blank screen or a silent stop. → Task 7 `test_run_error_keeps_partial_answer_marked_incomplete`.

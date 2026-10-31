@@ -1,0 +1,31 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-fg: var(--c-fg);
+  --color-muted: var(--c-muted);
+  --color-line: var(--c-line);
+  --color-soft: var(--c-soft);
+  --color-card: var(--c-card);
+  --color-panel: var(--c-panel);
+  --color-code: var(--c-code);
+  --color-chip: var(--c-chip);
+  --color-chip-fg: var(--c-chip-fg);
+  --color-accent: var(--c-accent);
+  --color-on-accent: var(--c-on-accent);
+  --color-good: var(--c-good);
+  --color-best: var(--c-best);
+  --color-warn: var(--c-warn);
+  --color-bad: var(--c-bad);
+  --radius-tele: var(--radius);
+  --font-display: var(--font-saira-condensed), "Arial Narrow", sans-serif;
+  --font-sans: var(--font-saira), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, Consolas, monospace;
+}
+
+html, body { background: var(--c-bg); color: var(--c-fg); }
+body { font-family: var(--font-sans); font-feature-settings: "tnum" 1; }
+:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.slant { font-style: italic; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

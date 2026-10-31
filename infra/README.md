@@ -158,3 +158,20 @@ biggest miss). Forecaster 7 (`gemini_notes:<model>`) locks with the other six.
 Add a temporary `infra/backend_override.tf` containing
 `terraform { backend "local" {} }` (gitignored), `terraform init`, `terraform
 plan -out tfplan`, then delete the override and plan files.
+
+## Web app (Phase 5)
+
+Cloud Run service `cha-web` behind Cloud Run's built-in IAP (owner account only); see
+[docs/web.md](../docs/web.md).
+
+- **Before the first deploy:** run `CHA_DB_BUCKET=artful-timing-506108-n8-health-db uv run cha agentdb seed` once, so the
+  laptop's receipts and memory become the shared copy (done 2026-10-31).
+- **Deploy:** `docker build -f apps/webservice/Dockerfile -t us-central1-docker.pkg.dev/artful-timing-506108-n8/cha/web:<git-sha> .`,
+  `docker push` the same tag, set `web_image` in `infra/terraform.tfvars`, then
+  `terraform plan -out tfplan` and `terraform apply tfplan`. Open the `web_url` output.
+- **Roll back:** set `web_image` to the previous tag and plan/apply. The web app never writes
+  `health.db`, so no database restore is needed; `agent.db` is append-only during turns.
+- **Turn it off:** `terraform destroy -target=google_cloud_run_v2_service.web` (scale-to-zero
+  already means it costs nothing while idle).
+- **Who can get in:** only `var.owner_email` holds `roles/iap.httpsResourceAccessor`; the app
+  also refuses any IAP identity other than `CHA_WEB_OWNER_EMAIL`.
