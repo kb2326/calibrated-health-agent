@@ -122,3 +122,33 @@ def test_quiet_note_round_trip():
 
 def test_a_window_number_is_backed_only_as_a_time_span():
     assert unbacked("You slept 7 hours a night this week.", [{"x": 6.1}], "how did I sleep this week?") == ["7"]
+
+
+# Review I3 / I4: the window exemption must not wave through counts of days meeting a
+# condition, and data_catalog coverage numbers must not back health values.
+def test_count_of_nights_meeting_a_condition_is_checked():
+    from health_agents.verify import numbers_without_receipts as nwr
+
+    assert nwr("You slept under 7 hours on 6 nights.", [{"x": 7}], "How did I sleep last week?") \
+        == ["6"]
+    assert nwr("Between 2026-10-01 and 2026-10-12 your HRV dipped on 11 days.", [{"x": 1}]) \
+        == ["11"]
+
+
+def test_only_the_stated_window_span_is_implied():
+    from health_agents.verify import numbers_without_receipts as nwr
+
+    # first and last date only: 2026-10-05 to 2026-10-12 is not a window the answer stated
+    ans = "From 2026-10-01 to 2026-10-30 (30 days), best was 2026-10-05, worst 2026-10-12: 7 days apart."
+    assert nwr(ans, [{"x": 1}]) == ["7"]
+    assert nwr("Over the last 30 days your average was 61 bpm.", [{"avg": 61}],
+               "last month resting heart rate?") == []
+
+
+def test_catalog_coverage_backs_day_counts_not_values():
+    from health_agents.verify import numbers_without_receipts as nwr
+
+    catalog = {"metrics": [{"name": "resting_heart_rate", "days": 58, "days_last_30": 29}],
+               "tables": [], "as_of": "2026-10-30", "note": "x"}
+    assert nwr("Your resting heart rate was 58 bpm.", [catalog]) == ["58"]
+    assert nwr("You have 58 days of resting heart rate data.", [catalog]) == []

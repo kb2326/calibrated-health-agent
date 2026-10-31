@@ -71,6 +71,10 @@ def _first_day(conn: sqlite3.Connection) -> date | None:
     return date.fromisoformat(row[0]) if row and row[0] else None
 
 
+_DETAIL_UNTRUSTED = {
+    "sleep_sessions": (("source", "data_source"),),
+    "exercise_sessions": (("name", "workout_name"), ("source", "data_source")),
+}
 DETAIL_FRAMES = ("sleep_sessions", "exercise_sessions", "night_vitals", "activity_breakdown",
                  "weather_daily")
 
@@ -113,7 +117,12 @@ def build(conn: sqlite3.Connection, as_of: date, *, investigator: bool = False,
             cur = conn.execute(f"SELECT * FROM {table} WHERE date <= ? AND date >= ? ORDER BY date",
                                (as_of.isoformat(), start.isoformat()))
             cols = [c[0] for c in cur.description]
-            frames[table] = [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
+            rows = [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
+            for row in rows:  # typed names and sources stay data, as in the SQL guard
+                for col, label in _DETAIL_UNTRUSTED.get(table, ()):
+                    if row.get(col):
+                        row[col] = wrap(label, row[col])
+            frames[table] = rows
     if investigator:
         frames["misses"] = [
             {"day": r[0], "forecaster": r[1], "target": r[2], "outcome": r[3], "rps": r[4]}

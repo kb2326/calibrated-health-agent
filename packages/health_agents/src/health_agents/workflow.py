@@ -36,6 +36,7 @@ from google.genai import types
 from health_core.settings import get_settings
 
 from . import api_tools, instructions, memory, tools, tracing
+from .untrusted import wrap
 from .verify import note, numbers_without_receipts
 
 Topology = Literal["single", "team", "multi"]
@@ -47,13 +48,18 @@ REFUSAL = "Please ask a question about your health data (up to 2,000 characters)
 Model = str | BaseLlm
 
 
-def _note_output(tool: Any, args: dict, tool_context: Any, tool_response: Any) -> None:
-    """after_tool_callback: keep every tool result of this turn for verification."""
+def _note_output(tool: Any, args: dict, tool_context: Any, tool_response: Any) -> dict | None:
+    """after_tool_callback: keep every tool result of this turn for verification.
+
+    A specialist's reply (team topology) is returned wrapped as untrusted text: the coach
+    reads journal notes, and the main agent can save memories."""
+    if isinstance(tool, AgentTool):
+        tool_response = {"result": wrap(f"specialist_{tool.name}", str(tool_response))}
     outputs = list(tool_context.state.get(TURN_OUTPUTS, []))
     outputs.append(tool_response)
     tool_context.state[TURN_OUTPUTS] = outputs
     tracing.annotate_tool(args, tool_response)
-    return None
+    return tool_response if isinstance(tool, AgentTool) else None
 
 
 # A lean toolbox: every tool's description is re-sent at each step, so overlapping tools

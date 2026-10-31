@@ -260,7 +260,10 @@ def compare_runs(old: list[runner.Transcript], new: list[runner.Transcript],
     """Old vs new answers to the owner's labelled questions (matched by case id).
 
     For each labelled fail: did the new answer win the blind pairwise judge? For each
-    labelled pass: did the new answer get worse? Aggregates only."""
+    labelled pass: did the new answer get worse? Aggregates only.
+
+    Expects one trial per case (labelling batches are k=1): with more, every old trial
+    would be judged against the same new trial and counts would be trials, not cases."""
     by_id = {t.case_id: t for t in new}
     pref = {"new": 0, "old": 0, "tie": 0, "unknown": 0}
     out: dict[str, Any] = {"compared": 0, "labelled_fail": 0, "fail_now_better": 0, "fail_not_better": 0,

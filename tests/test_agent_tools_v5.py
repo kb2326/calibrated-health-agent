@@ -129,3 +129,26 @@ def test_sandbox_bundle_carries_detail_frames(v5):
         b = bundle.build(conn, date(2026, 10, 30))
     assert {"sleep_sessions", "weather_daily"} <= set(b["frames"])
     assert json.dumps(b["frames"]["sleep_sessions"])
+
+
+def test_query_metric_rejects_impossible_dates_without_crashing(v5):
+    """Review I5: models write month ends like 2026-09-31."""
+    for start, end in (("2026-09-01", "2026-09-31"), ("2026-02-30", "2026-03-01"),
+                       ("2026-10-01\n", "2026-10-02"), ("2026-10-10", "2026-10-01")):
+        out = tools.query_metric("daily-resting-heart-rate", start, end)
+        assert "error" in out, (start, end)
+
+
+def test_weather_request_never_carries_model_chosen_numbers(monkeypatch):
+    """Review minor: the URL is the same whatever the model asks, so no value can leak in it."""
+    seen = []
+    monkeypatch.setattr(weather, "forecast", lambda lat, lon, **k: seen.append(k) or [
+        {"date": f"2026-10-{d:02d}"} for d in range(1, 32)])
+    monkeypatch.setattr(tools.civil, "today", lambda: __import__("datetime").date(2026, 10, 20))
+    a = tools.weather(days_ahead=3)
+    b = tools.weather(days_back=9)
+    c = tools.weather(days_ahead="lots")  # type: ignore[arg-type]
+    assert len(seen) == 2 and seen[0] == seen[1]  # bad input errors before any request
+    assert [d["date"] for d in a["days"]] == ["2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23"]
+    assert b["days"][0]["date"] == "2026-10-11" and b["days"][-1]["date"] == "2026-10-20"
+    assert "error" in c

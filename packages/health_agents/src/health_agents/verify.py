@@ -80,9 +80,11 @@ def _matches(token: str, leaves: list[float]) -> bool:
 # correct answer flagged "unverified: 30" for "last month": that is arithmetic about the
 # window, not a health figure.
 _WINDOWS = (
-    (re.compile(r"\b(?:this|last|past|previous)\s+week\b|\bweekly\b|\b7 days\b", re.I), (7, 6, 8)),
-    (re.compile(r"\bfortnight\b|\btwo weeks\b|\b2 weeks\b", re.I), (14, 13, 15)),
-    (re.compile(r"\b(?:this|last|past|previous)\s+month\b|\bmonthly\b|\b30 days\b", re.I),
+    # A bare "7 days" in the answer is not a window by itself ("7 days apart"); it needs a
+    # window word before it.
+    (re.compile(r"\b(?:this|last|past|previous)\s+(?:week|7 days)\b|\bweekly\b", re.I), (7,)),
+    (re.compile(r"\bfortnight\b|\btwo weeks\b|\b2 weeks\b", re.I), (14,)),
+    (re.compile(r"\b(?:this|last|past|previous)\s+(?:month|30 days)\b|\bmonthly\b", re.I),
      (28, 29, 30, 31)),
     (re.compile(r"\bquarter\b|\b3 months\b|\bthree months\b", re.I), (90, 91, 92)),
     (re.compile(r"\b(?:this|last|past|previous)\s+year\b|\b12 months\b", re.I), (365, 366, 12)),
@@ -104,17 +106,34 @@ def _implied(answer: str, question: str) -> set[float]:
             days.append(date.fromisoformat(d))
         except ValueError:
             continue
-    for i, a in enumerate(days):
-        for b in days[i + 1:]:
-            span = abs((b - a).days)
-            out.update((float(span), float(span + 1)))
+    if len(days) >= 2:  # the window the answer states: its first and last date only
+        span = abs((max(days) - min(days)).days)
+        out.update((float(span), float(span + 1)))
     return out
 
 
+# "on 6 nights", "of 11 days", "had 4 days": a count of days meeting a condition is a health
+# figure, never the window, so it is not exempt.
+_CONDITION_BEFORE = re.compile(
+    r"(?:\bon|\bof|\bhad|\bwith|\bwere|\bwas|\bjust|\bonly)\s+$", re.I)
+
+
+def _is_span(token: str, answer: str) -> bool:
+    """The token is followed by a time unit and not preceded by a condition word."""
+    return any(not _CONDITION_BEFORE.search(answer[:m.start()])
+               for m in _SPAN_AFTER(token).finditer(answer))
+
+
+def _is_catalog(output: Any) -> bool:
+    return isinstance(output, dict) and {"metrics", "tables", "as_of"} <= output.keys()
+
+
 def numbers_without_receipts(answer: str, outputs: list[Any], question: str = "") -> list[str]:
-    leaves = list(_leaves(outputs)) if outputs else []
-    if outputs:
-        leaves = leaves[1:]  # drop the top-level list length itself
+    # data_catalog says how many days each metric covers: those numbers back a day count
+    # ("58 days of data"), never a health value ("58 bpm").
+    values = [o for o in outputs or [] if not _is_catalog(o)]
+    leaves = list(_leaves(values))[1:]  # drop the top-level list length itself
+    coverage = [x for o in outputs or [] if _is_catalog(o) for x in _leaves(o)]
     implied = sorted(_implied(answer, question))
     asked = {n.rstrip("%").replace(",", "") for n in _numbers(question)}
     out = []
@@ -123,8 +142,8 @@ def numbers_without_receipts(answer: str, outputs: list[Any], question: str = ""
             continue
         if _matches(token, leaves):
             continue
-        if _matches(token, implied) and _SPAN_AFTER(token).search(answer):
-            continue  # "30 days": the window itself, not a health figure
+        if _matches(token, implied + coverage) and _is_span(token, answer):
+            continue  # "30 days": the window or the coverage, not a health figure
         out.append(token)
     return out
 

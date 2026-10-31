@@ -54,7 +54,7 @@ def _rows(conn: sqlite3.Connection, data_type: str) -> Iterator[tuple[str, str, 
     camel = "".join(w.capitalize() if i else w for i, w in enumerate(data_type.split("-")))
     for day, start, source, raw in conn.execute(
             "SELECT civil_date, start_time, COALESCE(source, ''), raw_json FROM raw_points"
-            " WHERE data_type = ? ORDER BY start_time", (data_type,)):
+            " WHERE data_type = ? ORDER BY start_time, id", (data_type,)):  # newest revision last
         try:
             section = json.loads(raw).get(camel)
         except (ValueError, AttributeError):

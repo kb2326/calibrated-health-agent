@@ -17,10 +17,10 @@ Step and push rules:
 5. A sync that completed with some failed data types, or a journal step that failed, still
    pushes the completed work.
 6. The push is skipped when the run changed no data: no migration applied, zero
-   new-or-changed rows from sync and zero new journal submissions. Bookkeeping alone
-   (cursors, stage output, device inventory) is not worth a new bucket generation; the
-   next run re-fetches the lookback anyway. So a network outage does not mint a new
-   generation every run.
+   new-or-changed rows from sync, zero new journal submissions and no change to the stored
+   weather. Bookkeeping alone (cursors, stage output, device inventory) is not worth a new
+   bucket generation; the next run re-fetches the lookback anyway. So a network outage
+   does not mint a new generation every run.
 7. **lock** and **settle** (the forecast ledger) run after the journal step, unless the
    database errored (rule 3) or it is a dry run. Rows they write count as changed data.
    Their failure fails the run but never blocks pushing the other work.
@@ -109,16 +109,23 @@ def _step(name: str, fn: Callable[[], dict[str, Any] | None]) -> dict[str, Any]:
 def _weather(settings: Settings) -> dict[str, Any]:
     """Recent daily weather for the home location; the first run backfills history.
 
-    Context, not data the run depends on: an outage is reported as skipped, never an ERROR
-    (which would page the owner)."""
+    Context, not data the run depends on: any failure (an outage or a bug) is reported as
+    skipped, never an ERROR, and never stops the lock or the push. `changed` says whether the
+    table's content changed, so a backfill or a new day's weather is pushed (rule 6)."""
+    import hashlib
     from datetime import timedelta
 
     from health_data import civil, weather
+
+    def fingerprint(conn) -> str:
+        rows = conn.execute("SELECT * FROM weather_daily ORDER BY date, place").fetchall()
+        return hashlib.sha256(repr(rows).encode()).hexdigest()
 
     where = {"place": settings.home_place, "latitude": settings.home_latitude,
              "longitude": settings.home_longitude}
     try:
         with db.connect() as conn:
+            before = fingerprint(conn)
             empty = conn.execute("SELECT COUNT(*) FROM weather_daily").fetchone()[0] == 0
             first = conn.execute("SELECT MIN(date) FROM daily_metrics").fetchone()[0]
             backfilled = 0
@@ -126,9 +133,12 @@ def _weather(settings: Settings) -> dict[str, Any]:
                 end = (civil.today() - timedelta(days=6)).isoformat()
                 if first < end:
                     backfilled = weather.backfill(conn, first, end, **where)
-            return {"days": weather.sync_recent(conn, **where), "backfilled": backfilled}
+            days = weather.sync_recent(conn, **where)
+            return {"days": days, "backfilled": backfilled, "changed": fingerprint(conn) != before}
     except weather.WeatherError as exc:
         return {"result": "skipped (weather unavailable)", "error": str(exc)}
+    except Exception as exc:  # a bug here must not cost the day's forecast lock
+        return {"result": "skipped (weather step failed)", "error": type(exc).__name__}
 
 
 def _derive() -> dict[str, Any]:
@@ -314,7 +324,10 @@ def _run(settings: Settings, dry_run: bool) -> int:
             _step("derive", _derive)
         except _Abort:
             failed = True
-        _step("weather", lambda: _weather(settings))  # never fails the run
+        try:  # never fails the run; _weather already turns its own errors into a skip
+            weather_changed = bool(_step("weather", lambda: _weather(settings)).get("changed"))
+        except _Abort:
+            weather_changed = False
 
         if sync_result:
             sync_rows = sync_result["changed_rows"]
@@ -358,7 +371,7 @@ def _run(settings: Settings, dry_run: bool) -> int:
         agent_written = not (db_error or dry_run) and _agent_seq() != agent_before
 
         changed = (bool(migrated.get("migrated")) or bool(sync_rows) or bool(new_submissions)
-                   or ledger_written or agent_written)
+                   or ledger_written or agent_written or weather_changed)
         generation = store.recorded_generation(generation_path)
         pushed = publishable = False
         if db_error:

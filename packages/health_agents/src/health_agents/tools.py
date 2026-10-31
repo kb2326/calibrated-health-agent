@@ -528,7 +528,7 @@ METRIC_INFO: dict[str, tuple[str, str]] = {
 DETAIL_TABLES: dict[str, str] = {
     "sleep_sessions": "one row per sleep (main_sleep=1, or nap): minutes_asleep, deep/light/rem/"
                       "awake minutes, minutes_to_fall_asleep, efficiency; date = the wake-up day",
-    "exercise_sessions": "one row per workout: type, name, active_min, calories_kcal, "
+    "exercise_sessions": "one row per workout: type (e.g. TENNIS), active_min, calories_kcal, "
                          "distance_km, steps, avg_hr_bpm, azm, minutes per heart-rate zone",
     "night_vitals": "one row per night: skin_temp_c and skin_temp_delta_c (vs personal "
                     "baseline), spo2_avg/low/high, hrv_ms, hrv_deep_ms, non_rem_hr_bpm, "
@@ -544,7 +544,7 @@ _DETAIL_SUM = {"active_min", "calories_kcal", "distance_km", "steps", "azm", "li
                "moderate_min", "vigorous_min", "peak_min"}
 _NOT_A_MEASURE = {"date", "start", "end", "source", "type", "name", "zone", "place", "sunrise",
                   "sunset", "fetched_at"}
-_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
 
 
 def _columns(conn: sqlite3.Connection, table: str) -> list[str]:
@@ -605,8 +605,13 @@ def query_metric(metric: str, start: str, end: str, agg: str = "daily",
         dict: `rows` (daily) or `value`, plus `n` (days with data), `days_in_range`,
         `missing_days`, and `receipt`. Cite the receipt next to any number.
     """
-    if not (_DATE_RE.match(start or "") and _DATE_RE.match(end or "")):
-        return {"error": "start and end must be YYYY-MM-DD"}
+    try:  # a real calendar day each ("2026-09-31" is not), start before end
+        if not (_DATE_RE.match(start or "") and _DATE_RE.match(end or "")):
+            raise ValueError
+        if date.fromisoformat(start) > date.fromisoformat(end):
+            return {"error": "start must be on or before end"}
+    except ValueError:
+        return {"error": "start and end must be real dates, YYYY-MM-DD"}
     if agg not in ("daily", "mean", "min", "max", "sum", "count"):
         return {"error": "agg must be daily, mean, min, max, sum or count"}
     with _ro_connect() as conn:
@@ -673,8 +678,14 @@ def weather(days_ahead: int = 0, days_back: int = 0,
     else:
         lat, lon, place = st.home_latitude, st.home_longitude, st.home_place
     try:
-        days = open_meteo.forecast(lat, lon, days=max(0, min(int(days_ahead), 14)) + 1,
-                                   past_days=max(0, min(int(days_back), 30)))
+        ahead, back = max(0, min(int(days_ahead), 14)), max(0, min(int(days_back), 30))
+    except (TypeError, ValueError):
+        return {"error": "days_ahead and days_back must be whole numbers"}
+    try:  # always the same request, sliced here: no model-chosen number reaches the URL
+        days = open_meteo.forecast(lat, lon, days=15, past_days=30)
     except open_meteo.WeatherError as exc:
         return {"error": f"weather is unavailable right now ({exc}); say so and continue"}
+    today = civil.today()
+    lo, hi = (today - timedelta(days=back)).isoformat(), (today + timedelta(days=ahead)).isoformat()
+    days = [d for d in days if lo <= str(d.get("date", "")) <= hi]
     return {"place": place, "days": days, "source": "Open-Meteo"}
