@@ -30,6 +30,7 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(sync_job, "_migrate", lambda: log.append("migrate") or {})
     monkeypatch.setattr(sync, "run", lambda: log.append("sync") or {"steps": {"fetched": 1, "inserted": 1}})
     monkeypatch.setattr(sync_job, "_journal_import", lambda s: log.append("import") or {})
+    monkeypatch.setattr(sync_job, "_derive", lambda: log.append("derive") or {"rows": {}})
     monkeypatch.setattr(store, "push_recorded", lambda *a, **k: log.append("push") or 6)
     monkeypatch.setattr(sync_job, "_lock", lambda s: log.append("lock") or {"written": False})
     monkeypatch.setattr(sync_job, "_settle", lambda: log.append("settle") or {"written": False})
@@ -59,11 +60,11 @@ def _interrupted(committed: dict, cause: Exception):
 
 def test_job_happy_path_order(calls, capsys):
     assert sync_job.main([]) == 0
-    assert calls == ["pull", "migrate", "sync", "import", "lock", "settle", "retest",
+    assert calls == ["pull", "migrate", "sync", "import", "derive", "lock", "settle", "retest",
                      "investigate", "push", "publish", "heartbeat"]
     lines = _lines(capsys)
     assert [line["step"] for line in lines] == [
-        "pull", "migrate", "sync", "journal", "lock", "settle", "retest", "investigate", "push",
+        "pull", "migrate", "sync", "journal", "derive", "lock", "settle", "retest", "investigate", "push",
         "publish", "heartbeat"]
     assert {line["severity"] for line in lines} == {"INFO"}
 
@@ -129,7 +130,7 @@ def test_empty_sync_summary_is_an_error(calls, monkeypatch, capsys):
 def test_sync_exception_still_imports_journal_and_pushes_committed_rows(calls, monkeypatch, capsys):
     monkeypatch.setattr(sync, "run", _interrupted({"steps": {"fetched": 3, "inserted": 2}}, RuntimeError("bug")))
     assert sync_job.main([]) == 1
-    assert calls == ["pull", "migrate", "import", "lock", "settle", "retest", "investigate",
+    assert calls == ["pull", "migrate", "import", "derive", "lock", "settle", "retest", "investigate",
                      "push", "publish", "heartbeat"]
     line = _step(_lines(capsys), "sync")
     assert (line["severity"], line["error"], line["changed_rows"]) == ("ERROR", "RuntimeError", 2)

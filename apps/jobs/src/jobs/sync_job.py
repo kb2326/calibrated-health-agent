@@ -106,6 +106,13 @@ def _step(name: str, fn: Callable[[], dict[str, Any] | None]) -> dict[str, Any]:
     return extra
 
 
+def _derive() -> dict[str, Any]:
+    from health_data import derive
+
+    with db.connect() as conn:
+        return {"rows": derive.rebuild(conn)}
+
+
 def _migrate() -> dict[str, Any]:
     with db.connect() as conn:
         before = conn.execute("PRAGMA user_version").fetchone()[0]
@@ -278,6 +285,10 @@ def _run(settings: Settings, dry_run: bool) -> int:
             log("sync", "ERROR", error="partial sync", failed=sync_result["failed"])
         failed = (sync_error is not None or journal_result is None
                   or bool(sync_result and sync_result["types_failed"]))
+        try:  # detail tables (sleep stages, workouts, night vitals, zones) from raw_json
+            _step("derive", _derive)
+        except _Abort:
+            failed = True
 
         if sync_result:
             sync_rows = sync_result["changed_rows"]

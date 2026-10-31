@@ -202,6 +202,16 @@ def parity_cmd(days: Annotated[int, typer.Option("--days", min=1)] = 30) -> None
         typer.echo(f"{data_type:30s} worn days={worn:4d}  agree={agree:4d}")
 
 
+@db_app.command("derive")
+def derive_cmd() -> None:
+    """Rebuild the detail tables (sleep stages, workouts, night vitals, zones) from raw data."""
+    from health_data import derive
+
+    with db.connect() as conn:
+        for table, n in derive.rebuild(conn).items():
+            typer.echo(f"{table:20} {n} rows")
+
+
 @db_app.command("vacuum")
 @_persisted
 def db_vacuum_cmd() -> None:

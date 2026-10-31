@@ -528,7 +528,57 @@ def _migrate_v4(conn: sqlite3.Connection) -> None:
         conn.execute(stmt)
 
 
-MIGRATIONS = [_migrate_v1, _migrate_v2, _migrate_v3, _migrate_v4]
+# v5 (Phase 4.5): detail the daily roll-up flattens, derived from raw_points.raw_json by
+# health_data.derive (rebuilt on every sync, never edited by hand), plus daily weather for
+# the home location. The ledger and daily_metrics are untouched: existing values (sleep as
+# time in bed) stay, because the frozen forecast ledger reads them.
+_V5_DETAIL = """
+CREATE TABLE IF NOT EXISTS sleep_sessions (
+    date TEXT NOT NULL, start TEXT NOT NULL, end TEXT, main_sleep INTEGER,
+    minutes_asleep REAL, minutes_awake REAL, minutes_to_fall_asleep REAL,
+    minutes_in_period REAL, deep_min REAL, light_min REAL, rem_min REAL, awake_min REAL,
+    efficiency REAL, source TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (start, source)
+);
+CREATE INDEX IF NOT EXISTS idx_sleep_sessions_date ON sleep_sessions(date);
+CREATE TABLE IF NOT EXISTS exercise_sessions (
+    date TEXT NOT NULL, start TEXT NOT NULL, type TEXT, name TEXT, active_min REAL,
+    calories_kcal REAL, distance_km REAL, steps REAL, avg_hr_bpm REAL, azm REAL,
+    light_min REAL, moderate_min REAL, vigorous_min REAL, peak_min REAL,
+    source TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (start, source)
+);
+CREATE INDEX IF NOT EXISTS idx_exercise_sessions_date ON exercise_sessions(date);
+CREATE TABLE IF NOT EXISTS night_vitals (
+    date TEXT PRIMARY KEY, skin_temp_c REAL, skin_temp_baseline_c REAL, skin_temp_delta_c REAL,
+    spo2_avg REAL, spo2_low REAL, spo2_high REAL, hrv_ms REAL, hrv_deep_ms REAL,
+    non_rem_hr_bpm REAL, resp_full REAL, resp_deep REAL, resp_light REAL, resp_rem REAL
+);
+CREATE TABLE IF NOT EXISTS activity_breakdown (
+    date TEXT PRIMARY KEY, fat_burn_azm REAL, cardio_azm REAL, peak_azm REAL,
+    light_active_min REAL, moderate_active_min REAL, vigorous_active_min REAL,
+    zone_light_min REAL, zone_moderate_min REAL, zone_vigorous_min REAL, zone_peak_min REAL
+);
+CREATE TABLE IF NOT EXISTS hr_zone_thresholds (
+    date TEXT NOT NULL, zone TEXT NOT NULL, min_bpm REAL, max_bpm REAL,
+    PRIMARY KEY (date, zone)
+);
+CREATE TABLE IF NOT EXISTS weather_daily (
+    date TEXT NOT NULL, place TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL,
+    temp_min_c REAL, temp_max_c REAL, temp_mean_c REAL, humidity_mean REAL,
+    precipitation_mm REAL, uv_index_max REAL, sunrise TEXT, sunset TEXT,
+    source TEXT NOT NULL, fetched_at TEXT NOT NULL,
+    PRIMARY KEY (date, place)
+);
+"""
+
+
+def _migrate_v5(conn: sqlite3.Connection) -> None:
+    for stmt in _split(_V5_DETAIL):
+        conn.execute(stmt)
+
+
+MIGRATIONS = [_migrate_v1, _migrate_v2, _migrate_v3, _migrate_v4, _migrate_v5]
 
 
 class SchemaTooNewError(RuntimeError):
