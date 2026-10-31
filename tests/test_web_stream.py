@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from ag_ui.core import (
     EventType,
@@ -17,15 +18,20 @@ from fastapi.testclient import TestClient
 from health_web.stream import StreamFilter
 from test_web_agent import answer_text, fixture_db, run_input, stream  # noqa: F401
 
+
+def _any(x: Any) -> Any:
+    return x
+
+
 ROWS = {"rows": [{"v": 41.0}], "n": 1, "truncated": False, "receipt": "r-c06cd4de3a"}
 
 
-def _start(f: StreamFilter, name="run_sql", cid="c1"):
+def _start(f: Any, name="run_sql", cid="c1"):
     return f(ToolCallStartEvent(type=EventType.TOOL_CALL_START, tool_call_id=cid, tool_call_name=name))
 
 
 def test_tool_result_keeps_receipt_drops_rows():
-    f = StreamFilter()
+    f: Any = StreamFilter()
     _start(f)
     out = f(ToolCallResultEvent(type=EventType.TOOL_CALL_RESULT, message_id="m", tool_call_id="c1",
                                 content=json.dumps(ROWS)))
@@ -36,7 +42,7 @@ def test_tool_result_keeps_receipt_drops_rows():
 
 
 def test_tool_error_is_kept_as_a_short_message():
-    f = StreamFilter()
+    f: Any = StreamFilter()
     _start(f, "query_metric")
     out = f(ToolCallResultEvent(type=EventType.TOOL_CALL_RESULT, message_id="m", tool_call_id="c1",
                                 content=json.dumps({"error": "start and end must be real dates"})))
@@ -45,7 +51,7 @@ def test_tool_error_is_kept_as_a_short_message():
 
 
 def test_non_json_tool_result_reveals_nothing():
-    f = StreamFilter()
+    f: Any = StreamFilter()
     _start(f, "coach")
     out = f(ToolCallResultEvent(type=EventType.TOOL_CALL_RESULT, message_id="m", tool_call_id="c1",
                                 content="Your resting HR was 58 so take it easy"))
@@ -53,25 +59,25 @@ def test_non_json_tool_result_reveals_nothing():
 
 
 def test_state_delta_allowlist_and_receipts_reduced_to_ids():
-    f = StreamFilter()
-    out = f(StateDeltaEvent(type=EventType.STATE_DELTA, delta=[
+    f: Any = StreamFilter()
+    out = f(StateDeltaEvent(type=EventType.STATE_DELTA, delta=_any([
         {"op": "add", "path": "/turn_receipts", "value": [{"receipt": "r-1", "output": [{"v": 41}]}]},
         {"op": "add", "path": "/turn_outputs", "value": [ROWS]},
         {"op": "add", "path": "/last_draft", "value": "41"},
-        {"op": "replace", "path": "/verify_attempts", "value": 1}]))
+        {"op": "replace", "path": "/verify_attempts", "value": 1}])))
     assert out is not None
     assert out.delta == [{"op": "add", "path": "/turn_receipts", "value": ["r-1"]},
                          {"op": "replace", "path": "/verify_attempts", "value": 1}]
 
 
 def test_state_delta_with_nothing_allowed_is_dropped():
-    f = StreamFilter()
-    assert f(StateDeltaEvent(type=EventType.STATE_DELTA, delta=[
-        {"op": "add", "path": "/turn_outputs", "value": [ROWS]}])) is None
+    f: Any = StreamFilter()
+    assert f(StateDeltaEvent(type=EventType.STATE_DELTA, delta=_any([
+        {"op": "add", "path": "/turn_outputs", "value": [ROWS]}]))) is None
 
 
 def test_state_snapshot_allowlist():
-    f = StreamFilter()
+    f: Any = StreamFilter()
     out = f(StateSnapshotEvent(type=EventType.STATE_SNAPSHOT, snapshot={
         "question": "q", "turn_outputs": [ROWS], "turn_receipts": [{"receipt": "r-1", "output": [1]}],
         "verify_attempts": 0, "location": {"latitude": 1, "longitude": 2}}))
@@ -79,18 +85,18 @@ def test_state_snapshot_allowlist():
 
 
 def test_messages_snapshot_tool_content_reduced():
-    f = StreamFilter()
-    out = f(MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=[
+    f: Any = StreamFilter()
+    out = f(MessagesSnapshotEvent(type=EventType.MESSAGES_SNAPSHOT, messages=_any([
         {"id": "a", "role": "assistant", "content": "", "toolCalls": [
             {"id": "c9", "type": "function", "function": {"name": "run_sql", "arguments": "{}"}}]},
-        {"id": "t", "role": "tool", "toolCallId": "c9", "content": json.dumps(ROWS)}]))
+        {"id": "t", "role": "tool", "toolCallId": "c9", "content": json.dumps(ROWS)}])))
     assert out is not None
     tool_msg = out.messages[1]
     assert "41" not in tool_msg.content and json.loads(tool_msg.content)["receipt"] == "r-c06cd4de3a"
 
 
 def test_text_passes_through():
-    f = StreamFilter()
+    f: Any = StreamFilter()
     ev = TextMessageContentEvent(type=EventType.TEXT_MESSAGE_CONTENT, message_id="m", delta="58 bpm")
     assert f(ev) is ev
 

@@ -16,6 +16,7 @@ from ag_ui.core import (
     StateSnapshotEvent,
     ToolCallResultEvent,
     ToolCallStartEvent,
+    ToolMessage,
 )
 
 STATE_KEYS = ("turn_receipts", "verify_attempts")
@@ -32,10 +33,11 @@ def _receipt_ids(value: Any) -> Any:
     return value if isinstance(value, str) else None
 
 
-def summarise_result(tool: str | None, content: str) -> str:
+def summarise_result(tool: str | None, content: Any) -> str:
+    """Content that isn't a JSON object (text, content parts) reveals nothing but the tool."""
     try:
-        body = json.loads(content)
-    except (TypeError, ValueError):
+        body = json.loads(content) if isinstance(content, str) else None
+    except ValueError:
         body = None
     out: dict[str, Any] = {"tool": tool, "receipt": None, "status": "ok", "n": None, "error": None}
     if isinstance(body, dict):
@@ -95,7 +97,7 @@ class StreamFilter:
                     names[tc.id] = tc.function.name
             msgs = []
             for m in event.messages:
-                if getattr(m, "role", None) == "tool":
+                if isinstance(m, ToolMessage):
                     m = m.model_copy(update={"content": summarise_result(
                         names.get(m.tool_call_id), m.content)})
                 msgs.append(m)
