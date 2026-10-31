@@ -8,13 +8,16 @@ Modes:
 """
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from contextlib import ExitStack, asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 from ag_ui_adk import add_adk_fastapi_endpoint
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from google.adk.models import BaseLlm
 
 from . import routes
@@ -22,6 +25,11 @@ from .agent import build_agent
 
 Mode = Literal["local", "demo", "cloud"]
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
+# The statically exported Next.js app; in the container image CHA_WEB_STATIC points at it.
+DEFAULT_STATIC = Path(os.environ.get("CHA_WEB_STATIC") or Path(__file__).resolve().parents[4] / "apps" / "web" / "out")
+NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Calibrated Health Agent</title>
+<p>The front end isn't built yet. Run <code>npm ci &amp;&amp; npm run build</code> in
+<code>apps/web</code>, then reload. The agent API is up at <code>/api</code>.</p>"""
 
 
 def _host(request: Request) -> str:
@@ -32,7 +40,8 @@ def _host(request: Request) -> str:
 
 
 def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str | None = None,
-               models: dict[str, BaseLlm | str] | None = None) -> FastAPI:
+               models: dict[str, BaseLlm | str] | None = None,
+               static_dir: Path | None = None) -> FastAPI:
     stack = ExitStack()
     if mode == "demo":  # point every tool at the synthetic fixture for the app's lifetime
         from health_eval.runner import eval_fixture
@@ -61,4 +70,11 @@ def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str 
     api.include_router(routes.router)
     add_adk_fastapi_endpoint(api, build_agent(topology=topology, model=model, models=models),
                              path="/api/agent")
+    static = static_dir or DEFAULT_STATIC
+    if (static / "index.html").exists():  # mounted last, so /api/* always wins
+        api.mount("/", StaticFiles(directory=static, html=True), name="web")
+    else:
+        @api.get("/", include_in_schema=False)
+        def not_built() -> HTMLResponse:
+            return HTMLResponse(NOT_BUILT)
     return api

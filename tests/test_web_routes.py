@@ -110,3 +110,19 @@ def test_cli_refuses_a_public_bind(monkeypatch):
 
     monkeypatch.setattr("uvicorn.run", lambda *a, **k: None)
     assert CliRunner().invoke(cli.app, ["--host", "0.0.0.0", "--demo"]).exit_code != 0
+
+
+def test_serves_the_built_front_end_at_root(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "index.html").write_text("<html><body>chat app</body></html>")
+    client = local_client(create_app("local", model=FakeLlm([text("x")]), static_dir=out))
+    r = client.get("/")
+    assert r.status_code == 200 and "chat app" in r.text
+    assert client.get("/api/health").json()["ok"] is True  # API routes still win
+
+
+def test_missing_front_end_explains_how_to_build_it(tmp_path):
+    client = local_client(create_app("local", model=FakeLlm([text("x")]), static_dir=tmp_path / "nope"))
+    r = client.get("/")
+    assert r.status_code == 200 and "npm run build" in r.text
