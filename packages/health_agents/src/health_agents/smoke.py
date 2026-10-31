@@ -112,13 +112,14 @@ def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
         for question in questions:
             session = cli.Session(model=model or cli._model(), refresh_memory=False)
             turn = session.ask(question, confirm=lambda _args: False)
-            numbers = verify._numbers(turn.answer.split("\n\nunverified:")[0])
+            flagged = verify.unbacked_in(turn.answer)
+            numbers = verify._numbers(turn.answer.split("\n\n_Note:")[0].split("\n\nunverified:")[0])
             reruns = [receipts.rerun(r) for r in turn.receipts]
             mismatched = [{"id": r.get("id"), "old": r.get("old"), "new": r.get("new"),
                            "error": r.get("error")} for r in reruns if not r.get("matches")]
             rerun_ok = all(r.get("matches") for r in reruns)
-            if "unverified:" in turn.answer:
-                ok, reason = False, "unverified numbers"
+            if flagged:
+                ok, reason = False, "numbers not computed by a tool"
             elif not numbers:  # every smoke question asks for a number
                 ok, reason = False, "no number in the answer"
             elif not turn.receipts:
@@ -128,8 +129,7 @@ def run_smoke(questions: list[str], *, model: str | BaseLlm | None = None,
             else:
                 ok, reason = True, ""
             results.append({"question": question, "ok": ok, "reason": reason,
-                            "unverified": turn.answer.split("unverified: ")[-1]
-                            if "unverified:" in turn.answer else "",
+                            "unverified": ", ".join(flagged),
                             "mismatched": mismatched,
                             "receipts": turn.receipts, "receipts_rerun": rerun_ok,
                             "input_tokens": turn.input_tokens, "output_tokens": turn.output_tokens,

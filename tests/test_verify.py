@@ -94,3 +94,31 @@ def test_a_quantity_after_a_date_list_word_is_still_checked():
     assert unbacked("You slept 7.2 hours on Oct 3 and 6 hours on Oct 4.", [{"v": 7.2}]) == ["6"]
     assert unbacked("Steps went from Oct 3 to 9 thousand a day.", [{"v": 1}]) == ["9"]
     assert unbacked("Oct 9, 10 and 11 had no data.", [{"n": 0}]) == []
+
+
+def test_window_phrases_are_backed():
+    # owner labelling: "unverified: 30" on a correct answer to "last month"
+    assert unbacked("Over the last 30 days your RHR averaged 61.5 [r-1a2b3c4d5e].", [{"m": 61.5}],
+                    "what was my average resting heart rate over the last month?") == []
+    assert unbacked("Across the past 7 days you slept 6.8 h.", [{"h": 6.8}], "how did I sleep this week?") == []
+    assert unbacked("In the last 14 days: 9,378 steps a day.", [{"s": 9378}], "steps the past two weeks?") == []
+
+
+def test_day_counts_between_dates_are_backed():
+    answer = "From 2026-10-01 to 2026-10-30 (30 days) you averaged 61.5 [r-1a2b3c4d5e]."
+    assert unbacked(answer, [{"m": 61.5}]) == []
+    assert unbacked("From 2026-10-01 to 2026-10-30 you had 12 rest days.", [{"m": 1}]) == ["12"]
+
+
+def test_quiet_note_round_trip():
+    from health_agents.verify import note, unbacked_in
+
+    assert unbacked_in("All good.") == []
+    text_ = "Answer 9.9." + note(["9.9"])
+    assert unbacked_in(text_) == ["9.9"] and "unverified:" not in text_
+    assert unbacked_in("Answer." + note(["3", "12"])) == ["3", "12"]
+    assert unbacked_in("old\n\nunverified: 4, 5") == ["4", "5"]  # older transcripts still read
+
+
+def test_a_window_number_is_backed_only_as_a_time_span():
+    assert unbacked("You slept 7 hours a night this week.", [{"x": 6.1}], "how did I sleep this week?") == ["7"]

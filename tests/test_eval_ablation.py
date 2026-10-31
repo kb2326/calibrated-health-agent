@@ -17,9 +17,6 @@ def _arm(arm: str) -> FakeLlm:
     sql = call("run_sql", query="SELECT COUNT(*) AS n FROM journal_submissions")
     if arm == "no_tools":
         return FakeLlm([text("You have about 12 entries.")])
-    if arm == "multi":
-        return FakeLlm([text('{"specialists": ["data_scientist"]}'), sql,
-                        text("41 entries."), text("You have 41 journal entries.")])
     return FakeLlm([sql, text("You have 41 journal entries.")])
 
 

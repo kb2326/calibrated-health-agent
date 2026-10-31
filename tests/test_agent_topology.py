@@ -19,8 +19,10 @@ def test_agents_use_configured_model(monkeypatch):
     monkeypatch.setenv("CHA_MODEL_DEFAULT", "gemini-test-model")
     get_settings.cache_clear()
     try:
-        for agent in workflow.specialists(get_settings().model_default).values():
-            assert agent.model == "gemini-test-model", agent.name
+        for tool in workflow.specialist_tools(get_settings().model_default):
+            assert getattr(tool.agent, "model", None) == "gemini-test-model", tool.agent.name
+        team = workflow.build_workflow("team")
+        assert workflow.answer_agent(team).model == "gemini-test-model"
         assert _load_agent().MODEL == "gemini-test-model"
     finally:
         monkeypatch.undo()

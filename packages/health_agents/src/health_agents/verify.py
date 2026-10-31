@@ -75,15 +75,84 @@ def _matches(token: str, leaves: list[float]) -> bool:
     return any(abs(x - value) <= tol for x in candidates)
 
 
+# Numbers a reader supplies from the question's wording ("last month" -> 30) or from dates
+# the answer states (2026-10-01 to 2026-10-30 -> 30 days). The owner's labelling showed a
+# correct answer flagged "unverified: 30" for "last month": that is arithmetic about the
+# window, not a health figure.
+_WINDOWS = (
+    (re.compile(r"\b(?:this|last|past|previous)\s+week\b|\bweekly\b|\b7 days\b", re.I), (7, 6, 8)),
+    (re.compile(r"\bfortnight\b|\btwo weeks\b|\b2 weeks\b", re.I), (14, 13, 15)),
+    (re.compile(r"\b(?:this|last|past|previous)\s+month\b|\bmonthly\b|\b30 days\b", re.I),
+     (28, 29, 30, 31)),
+    (re.compile(r"\bquarter\b|\b3 months\b|\bthree months\b", re.I), (90, 91, 92)),
+    (re.compile(r"\b(?:this|last|past|previous)\s+year\b|\b12 months\b", re.I), (365, 366, 12)),
+)
+_ISO_DAY = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
+
+
+def _implied(answer: str, question: str) -> set[float]:
+    from datetime import date
+
+    out: set[float] = set()
+    text = f"{question}\n{answer}"
+    for pattern, values in _WINDOWS:
+        if pattern.search(text):
+            out.update(float(v) for v in values)
+    days = []
+    for d in _ISO_DAY.findall(answer):
+        try:
+            days.append(date.fromisoformat(d))
+        except ValueError:
+            continue
+    for i, a in enumerate(days):
+        for b in days[i + 1:]:
+            span = abs((b - a).days)
+            out.update((float(span), float(span + 1)))
+    return out
+
+
 def numbers_without_receipts(answer: str, outputs: list[Any], question: str = "") -> list[str]:
     leaves = list(_leaves(outputs)) if outputs else []
     if outputs:
         leaves = leaves[1:]  # drop the top-level list length itself
+    implied = sorted(_implied(answer, question))
     asked = {n.rstrip("%").replace(",", "") for n in _numbers(question)}
     out = []
     for token in _numbers(answer):
         if token.rstrip("%").replace(",", "") in asked:
             continue
-        if not _matches(token, leaves):
-            out.append(token)
+        if _matches(token, leaves):
+            continue
+        if _matches(token, implied) and _SPAN_AFTER(token).search(answer):
+            continue  # "30 days": the window itself, not a health figure
+        out.append(token)
     return out
+
+
+def _SPAN_AFTER(token: str) -> re.Pattern[str]:  # noqa: N802 (reads as a pattern constant)
+    return re.compile(r"(?<![\w.])" + re.escape(token) + r"\s*(?:recorded\s+|calendar\s+)?"
+                      r"(?:days?|nights?|weeks?|months?|years?)(?![a-z])", re.I)
+
+
+
+# The quiet note appended when a number stays unbacked after one revision. It replaces the
+# old "unverified: ..." footer, which read like an error; both forms are still parsed.
+_NOTE = re.compile(r"_Note: \d+ figures? (?:wasn't|weren't) computed by a tool: (.+?)\._\s*$")
+_FOOTER = re.compile(r"\n\nunverified: (.+?)\s*$")
+
+
+def note(unbacked: list[str]) -> str:
+    if not unbacked:
+        return ""
+    n = len(unbacked)
+    verb = "figure wasn't" if n == 1 else "figures weren't"
+    return f"\n\n_Note: {n} {verb} computed by a tool: {', '.join(unbacked)}._"
+
+
+def unbacked_in(answer: str) -> list[str]:
+    """The numbers an answer itself flags as not computed (note or legacy footer)."""
+    for pattern in (_NOTE, _FOOTER):
+        m = pattern.search(answer or "")
+        if m:
+            return [x.strip() for x in m.group(1).split(",") if x.strip()]
+    return []

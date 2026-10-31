@@ -45,7 +45,7 @@ def test_smoke_fails_an_answer_with_an_unbacked_number(tmp_path):
     llm = FakeLlm([text("You have 99 entries.")])
     report = smoke.run_smoke(["How many journal entries do I have?"], model=llm, workdir=tmp_path)
     assert report["passed"] == 0
-    assert "unverified" in report["results"][0]["reason"]
+    assert "not computed by a tool" in report["results"][0]["reason"]
 
 
 def test_an_answer_without_any_number_fails(tmp_path):
