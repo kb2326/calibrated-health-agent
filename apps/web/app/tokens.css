@@ -1,0 +1,43 @@
+/* Visual system: A · Race telemetry (owner pick, 2026-10-31).
+   A pit-wall timing screen: slanted condensed numbers, sector colours (purple = best,
+   yellow = in progress, green = done), hard 2px edges. Dark is the default look; the light
+   theme is a real theme, not an inversion. Contrast is checked by axe in CI (Task 10). */
+:root {
+  --c-bg: #101317;
+  --c-fg: #eef1f4;
+  --c-muted: #8d97a3;
+  --c-line: #232a33;
+  --c-soft: #1a2028;
+  --c-card: #151a21;
+  --c-panel: #0c0f13;
+  --c-code: #161c24;
+  --c-chip: #2a2140;
+  --c-chip-fg: #c9b5ff;
+  --c-accent: #ffd400;   /* yellow: in progress, primary action */
+  --c-on-accent: #121212;
+  --c-good: #3ee08f;     /* green: step done, re-run matches */
+  --c-best: #b38cff;     /* purple: personal best, receipt */
+  --c-warn: #ff9f43;     /* unbacked-figure note */
+  --c-bad: #ff5d5d;      /* error */
+  --c-bar: #3a4452;
+  --c-grid: #232a33;
+  --radius: 2px;
+  --slant: -8deg;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --c-bg: #f4f5f7; --c-fg: #0f1318; --c-muted: #56616d; --c-line: #d7dce2; --c-soft: #e7eaee;
+    --c-card: #ffffff; --c-panel: #eceff2; --c-code: #ffffff; --c-chip: #ece5ff; --c-chip-fg: #5a2fd6;
+    --c-accent: #111418; --c-on-accent: #ffd400; --c-good: #0f7a46; --c-best: #6b3ee6;
+    --c-warn: #a14e00; --c-bad: #c22626; --c-bar: #b8c0ca; --c-grid: #e1e5ea;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --c-bg: #f4f5f7; --c-fg: #0f1318; --c-muted: #56616d; --c-line: #d7dce2; --c-soft: #e7eaee;
+  --c-card: #ffffff; --c-panel: #eceff2; --c-code: #ffffff; --c-chip: #ece5ff; --c-chip-fg: #5a2fd6;
+  --c-accent: #111418; --c-on-accent: #ffd400; --c-good: #0f7a46; --c-best: #6b3ee6;
+  --c-warn: #a14e00; --c-bad: #c22626; --c-bar: #b8c0ca; --c-grid: #e1e5ea;
+  color-scheme: light;
+}
