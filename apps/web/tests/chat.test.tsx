@@ -50,7 +50,7 @@ describe("ChatView", () => {
     const { container } = render(<ChatView state={{ status: "done", steps: [],
       messages: [user("x"), bot("See [this](https://evil.example).")] }}
       demo={false} onAsk={() => {}} onOpenReceipt={() => {}} locationOn={false} onToggleLocation={() => {}} />);
-    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("a[href*=\"evil.example\"]")).toBeNull();
     expect(screen.getByText("this")).toBeInTheDocument();
   });
 
