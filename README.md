@@ -63,7 +63,7 @@ many that is, and names the gap.
 
   | A typical "chat with your data" bot | This agent |
   |---|---|
-  | Answers from a summary pasted into the prompt | Plans, then acts with 13 tools (read-only SQL, a Python sandbox, a data map, weather, journal, memory) |
+  | Answers from a summary pasted into the prompt | Plans, then acts with 14 tools (read-only SQL, a Python sandbox, a data map, weather, journal, memory) |
   | Numbers you have to trust | A code check rejects any figure not computed this turn |
   | Treats text it reads as instructions | Untrusted text is wrapped as data; no tool can send data out |
   | Never checks itself | A nightly investigator studies its own forecast misses |

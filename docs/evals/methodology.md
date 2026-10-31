@@ -111,7 +111,21 @@ failure was plausibly the injected break (a "5 hours 36 minutes" conversion with
 and it passed on retry. All four were fixed with tests that failed first.
 
 The check is complete only when the gate **passes** on the unbroken branch and **fails** on
-the break with the fixed graders. Both runs are recorded here when they land.
+the break with the fixed graders.
+
+**Result (2026-10-31, after Phase 4.5, commit `3977586`):**
+
+| Run | Branch | Result |
+|---|---|---|
+| [41190732233](https://github.com/kb2326/calibrated-health-agent/actions/runs/41190732233) | break (PR #4: receipt rule removed, tools discouraged) | **fails**, for the right reason: must-pass reg-001 and reg-020 failed and failed again on retry |
+| [41190707349](https://github.com/kb2326/calibrated-health-agent/actions/runs/41190707349), attempt 1 | unbroken (PR #5) | 31 of 31 evaluated must-pass cases passed; reg-040 was not evaluated (free-tier per-minute limit), so the gate correctly refused to pass |
+| same run, attempt 2 | unbroken (PR #5) | not evaluated: the free tier's daily quota was used up by the day's other runs |
+| local, Vertex AI, same commit | unbroken (PR #5) | **passes**: 32/32 must-pass (Wilson 95% 89–100%), none unevaluated, $0.21 |
+
+The gate passes on the real branch and fails on the break, and in both quota cases it failed
+loudly as "not evaluated" instead of passing quietly. The lesson for the free tier: one full
+regression run plus two PR gates exceed 500 requests a day, so a merge day runs the PR gates
+before any extra suites.
 
 ## Tracing
 

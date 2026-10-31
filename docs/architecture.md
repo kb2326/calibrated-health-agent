@@ -356,7 +356,7 @@ shape proven in ADR `docs/adr/0001-phase3-workflow.md`.
 | Component | Design |
 |---|---|
 | Framework | Google ADK 2.12.0 pinned; graph `Workflow`: `screen` (deterministic) → answer (LLM) → `verify_receipts` (deterministic, one retry) |
-| Topologies | Phase 4.5 (ADR 0007): `single` (one tool-loop agent with thinking, 13 tools; default) and `team` (alias `multi`: the same agent plus a coach and a domain expert as `AgentTool`s it may consult). The Phase 3 router → specialists → synthesizer pipeline was retired after evaluation. `CHA_TOPOLOGY` |
+| Topologies | Phase 4.5 (ADR 0007): `single` (one tool-loop agent with thinking, 14 tools; default) and `team` (alias `multi`: the same agent plus a coach and a domain expert as `AgentTool`s it may consult). The Phase 3 router → specialists → synthesizer pipeline was retired after evaluation. `CHA_TOPOLOGY` |
 | Models | Gemini 3.5 Flash-Lite everywhere (Vertex AI, global endpoint); `gemini-embedding-2` for memory; IDs and prices in `Settings` |
 | Code execution | `run_python`: a fresh subprocess per call (`-s -P`, scrubbed environment, empty temp dir), AST allowlist, an audit hook that blocks sockets, processes, ctypes and file writes, Linux rlimits (CPU 10 s, 1.5 GiB, no files, no forks), 15 s timeout. Data arrives as JSON (a leakage-safe bundle cut at an as-of day), never the database. Defense in depth, not a VM boundary; gVisor underneath on Cloud Run |
 | Receipts | Content-addressed `{code, data hash, as-of, output, executor}`; chat receipts in the laptop's `agent.db`, investigator receipts in `health.db`. `cha receipt <id> --rerun` reproduces the value or says the data changed |
