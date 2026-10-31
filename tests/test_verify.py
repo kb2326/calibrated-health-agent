@@ -87,3 +87,10 @@ def test_a_count_after_a_date_is_still_checked():
     # no closing "and"/"or": "12" is a count, not a day, and must be backed
     assert unbacked("Since Oct 3, 12 of your nights were short.", [{"n": 4}]) == ["12"]
     assert unbacked("On October 9, 10 hours of sleep.", [{"n": 4}]) == ["10"]
+
+
+def test_a_quantity_after_a_date_list_word_is_still_checked():
+    # final review I9: "and 6 hours" is a quantity, not a day
+    assert unbacked("You slept 7.2 hours on Oct 3 and 6 hours on Oct 4.", [{"v": 7.2}]) == ["6"]
+    assert unbacked("Steps went from Oct 3 to 9 thousand a day.", [{"v": 1}]) == ["9"]
+    assert unbacked("Oct 9, 10 and 11 had no data.", [{"n": 0}]) == []

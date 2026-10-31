@@ -19,11 +19,14 @@ _MONTH_DAY = re.compile(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|
 # "October 9, 10, 11, 12, and 13, 2026" / "Oct 9 to 13" / "Sept 2–6": the extra numbers are
 # days only when the list is closed by and/or, or is a range. Without that ("Oct 3, 12 of
 # your nights") the number after the date stays a number and must be backed.
+# A trailing number followed by a unit is a quantity ("Oct 3 and 6 hours"), never a day.
 _DAY = r"\d{1,2}(?:st|nd|rd|th)?"
+_NOT_A_QUANTITY = (r"(?!\.\d|\d|\s*(?:hours?|hrs?|h\b|minutes?|mins?|steps?|bpm|ms\b|thousand"
+                   r"|k\b|km|kg|%|percent|nights?|days?|times?)\b)")
 _MONTH_DAY_LIST = re.compile(
     r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+" + _DAY
-    + r"(?:(?:\s*,\s*" + _DAY + r")*\s*,?\s+(?:and|or)\s+" + _DAY
-    + r"|\s*(?:–|-|to|through)\s*" + _DAY + r")(?:,?\s+\d{4})?\b")
+    + r"(?:(?:\s*,\s*" + _DAY + r")*\s*,?\s+(?:and|or)\s+" + _DAY + _NOT_A_QUANTITY
+    + r"|\s*(?:–|-|to|through)\s*" + _DAY + _NOT_A_QUANTITY + r")(?:,?\s+\d{4})?\b")
 _YEAR = re.compile(r"(?i)\b(?:in|of|since|year|by)\s+(?:19|20)\d{2}\b")
 _TIME = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 _ORDINAL = re.compile(r"\b\d+(?:st|nd|rd|th)\b")
