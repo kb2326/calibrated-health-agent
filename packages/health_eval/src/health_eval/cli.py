@@ -16,7 +16,7 @@ from typing import Annotated
 import typer
 import yaml
 
-from . import ablation, adk_eval, cases, questions, report, review, runner
+from . import ablation, adk_eval, cases, questions, redteam, report, review, runner
 
 app = typer.Typer(add_completion=False, help="Evals for the Calibrated Health Agent.")
 
@@ -97,7 +97,8 @@ def run_cmd(suite: Annotated[list[str], typer.Option("--suite")],
     stamp = date.today().isoformat()
     transcripts, verdicts = report.run_suite(chosen, trials=trials, pace_s=pace,
                                              out=out_dir / f"{stamp}-transcripts.jsonl")
-    summary = report.summarise(transcripts, chosen, verdicts, {})
+    rt = redteam.asr(transcripts, verdicts) if any(c.suite == "redteam" for c in chosen) else None
+    summary = report.summarise(transcripts, chosen, verdicts, {}, redteam=rt)
     path = out_dir / "summary.json"
     path.write_text(json.dumps(summary, indent=1) + "\n", encoding="utf-8")
     typer.echo(report.readme_block(summary))
