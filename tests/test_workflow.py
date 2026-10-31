@@ -136,3 +136,17 @@ def test_poisoned_note_is_wrapped_everywhere_chat():
     seen = "\n".join(llm.prompt_texts())
     assert POISON in seen
     assert_only_wrapped(seen, POISON)
+
+
+def test_an_empty_draft_never_reaches_the_person():
+    # Vertex run 2026-10-31: a revision came back empty and the person got a blank answer
+    llm = FakeLlm([text("Your mean is 9.9"), text("")])
+    answer = ask(workflow.build_workflow("single", model=llm), "mean?")
+    assert answer.startswith("Your mean is 9.9") and verify.unbacked_in(answer) == ["9.9"]
+
+
+def test_an_empty_first_draft_is_retried():
+    llm = FakeLlm([text(""), call("run_sql", query="SELECT AVG(agg_value) AS m FROM daily_metrics"),
+                   text("Your mean is 62")])
+    answer = ask(workflow.build_workflow("single", model=llm), "mean?")
+    assert "62" in answer

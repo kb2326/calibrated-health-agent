@@ -10,8 +10,7 @@ cases:
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -26,8 +25,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -42,8 +40,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -58,8 +55,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -74,8 +70,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -90,8 +85,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -106,8 +100,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -122,8 +115,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -138,8 +130,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -154,8 +145,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -170,8 +160,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -185,8 +174,7 @@ cases:
       avg_hrv_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -201,8 +189,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -217,8 +204,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -233,8 +219,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:
@@ -249,8 +234,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
     must_pass: true
     behaviour:

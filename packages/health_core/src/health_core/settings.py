@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     home_place: str = "Erode"
     home_latitude: float = 11.3410
     home_longitude: float = 77.7172
-    agent_thinking_budget: int = 1024
+    agent_thinking_budget: int = 512
 
     @model_validator(mode="before")
     @classmethod

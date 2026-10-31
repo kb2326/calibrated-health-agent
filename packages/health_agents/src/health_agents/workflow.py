@@ -56,16 +56,17 @@ def _note_output(tool: Any, args: dict, tool_context: Any, tool_response: Any) -
     return None
 
 
+# A lean toolbox: every tool's description is re-sent at each step, so overlapping tools
+# cost tokens and invite confusion. data_catalog + query_metric replace list_metrics,
+# describe_substrate, get_metric_series and compare_periods (still importable).
 ALL_TOOLS = [
     tools.data_catalog, tools.query_metric, tools.weather,
-    tools.list_metrics, tools.describe_substrate, tools.get_metric_series, tools.compare_periods,
     tools.get_anomalies, tools.get_correlations, tools.get_journal, tools.run_sql,
     tools.run_python, tools.get_scoreboard, api_tools.sources_for_metric, api_tools.list_devices,
     api_tools.get_health_profile, memory.save_fact_tool, load_memory,
 ]
 # Specialists read; only the main agent saves memory or runs code.
-COACH_TOOLS = [tools.data_catalog, tools.query_metric, tools.get_journal, tools.weather,
-               tools.compare_periods]
+COACH_TOOLS = [tools.data_catalog, tools.query_metric, tools.get_journal, tools.weather]
 EXPERT_TOOLS = [tools.data_catalog, tools.query_metric, api_tools.sources_for_metric,
                 api_tools.list_devices, api_tools.get_health_profile]
 
@@ -110,6 +111,7 @@ def screen(ctx: Context, node_input: Any) -> str:
     ctx.state[TURN_OUTPUTS] = []
     ctx.state[tools.TURN_RECEIPTS] = []
     ctx.state["verify_attempts"] = 0
+    ctx.state["last_draft"] = ""
     ctx.route = "ok"
     return question
 
@@ -117,8 +119,17 @@ def screen(ctx: Context, node_input: Any) -> str:
 def verify_receipts(ctx: Context, node_input: Any) -> str:
     answer = _text(node_input).strip()
     question = str(ctx.state.get("question", ""))
-    unbacked = numbers_without_receipts(answer, list(ctx.state.get(TURN_OUTPUTS, [])), question)
     attempts = int(ctx.state.get("verify_attempts", 0))
+    if not answer:  # a draft with no text (seen live after a revision): never send a blank
+        last = str(ctx.state.get("last_draft", ""))
+        if attempts < MAX_RETRIES + 1 and not last:
+            ctx.state["verify_attempts"] = attempts + 1
+            ctx.route = "retry"
+            return (f"The person asked: {question}\n\nYou have not replied yet. Answer the "
+                    "question now, computing any number with a tool and citing its receipt.")
+        answer = last or "Sorry, I couldn't put an answer together. Please ask again."
+    ctx.state["last_draft"] = answer
+    unbacked = numbers_without_receipts(answer, list(ctx.state.get(TURN_OUTPUTS, [])), question)
     if unbacked and attempts < MAX_RETRIES:
         ctx.state["verify_attempts"] = attempts + 1
         ctx.route = "retry"

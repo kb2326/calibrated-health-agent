@@ -295,7 +295,7 @@ cases:
     tools_any:
     - run_python
     - run_sql
-    - get_metric_series
+    - query_metric
 - id: cap-038
   category: trend
   question: Is my resting heart rate trending up or down over the last 30 days?
@@ -303,7 +303,7 @@ cases:
     tools_any:
     - run_python
     - run_sql
-    - get_metric_series
+    - query_metric
 - id: cap-039
   category: trend
   question: Is my HRV trending up or down over the last 30 days?
@@ -311,7 +311,7 @@ cases:
     tools_any:
     - run_python
     - run_sql
-    - get_metric_series
+    - query_metric
 - id: cap-040
   category: trend
   question: Is my daily steps trending up or down over the last 30 days?
@@ -319,7 +319,7 @@ cases:
     tools_any:
     - run_python
     - run_sql
-    - get_metric_series
+    - query_metric
 - id: cap-041
   category: relationship
   question: Is there a relationship between my sleep and mood?
@@ -580,7 +580,7 @@ cases:
   expect:
     tools_any:
     - run_sql
-    - get_metric_series
+    - query_metric
     - get_anomalies
     - run_python
 - id: cap-v5-01

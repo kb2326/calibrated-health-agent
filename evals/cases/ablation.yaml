@@ -10,8 +10,7 @@ cases:
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-002
   category: numbers
@@ -22,8 +21,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-003
   category: numbers
@@ -34,8 +32,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-004
   category: numbers
@@ -45,8 +42,7 @@ cases:
       avg_steps_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'steps'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-005
   category: numbers
@@ -57,8 +53,7 @@ cases:
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-006
   category: numbers
@@ -69,8 +64,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-007
   category: numbers
@@ -81,8 +75,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-008
   category: numbers
@@ -92,8 +85,7 @@ cases:
       max_steps_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'steps'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-009
   category: numbers
@@ -104,8 +96,7 @@ cases:
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-010
   category: numbers
@@ -116,8 +107,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-011
   category: numbers
@@ -128,8 +118,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-012
   category: numbers
@@ -139,8 +128,7 @@ cases:
       min_steps_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'steps'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-013
   category: numbers
@@ -151,8 +139,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-014
   category: numbers
@@ -163,8 +150,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-015
   category: numbers
@@ -175,8 +161,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-016
   category: numbers
@@ -186,8 +171,7 @@ cases:
       avg_rhr_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-017
   category: numbers
@@ -198,8 +182,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-018
   category: numbers
@@ -210,8 +193,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-019
   category: numbers
@@ -222,8 +204,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-020
   category: numbers
@@ -233,8 +214,7 @@ cases:
       max_rhr_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-021
   category: numbers
@@ -245,8 +225,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-022
   category: numbers
@@ -257,8 +236,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-023
   category: numbers
@@ -269,8 +247,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-024
   category: numbers
@@ -280,8 +257,7 @@ cases:
       min_rhr_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-025
   category: numbers
@@ -292,8 +268,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-026
   category: numbers
@@ -304,8 +279,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-027
   category: numbers
@@ -316,8 +290,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-028
   category: numbers
@@ -327,8 +300,7 @@ cases:
       avg_hrv_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-029
   category: numbers
@@ -339,8 +311,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-030
   category: numbers
@@ -351,8 +322,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-031
   category: numbers
@@ -363,8 +333,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-032
   category: numbers
@@ -374,8 +343,7 @@ cases:
       max_hrv_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-033
   category: numbers
@@ -386,8 +354,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-034
   category: numbers
@@ -398,8 +365,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-035
   category: numbers
@@ -410,8 +376,7 @@ cases:
         AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-036
   category: numbers
@@ -421,8 +386,7 @@ cases:
       min_hrv_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-037
   category: numbers
@@ -433,8 +397,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-038
   category: numbers
@@ -445,8 +408,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-039
   category: numbers
@@ -457,8 +419,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-040
   category: numbers
@@ -468,8 +429,7 @@ cases:
       avg_sleep_h_all: SELECT AVG(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-041
   category: numbers
@@ -480,8 +440,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-042
   category: numbers
@@ -492,8 +451,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-043
   category: numbers
@@ -504,8 +462,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-044
   category: numbers
@@ -515,8 +472,7 @@ cases:
       max_sleep_h_all: SELECT MAX(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-045
   category: numbers
@@ -527,8 +483,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-046
   category: numbers
@@ -539,8 +494,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-047
   category: numbers
@@ -551,8 +505,7 @@ cases:
         > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-048
   category: numbers
@@ -562,8 +515,7 @@ cases:
       min_sleep_h_all: SELECT MIN(agg_value / 60.0) FROM daily_metrics WHERE data_type = 'sleep'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-049
   category: numbers
@@ -574,8 +526,7 @@ cases:
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-050
   category: numbers
@@ -586,8 +537,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-051
   category: numbers
@@ -598,8 +548,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-052
   category: numbers
@@ -609,8 +558,7 @@ cases:
       avg_sleep_m_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'sleep'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-053
   category: numbers
@@ -621,8 +569,7 @@ cases:
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-054
   category: numbers
@@ -633,8 +580,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-055
   category: numbers
@@ -645,8 +591,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-056
   category: numbers
@@ -656,8 +601,7 @@ cases:
       max_sleep_m_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'sleep'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-057
   category: numbers
@@ -668,8 +612,7 @@ cases:
         MAX(date) FROM daily_metrics), '-7 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-058
   category: numbers
@@ -680,8 +623,7 @@ cases:
         MAX(date) FROM daily_metrics), '-14 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-059
   category: numbers
@@ -692,8 +634,7 @@ cases:
         MAX(date) FROM daily_metrics), '-30 day')
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
 - id: abl-060
   category: numbers
@@ -703,6 +644,5 @@ cases:
       min_sleep_m_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'sleep'
     tools_any:
     - run_sql
-    - get_metric_series
-    - compare_periods
+    - query_metric
     - run_python
