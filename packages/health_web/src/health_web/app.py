@@ -8,7 +8,10 @@ Modes:
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
+import re
 from collections.abc import AsyncIterator
 from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path
@@ -19,6 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from google.adk.models import BaseLlm
+from health_agents import tracing
 
 from . import routes
 from .agent import build_agent
@@ -30,6 +34,36 @@ DEFAULT_STATIC = Path(os.environ.get("CHA_WEB_STATIC") or Path(__file__).resolve
 NOT_BUILT = """<!doctype html><meta charset="utf-8"><title>Calibrated Health Agent</title>
 <p>The front end isn't built yet. Run <code>npm ci &amp;&amp; npm run build</code> in
 <code>apps/web</code>, then reload. The agent API is up at <code>/api</code>.</p>"""
+
+
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Permissions-Policy": "geolocation=(self), camera=(), microphone=(), payment=()",
+}
+_INLINE_SCRIPT = re.compile(r"<script(?![^>]*src=)[^>]*>(.*?)</script>", re.S | re.I)
+
+
+def content_security_policy(static: Path) -> str:
+    """'self' only, plus the exact inline scripts the static export contains, by hash.
+
+    Next.js puts a few small inline scripts in each exported page; allowing them by SHA-256
+    keeps the policy strict (no 'unsafe-inline'), and any other injected script is refused.
+    """
+    hashes: set[str] = set()
+    if static.is_dir():
+        for page in static.rglob("*.html"):
+            for body in _INLINE_SCRIPT.findall(page.read_text(encoding="utf-8", errors="replace")):
+                digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+                hashes.add(f"'sha256-{digest}'")
+    scripts = " ".join(["'self'", *sorted(hashes)])
+    return ("default-src 'self'; "
+            f"script-src {scripts}; "
+            "style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; "
+            "manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; "
+            "form-action 'self'; frame-ancestors 'none'")
 
 
 def _host(request: Request) -> str:
@@ -67,10 +101,28 @@ def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str 
                                     status_code=403)
             return await call_next(request)
 
+    static = static_dir or DEFAULT_STATIC
+    csp = content_security_policy(static)
+
+    @api.middleware("http")
+    async def headers_and_span(request: Request, call_next):
+        # One span per request: the route template and status only, never the path's values,
+        # the query string or a body.
+        with tracing.span("cha.web.request") as span:
+            response = await call_next(request)
+            route = request.scope.get("route")
+            span.set_attribute("http.route", getattr(route, "path", None) or "static")
+            span.set_attribute("http.method", request.method)
+            span.set_attribute("http.status_code", response.status_code)
+        response.headers.update(SECURITY_HEADERS)
+        response.headers["Content-Security-Policy"] = csp
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     api.include_router(routes.router)
     add_adk_fastapi_endpoint(api, build_agent(topology=topology, model=model, models=models),
                              path="/api/agent")
-    static = static_dir or DEFAULT_STATIC
     if (static / "index.html").exists():  # mounted last, so /api/* always wins
         api.mount("/", StaticFiles(directory=static, html=True), name="web")
     else:
