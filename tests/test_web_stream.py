@@ -112,3 +112,12 @@ def test_end_to_end_stream_has_no_fixture_values():
     result = next(e for e in events if e["type"] == "TOOL_CALL_RESULT")
     assert json.loads(result["content"])["receipt"].startswith("r-")
     assert answer_text(events) == "Here is your heart rate."
+
+
+def test_reasoning_events_never_reach_the_browser():
+    from ag_ui.core import BaseEvent
+
+    f = StreamFilter()
+    for t in ("REASONING_START", "REASONING_MESSAGE_CONTENT", "REASONING_ENCRYPTED_VALUE", "REASONING_END"):
+        ev = BaseEvent.model_construct(type=t)
+        assert f(ev) is None, t

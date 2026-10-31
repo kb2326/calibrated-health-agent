@@ -63,6 +63,9 @@ class StreamFilter:
         self.names: dict[str, str] = {}
 
     def __call__(self, event: BaseEvent) -> BaseEvent | None:
+        kind = getattr(event.type, "value", event.type)
+        if str(kind).startswith(("REASONING", "THINKING")):
+            return None  # the model's (encrypted) reasoning: the page has no use for it
         if isinstance(event, ToolCallStartEvent):
             self.names[event.tool_call_id] = event.tool_call_name
             return event
