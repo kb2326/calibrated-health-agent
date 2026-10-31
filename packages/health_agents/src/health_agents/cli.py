@@ -29,14 +29,20 @@ from google.genai import types
 from health_core.settings import get_settings
 from health_data import civil, db, store
 
-from . import agent_db, costs, memory, receipts, tools, vertex
-from .workflow import build_workflow
+from . import agent_db, costs, memory, receipts, tools, tracing, vertex
+from .workflow import Topology, build_workflow
 
 app = typer.Typer(add_completion=False, help="Ask the Calibrated Health Agent.")
 memory_app = typer.Typer(invoke_without_command=True, help="What the agent remembers.")
 app.add_typer(memory_app, name="memory")
 notes_app = typer.Typer(invoke_without_command=True, help="What the investigator found.")
 app.add_typer(notes_app, name="notes")
+
+
+@app.callback()
+def _start() -> None:
+    """Tracing per CHA_TRACING (default off; never message content outside the laptop)."""
+    tracing.setup()
 STALE_JOURNAL_DAYS = 2
 SMOKE_QUESTIONS = Path("evals/smoke/questions.yaml")
 
@@ -56,6 +62,7 @@ class TurnResult:
     input_tokens: int = 0
     output_tokens: int = 0
     usd: float = 0.0
+    tool_calls: list[dict] = field(default_factory=list)  # {name, args, response}
 
 
 def _model() -> str | BaseLlm:
@@ -87,11 +94,13 @@ def _stale_note() -> str | None:
 class Session:
     """One ADK runner + session, reused across the turns of `cha chat`."""
 
-    def __init__(self, model: str | BaseLlm | None = None, *, refresh_memory: bool = True):
+    def __init__(self, model: str | BaseLlm | None = None, *, refresh_memory: bool = True,
+                 tools: list | None = None, topology: Topology | None = None):
         self.refresh_memory = refresh_memory
         self.service = InMemorySessionService()
         self.memory = memory.HealthMemoryService()
-        self.runner = Runner(app_name=APP_NAME, node=build_workflow(model=model or _model()),
+        self.runner = Runner(app_name=APP_NAME,
+                             node=build_workflow(topology, model=model or _model(), tools=tools),
                              session_service=self.service, memory_service=self.memory)
         self.session_id = uuid.uuid4().hex
 
@@ -101,6 +110,7 @@ class Session:
             await self.service.create_session(app_name=APP_NAME, user_id="owner",
                                               session_id=self.session_id)
         result = TurnResult(answer="")
+        calls: dict[str, dict] = {}
         message: types.Content | None = types.Content(role="user", parts=[types.Part(text=question)])
         while message is not None:
             pending = []
@@ -112,6 +122,13 @@ class Session:
                                              + (ev.usage_metadata.thoughts_token_count or 0))
                 if isinstance(ev.output, str):
                     result.answer = ev.output
+                for fc in ev.get_function_calls():
+                    if fc.name != CONFIRM:
+                        calls[fc.id or str(len(calls))] = {"name": fc.name, "args": dict(fc.args or {}),
+                                                           "response": None}
+                for fr in ev.get_function_responses():
+                    if fr.id in calls:
+                        calls[fr.id]["response"] = fr.response
                 pending += [fc for fc in ev.get_function_calls() if fc.name == CONFIRM]
             message = None
             if pending:
@@ -124,6 +141,7 @@ class Session:
         turn = (session.state.get(tools.TURN_RECEIPTS, []) if session else []) or []
         ids = [r["receipt"] for r in turn] + _RECEIPT_ID.findall(result.answer)
         result.receipts = list(dict.fromkeys(ids))
+        result.tool_calls = list(calls.values())
         return result
 
     def ask(self, question: str, confirm: Callable[[dict], bool] = _confirm_with_typer) -> TurnResult:
@@ -136,9 +154,16 @@ class Session:
                     self.memory.refresh_episodes(conn)
             except Exception:
                 pass  # offline or no embeddings yet: memory search falls back to recent episodes
-        result = asyncio.run(self._ask(question, confirm))
-        result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
+        with tracing.span("cha.turn") as span:
+            result = asyncio.run(self._ask(question, confirm))
+            result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
+            span.set_attribute("cha.usd", result.usd)
+            span.set_attribute("cha.receipts", len(result.receipts))
         return result
+
+
+DISCLOSURE = ("AI agent (Gemini) answering from your own data. It can be wrong and is not "
+              "medical advice; every number has a receipt you can re-run.")
 
 
 def _print_turn(result: TurnResult) -> None:
@@ -152,6 +177,7 @@ def _print_turn(result: TurnResult) -> None:
 @app.command()
 def ask(question: str) -> None:
     """Ask one question about your health data."""
+    typer.echo(DISCLOSURE)
     note = _stale_note()
     if note:
         typer.echo(note)
@@ -165,6 +191,7 @@ def ask(question: str) -> None:
 @app.command()
 def chat() -> None:
     """A conversation; an empty line ends it."""
+    typer.echo(DISCLOSURE)
     note = _stale_note()
     if note:
         typer.echo(note)

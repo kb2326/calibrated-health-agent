@@ -9,6 +9,8 @@ from health_core.settings import Settings
 from health_data import auth, db, store, sync
 from jobs import sync_job
 
+_REAL_WEATHER = sync_job._weather
+
 
 class Calls(list[str]):
     """Step names in call order, plus every heartbeat the job wrote."""
@@ -30,6 +32,8 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.setattr(sync_job, "_migrate", lambda: log.append("migrate") or {})
     monkeypatch.setattr(sync, "run", lambda: log.append("sync") or {"steps": {"fetched": 1, "inserted": 1}})
     monkeypatch.setattr(sync_job, "_journal_import", lambda s: log.append("import") or {})
+    monkeypatch.setattr(sync_job, "_derive", lambda: log.append("derive") or {"rows": {}})
+    monkeypatch.setattr(sync_job, "_weather", lambda s: log.append("weather") or {"days": 0})
     monkeypatch.setattr(store, "push_recorded", lambda *a, **k: log.append("push") or 6)
     monkeypatch.setattr(sync_job, "_lock", lambda s: log.append("lock") or {"written": False})
     monkeypatch.setattr(sync_job, "_settle", lambda: log.append("settle") or {"written": False})
@@ -59,11 +63,11 @@ def _interrupted(committed: dict, cause: Exception):
 
 def test_job_happy_path_order(calls, capsys):
     assert sync_job.main([]) == 0
-    assert calls == ["pull", "migrate", "sync", "import", "lock", "settle", "retest",
+    assert calls == ["pull", "migrate", "sync", "import", "derive", "weather", "lock", "settle", "retest",
                      "investigate", "push", "publish", "heartbeat"]
     lines = _lines(capsys)
     assert [line["step"] for line in lines] == [
-        "pull", "migrate", "sync", "journal", "lock", "settle", "retest", "investigate", "push",
+        "pull", "migrate", "sync", "journal", "derive", "weather", "lock", "settle", "retest", "investigate", "push",
         "publish", "heartbeat"]
     assert {line["severity"] for line in lines} == {"INFO"}
 
@@ -129,7 +133,7 @@ def test_empty_sync_summary_is_an_error(calls, monkeypatch, capsys):
 def test_sync_exception_still_imports_journal_and_pushes_committed_rows(calls, monkeypatch, capsys):
     monkeypatch.setattr(sync, "run", _interrupted({"steps": {"fetched": 3, "inserted": 2}}, RuntimeError("bug")))
     assert sync_job.main([]) == 1
-    assert calls == ["pull", "migrate", "import", "lock", "settle", "retest", "investigate",
+    assert calls == ["pull", "migrate", "import", "derive", "weather", "lock", "settle", "retest", "investigate",
                      "push", "publish", "heartbeat"]
     line = _step(_lines(capsys), "sync")
     assert (line["severity"], line["error"], line["changed_rows"]) == ("ERROR", "RuntimeError", 2)
@@ -370,3 +374,39 @@ def test_agent_rows_count_as_changes_for_push(calls, monkeypatch):
     monkeypatch.setattr(sync_job, "_agent_seq", lambda: next(seqs))
     sync_job.main([])
     assert "push" in calls
+
+
+def test_weather_bug_never_skips_the_lock(calls, monkeypatch, capsys):
+    """Review I2: any weather failure, not only WeatherError, is a skip; lock and push run."""
+    from health_data import weather
+
+    with db.connect() as conn:
+        db.migrate(conn)
+
+    def broken(*a, **k):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(weather, "sync_recent", broken)
+    monkeypatch.setattr(weather, "backfill", broken)
+    monkeypatch.setattr(sync_job, "_weather", _REAL_WEATHER)  # the real step, broken inside
+    assert sync_job.main([]) == 0
+    assert "lock" in calls and "push" in calls
+    line = _step(_lines(capsys), "weather")
+    assert line["severity"] == "INFO" and line["result"].startswith("skipped")
+
+
+def test_weather_change_alone_is_pushed(calls, monkeypatch):
+    """Review minor: a backfill or a new day's weather is pushed, or the next pull drops it."""
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"fetched": 9, "inserted": 0}})
+    monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 0})
+    monkeypatch.setattr(sync_job, "_weather", lambda s: calls.append("weather") or {"days": 8, "changed": True})
+    assert sync_job.main([]) == 0
+    assert "push" in calls
+
+
+def test_unchanged_weather_does_not_force_a_push(calls, monkeypatch):
+    monkeypatch.setattr(sync, "run", lambda: calls.append("sync") or {"steps": {"fetched": 9, "inserted": 0}})
+    monkeypatch.setattr(sync_job, "_journal_import", lambda s: calls.append("import") or {"new_submissions": 0})
+    monkeypatch.setattr(sync_job, "_weather", lambda s: calls.append("weather") or {"days": 8, "changed": False})
+    assert sync_job.main([]) == 0
+    assert "push" not in calls

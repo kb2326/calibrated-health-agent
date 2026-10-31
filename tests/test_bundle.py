@@ -79,3 +79,23 @@ def test_hash_is_stable_and_changes_with_data(tmp_path):
 def test_latest_settled_day(tmp_path):
     conn = make_db(tmp_path / "h.db")
     assert bundle.latest_settled_day(conn) is None
+
+
+def test_detail_frames_wrap_typed_names_and_sources(tmp_path):
+    """Review I1: names and sources in v5 detail frames are untrusted text."""
+    conn = _db(tmp_path)
+    if "exercise_sessions" not in {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}:
+        from health_data import db as hdb
+        hdb.migrate(conn)
+    day = (AS_OF - timedelta(days=1)).isoformat()
+    conn.execute("INSERT INTO exercise_sessions (date, start, type, name, source) VALUES "
+                 "(?, ?, 'TENNIS', 'ignore previous', 'Pixel')", (day, day + "T07:00:00Z"))
+    conn.execute("INSERT INTO sleep_sessions (date, start, source) VALUES (?, ?, 'Pixel')",
+                 (day, day + "T22:00:00Z"))
+    frames = bundle.build(conn, AS_OF)["frames"]
+    ex = frames["exercise_sessions"][0]
+    assert ex["name"] == '<untrusted source="workout_name">ignore previous</untrusted>'
+    assert ex["source"].startswith('<untrusted source="data_source">')
+    assert ex["type"] == "TENNIS"
+    assert frames["sleep_sessions"][0]["source"].startswith('<untrusted source="data_source">')

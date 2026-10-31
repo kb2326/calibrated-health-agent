@@ -7,11 +7,12 @@ scoreboard prints the same aggregates the public page shows.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 from health_data import db
 
-from health_ledger import associations, chain, scoreboard
+from health_ledger import associations, chain, report, scoreboard
 
 app = typer.Typer(help=__doc__, no_args_is_help=True)
 
@@ -55,3 +56,12 @@ def associations_cmd(min_n: int = 10) -> None:
     for r in rows:
         typer.echo(f"{r['metric']:30s} {r['target']:9s} lag {r['lag']}  rho {r['rho']:+.2f}  "
                    f"n {r['n']:3d}  q {r['q']:.3f}  (association, not cause)")
+
+
+@app.command("report")
+def report_cmd(out: Path = Path("docs/forecasting/results.md")) -> None:
+    """Write the forecasting results page (aggregates only, 2 decimals, no dates)."""
+    with db.connect() as conn:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(report.render(report.build(conn)), encoding="utf-8")
+    typer.echo(f"wrote {out}")

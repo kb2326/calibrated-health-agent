@@ -75,6 +75,44 @@ data_types:
     scope: activity_and_fitness
     agg: sum
 
+  # Phase 4.5 (research 11, probe 2026-10-31). Same read-only scopes; types the
+  # owner's devices don't record yet simply stay empty.
+  active-energy-burned:
+    scope: activity_and_fitness
+    agg: sum
+  activity-level:          # timeline; raw_json only (derive step)
+    scope: activity_and_fitness
+    agg: sum
+  altitude:
+    scope: activity_and_fitness
+    agg: sum
+  swim-lengths-data:
+    scope: activity_and_fitness
+    agg: sum
+  calories-in-heart-rate-zone:
+    scope: activity_and_fitness
+    agg: sum
+  vo2-max:
+    scope: activity_and_fitness
+    agg: mean
+  run-vo2-max:
+    scope: activity_and_fitness
+    agg: mean
+  daily-heart-rate-zones:  # zone thresholds; raw_json only (derive step)
+    scope: health_metrics_and_measurements
+    agg: mean
+  body-fat:
+    scope: health_metrics_and_measurements
+    agg: mean
+  height:
+    scope: health_metrics_and_measurements
+    agg: mean
+  blood-glucose:
+    scope: health_metrics_and_measurements
+    agg: mean
+  core-body-temperature:
+    scope: health_metrics_and_measurements
+    agg: mean
 # OAuth scopes are requested read-only, one per category actually used above.
 oauth_scope_prefix: "https://www.googleapis.com/auth/googlehealth"
 scope_categories:

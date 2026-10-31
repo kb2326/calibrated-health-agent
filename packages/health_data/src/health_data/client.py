@@ -132,6 +132,18 @@ TIME_FIELD = {
     "daily-vo2-max": "daily",
     # One sample per night, stamped with sampleTime.
     "respiratory-rate-sleep-summary": "sample",
+    # Phase 4.5 additions (research 11; accepted by the API on the 2026-10-31 probe).
+    "vo2-max": "sample",
+    "run-vo2-max": "sample",
+    "body-fat": "sample",
+    "height": "sample",
+    "blood-glucose": "sample",
+    "core-body-temperature": "sample",
+    "daily-heart-rate-zones": "daily",
+    "active-energy-burned": "interval",
+    "activity-level": "interval",
+    "altitude": "interval",
+    "swim-lengths-data": "interval",
     # Interval types (the default); listed so the table is the full inventory.
     "floors": "interval",
     "active-zone-minutes": "interval",
@@ -316,6 +328,8 @@ ROLLUP_TYPES = {
     # floors rejects `list` outright (reconcile/rollup/dailyRollup only); the
     # other three are minute-granular streams, stored as one bucket per day.
     "floors", "active-zone-minutes", "sedentary-period", "time-in-heart-rate-zone",
+    # rollup-only per the reference (dataPoints.list is rejected)
+    "calories-in-heart-rate-zone",
 }
 
 # The API rejects a rollup range longer than this, per type (surfaced in its
@@ -453,6 +467,11 @@ def extract_rollup_value(data_type: str, bucket: dict) -> tuple[float | None, st
     if "durationSum" in section:
         secs = _seconds(section["durationSum"])
         return (None, None) if secs is None else (round(secs / 60, 2), "minutes")
+    per_zone_kcal = section.get("caloriesInHeartRateZones")
+    if isinstance(per_zone_kcal, list):
+        known = [_num((z or {}).get("kcal")) for z in per_zone_kcal]
+        known = [k for k in known if k is not None]
+        return (round(sum(known), 2), "kcal") if known else (None, None)
     zones = section.get("timeInHeartRateZones")
     if isinstance(zones, list):
         parts = [_seconds((z or {}).get("duration")) for z in zones]
@@ -543,7 +562,19 @@ VALUE_FIELD: dict[str, tuple[str, str, float]] = {
     "daily-sleep-temperature-derivations": ("nightlyTemperatureCelsius", "celsius", 1),
     "daily-vo2-max": ("vo2Max", "ml/kg/min", 1),
     "respiratory-rate-sleep-summary": ("fullSleepStats.breathsPerMinute", "breaths/min", 1),
+    "vo2-max": ("vo2Max", "ml/kg/min", 1),
+    "run-vo2-max": ("runVo2Max", "ml/kg/min", 1),
+    "body-fat": ("percentage", "percent", 1),
+    "height": ("heightMillimeters", "m", 0.001),
+    "blood-glucose": ("bloodGlucoseMilligramsPerDeciliter", "mg/dL", 1),
+    "core-body-temperature": ("temperatureCelsius", "celsius", 1),
+    "active-energy-burned": ("kcal", "kcal", 1),
+    "altitude": ("gainMillimeters", "m", 0.001),
+    "swim-lengths-data": ("strokeCount", "strokes", 1),
 }
+
+# Kept as raw_json only (timelines and thresholds); the v5 derive step reads them.
+NO_SCALAR_TYPES = {"activity-level", "daily-heart-rate-zones"}
 
 # Types with no scalar of their own — the meaningful daily figure is how long
 # they lasted, which we derive from the interval.
@@ -579,6 +610,8 @@ def extract_value(data_type: str, point: dict) -> tuple[float | None, str | None
         return None, None
     if data_type in DURATION_TYPES:
         return _duration_minutes(section), "minutes"
+    if data_type in NO_SCALAR_TYPES:
+        return None, None
     spec = VALUE_FIELD.get(data_type)
     if spec:
         field, unit, mult = spec

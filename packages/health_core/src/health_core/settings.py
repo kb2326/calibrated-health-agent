@@ -41,12 +41,18 @@ class Settings(BaseSettings):
     # Agent layer (Phase 3). Prices are list prices per million tokens for model_default
     # (gemini-3.5-flash-lite, standard paid tier; output includes thinking tokens), checked
     # 2026-10-23 at ai.google.dev/gemini-api/docs/pricing. Used only for the spend caps.
-    topology: Literal["single", "multi"] = "single"
+    topology: Literal["single", "team", "multi"] = "single"
     embedding_model: str = "gemini-embedding-2"
     price_in_per_m: float = 0.30
     price_out_per_m: float = 2.50
     agent_cloud_monthly_usd_cap: float = 0.30  # investigator + forecaster 7 (cloud job)
     chat_monthly_usd_cap: float = 0.30  # laptop chat
+    # Phase 4.5. Home location for daily weather (Erode, Tamil Nadu); the web front end
+    # passes the device's live location instead. Thinking budget for the chat agent.
+    home_place: str = "Erode"
+    home_latitude: float = 11.3410
+    home_longitude: float = 77.7172
+    agent_thinking_budget: int = 512
 
     @model_validator(mode="before")
     @classmethod

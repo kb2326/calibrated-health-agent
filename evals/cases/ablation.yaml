@@ -1,0 +1,648 @@
+# ablation suite: generated seed cases (Phase 4 Task 8), hand-edited from here.
+# Truth SQL is anchored on MAX(date) so it holds on any fixture build date.
+cases:
+- id: abl-001
+  category: numbers
+  question: What was my average daily steps over the last 7 days?
+  expect:
+    numbers:
+      avg_steps_7: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-002
+  category: numbers
+  question: What was my average daily steps over the last 14 days?
+  expect:
+    numbers:
+      avg_steps_14: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-003
+  category: numbers
+  question: What was my average daily steps over the last 30 days?
+  expect:
+    numbers:
+      avg_steps_30: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-004
+  category: numbers
+  question: What was my average daily steps over all the data I have?
+  expect:
+    numbers:
+      avg_steps_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'steps'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-005
+  category: numbers
+  question: What was my highest daily steps over the last 7 days?
+  expect:
+    numbers:
+      max_steps_7: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-006
+  category: numbers
+  question: What was my highest daily steps over the last 14 days?
+  expect:
+    numbers:
+      max_steps_14: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-007
+  category: numbers
+  question: What was my highest daily steps over the last 30 days?
+  expect:
+    numbers:
+      max_steps_30: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-008
+  category: numbers
+  question: What was my highest daily steps over all the data I have?
+  expect:
+    numbers:
+      max_steps_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'steps'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-009
+  category: numbers
+  question: What was my lowest daily steps over the last 7 days?
+  expect:
+    numbers:
+      min_steps_7: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-010
+  category: numbers
+  question: What was my lowest daily steps over the last 14 days?
+  expect:
+    numbers:
+      min_steps_14: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-011
+  category: numbers
+  question: What was my lowest daily steps over the last 30 days?
+  expect:
+    numbers:
+      min_steps_30: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'steps' AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-012
+  category: numbers
+  question: What was my lowest daily steps over all the data I have?
+  expect:
+    numbers:
+      min_steps_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'steps'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-013
+  category: numbers
+  question: What was my average resting heart rate in bpm over the last 7 days?
+  expect:
+    numbers:
+      avg_rhr_7: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-014
+  category: numbers
+  question: What was my average resting heart rate in bpm over the last 14 days?
+  expect:
+    numbers:
+      avg_rhr_14: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-015
+  category: numbers
+  question: What was my average resting heart rate in bpm over the last 30 days?
+  expect:
+    numbers:
+      avg_rhr_30: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-016
+  category: numbers
+  question: What was my average resting heart rate in bpm over all the data I have?
+  expect:
+    numbers:
+      avg_rhr_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-017
+  category: numbers
+  question: What was my highest resting heart rate in bpm over the last 7 days?
+  expect:
+    numbers:
+      max_rhr_7: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-018
+  category: numbers
+  question: What was my highest resting heart rate in bpm over the last 14 days?
+  expect:
+    numbers:
+      max_rhr_14: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-019
+  category: numbers
+  question: What was my highest resting heart rate in bpm over the last 30 days?
+  expect:
+    numbers:
+      max_rhr_30: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-020
+  category: numbers
+  question: What was my highest resting heart rate in bpm over all the data I have?
+  expect:
+    numbers:
+      max_rhr_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-021
+  category: numbers
+  question: What was my lowest resting heart rate in bpm over the last 7 days?
+  expect:
+    numbers:
+      min_rhr_7: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-022
+  category: numbers
+  question: What was my lowest resting heart rate in bpm over the last 14 days?
+  expect:
+    numbers:
+      min_rhr_14: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-023
+  category: numbers
+  question: What was my lowest resting heart rate in bpm over the last 30 days?
+  expect:
+    numbers:
+      min_rhr_30: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-024
+  category: numbers
+  question: What was my lowest resting heart rate in bpm over all the data I have?
+  expect:
+    numbers:
+      min_rhr_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-resting-heart-rate'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-025
+  category: numbers
+  question: What was my average HRV in ms over the last 7 days?
+  expect:
+    numbers:
+      avg_hrv_7: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-026
+  category: numbers
+  question: What was my average HRV in ms over the last 14 days?
+  expect:
+    numbers:
+      avg_hrv_14: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-027
+  category: numbers
+  question: What was my average HRV in ms over the last 30 days?
+  expect:
+    numbers:
+      avg_hrv_30: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-028
+  category: numbers
+  question: What was my average HRV in ms over all the data I have?
+  expect:
+    numbers:
+      avg_hrv_all: SELECT AVG(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-029
+  category: numbers
+  question: What was my highest HRV in ms over the last 7 days?
+  expect:
+    numbers:
+      max_hrv_7: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-030
+  category: numbers
+  question: What was my highest HRV in ms over the last 14 days?
+  expect:
+    numbers:
+      max_hrv_14: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-031
+  category: numbers
+  question: What was my highest HRV in ms over the last 30 days?
+  expect:
+    numbers:
+      max_hrv_30: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-032
+  category: numbers
+  question: What was my highest HRV in ms over all the data I have?
+  expect:
+    numbers:
+      max_hrv_all: SELECT MAX(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-033
+  category: numbers
+  question: What was my lowest HRV in ms over the last 7 days?
+  expect:
+    numbers:
+      min_hrv_7: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-034
+  category: numbers
+  question: What was my lowest HRV in ms over the last 14 days?
+  expect:
+    numbers:
+      min_hrv_14: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-035
+  category: numbers
+  question: What was my lowest HRV in ms over the last 30 days?
+  expect:
+    numbers:
+      min_hrv_30: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+        AND date > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-036
+  category: numbers
+  question: What was my lowest HRV in ms over all the data I have?
+  expect:
+    numbers:
+      min_hrv_all: SELECT MIN(agg_value) FROM daily_metrics WHERE data_type = 'daily-heart-rate-variability'
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-037
+  category: numbers
+  question: What was my average sleep in hours, to one decimal over the last 7 days?
+  expect:
+    numbers:
+      avg_sleep_h_7: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-038
+  category: numbers
+  question: What was my average sleep in hours, to one decimal over the last 14 days?
+  expect:
+    numbers:
+      avg_sleep_h_14: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-039
+  category: numbers
+  question: What was my average sleep in hours, to one decimal over the last 30 days?
+  expect:
+    numbers:
+      avg_sleep_h_30: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-040
+  category: numbers
+  question: What was my average sleep in hours, to one decimal over all the data I have?
+  expect:
+    numbers:
+      avg_sleep_h_all: SELECT AVG(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-041
+  category: numbers
+  question: What was my highest sleep in hours, to one decimal over the last 7 days?
+  expect:
+    numbers:
+      max_sleep_h_7: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-042
+  category: numbers
+  question: What was my highest sleep in hours, to one decimal over the last 14 days?
+  expect:
+    numbers:
+      max_sleep_h_14: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-043
+  category: numbers
+  question: What was my highest sleep in hours, to one decimal over the last 30 days?
+  expect:
+    numbers:
+      max_sleep_h_30: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-044
+  category: numbers
+  question: What was my highest sleep in hours, to one decimal over all the data I have?
+  expect:
+    numbers:
+      max_sleep_h_all: SELECT MAX(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-045
+  category: numbers
+  question: What was my lowest sleep in hours, to one decimal over the last 7 days?
+  expect:
+    numbers:
+      min_sleep_h_7: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-046
+  category: numbers
+  question: What was my lowest sleep in hours, to one decimal over the last 14 days?
+  expect:
+    numbers:
+      min_sleep_h_14: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-047
+  category: numbers
+  question: What was my lowest sleep in hours, to one decimal over the last 30 days?
+  expect:
+    numbers:
+      min_sleep_h_30: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1 AND date
+        > date((SELECT MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-048
+  category: numbers
+  question: What was my lowest sleep in hours, to one decimal over all the data I have?
+  expect:
+    numbers:
+      min_sleep_h_all: SELECT MIN(minutes_asleep / 60.0) FROM sleep_sessions WHERE main_sleep = 1
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-049
+  category: numbers
+  question: What was my average sleep in minutes over the last 7 days?
+  expect:
+    numbers:
+      avg_sleep_m_7: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-050
+  category: numbers
+  question: What was my average sleep in minutes over the last 14 days?
+  expect:
+    numbers:
+      avg_sleep_m_14: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-051
+  category: numbers
+  question: What was my average sleep in minutes over the last 30 days?
+  expect:
+    numbers:
+      avg_sleep_m_30: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-052
+  category: numbers
+  question: What was my average sleep in minutes over all the data I have?
+  expect:
+    numbers:
+      avg_sleep_m_all: SELECT AVG(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-053
+  category: numbers
+  question: What was my highest sleep in minutes over the last 7 days?
+  expect:
+    numbers:
+      max_sleep_m_7: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-054
+  category: numbers
+  question: What was my highest sleep in minutes over the last 14 days?
+  expect:
+    numbers:
+      max_sleep_m_14: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-055
+  category: numbers
+  question: What was my highest sleep in minutes over the last 30 days?
+  expect:
+    numbers:
+      max_sleep_m_30: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-056
+  category: numbers
+  question: What was my highest sleep in minutes over all the data I have?
+  expect:
+    numbers:
+      max_sleep_m_all: SELECT MAX(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-057
+  category: numbers
+  question: What was my lowest sleep in minutes over the last 7 days?
+  expect:
+    numbers:
+      min_sleep_m_7: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-7 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-058
+  category: numbers
+  question: What was my lowest sleep in minutes over the last 14 days?
+  expect:
+    numbers:
+      min_sleep_m_14: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-14 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-059
+  category: numbers
+  question: What was my lowest sleep in minutes over the last 30 days?
+  expect:
+    numbers:
+      min_sleep_m_30: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1 AND date > date((SELECT
+        MAX(date) FROM daily_metrics), '-30 day')
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python
+- id: abl-060
+  category: numbers
+  question: What was my lowest sleep in minutes over all the data I have?
+  expect:
+    numbers:
+      min_sleep_m_all: SELECT MIN(minutes_asleep) FROM sleep_sessions WHERE main_sleep = 1
+    tools_any:
+    - run_sql
+    - query_metric
+    - run_python

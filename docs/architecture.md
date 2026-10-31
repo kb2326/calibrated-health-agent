@@ -339,8 +339,8 @@ sequenceDiagram
   participant R as Receipts
   U->>A: question (streamed session)
   A->>G: screen input
-  A->>A: plan: route (single agent or specialist)
-  A->>T: describe_substrate / list_metrics (look before asking)
+  A->>A: plan (built-in thinking)
+  A->>T: data_catalog / query_metric (look before asking)
   A->>X: pandas / SQL computation
   X->>R: store {code, snapshot hash, output}
   R-->>A: value + receipt id
@@ -356,12 +356,12 @@ shape proven in ADR `docs/adr/0001-phase3-workflow.md`.
 | Component | Design |
 |---|---|
 | Framework | Google ADK 2.12.0 pinned; graph `Workflow`: `screen` (deterministic) → answer (LLM) → `verify_receipts` (deterministic, one retry) |
-| Topologies | `single` (one agent, all tools; default) and `multi` (router → data scientist · domain expert · coach, all `single_turn`, chosen by a graph edge from the router's structured output → synthesizer). `CHA_TOPOLOGY`; Phase 4 evals pick the winner |
+| Topologies | Phase 4.5 (ADR 0007): `single` (one tool-loop agent with thinking, 14 tools; default) and `team` (alias `multi`: the same agent plus a coach and a domain expert as `AgentTool`s it may consult). The Phase 3 router → specialists → synthesizer pipeline was retired after evaluation. `CHA_TOPOLOGY` |
 | Models | Gemini 3.5 Flash-Lite everywhere (Vertex AI, global endpoint); `gemini-embedding-2` for memory; IDs and prices in `Settings` |
 | Code execution | `run_python`: a fresh subprocess per call (`-s -P`, scrubbed environment, empty temp dir), AST allowlist, an audit hook that blocks sockets, processes, ctypes and file writes, Linux rlimits (CPU 10 s, 1.5 GiB, no files, no forks), 15 s timeout. Data arrives as JSON (a leakage-safe bundle cut at an as-of day), never the database. Defense in depth, not a VM boundary; gVisor underneath on Cloud Run |
 | Receipts | Content-addressed `{code, data hash, as-of, output, executor}`; chat receipts in the laptop's `agent.db`, investigator receipts in `health.db`. `cha receipt <id> --rerun` reproduces the value or says the data changed |
 | `run_sql` | SQLite `mode=ro` + authorizer (SELECT, allowlisted tables and functions; ledger and agent tables blinded) + 2 s progress-handler limit + single statement; row cap 500; every call leaves a receipt |
-| Verification | Every number in an answer must equal (at its precision) a value in this turn's tool outputs; dates, window lengths and the question's own numbers exempt; otherwise one retry, then an explicit `unverified:` footer |
+| Verification | Every number in an answer must equal (at its precision) a value in this turn's tool outputs; dates, window lengths and the question's own numbers exempt; otherwise one retry (an empty draft is retried, and the last real draft is used if needed), then a quiet note naming the figures not computed by a tool (Phase 4.5; previously an `unverified:` footer) |
 | Untrusted text | Journal notes, device/source names, sandbox output and hypothesis statements wrapped in `<untrusted>` before any prompt; every instruction says what that means |
 | Memory | `HealthMemoryService(BaseMemoryService)` over `agent.db`: facts saved only via `save_fact` (`require_confirmation`, a y/n in the terminal) with validity windows; journal notes and hypotheses embedded and searched by cosine; ADK `load_memory` tool |
 | Ledger access | `get_scoreboard` (settled aggregates) only; unsettled forecasts invisible under blinding |

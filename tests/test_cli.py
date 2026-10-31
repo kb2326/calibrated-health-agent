@@ -36,6 +36,7 @@ def test_ask_prints_answer_receipts_and_cost(monkeypatch):
     out = runner.invoke(cli.app, ["ask", "how many steps?"])
     assert out.exit_code == 0, out.output
     assert "8000 steps" in out.output and "receipts: r-" in out.output and "$" in out.output
+    assert out.output.startswith("AI agent (Gemini)") and "not medical advice" in out.output
 
 
 def test_chat_cap_refuses(monkeypatch):

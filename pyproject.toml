@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A personal health agent that keeps score"
 requires-python = ">=3.13"
 license = "Apache-2.0"
-dependencies = ["health-core", "health-data", "health-ledger", "health-agents", "jobs"]
+dependencies = ["health-core", "health-data", "health-ledger", "health-agents", "health-eval", "jobs"]
 
 [dependency-groups]
 dev = ["pytest>=8.0", "ruff>=0.6", "pyright>=1.1.380", "pre-commit>=3.8", "pandas-stubs", "types-PyYAML"]
@@ -17,6 +17,7 @@ health-core = { workspace = true }
 health-data = { workspace = true }
 health-ledger = { workspace = true }
 health-agents = { workspace = true }
+health-eval = { workspace = true }
 jobs = { workspace = true }
 
 [tool.pytest.ini_options]

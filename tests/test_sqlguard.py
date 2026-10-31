@@ -121,3 +121,18 @@ def test_run_sql_never_returns_untrusted_text_columns():
         r = tools.run_sql(q)
         assert "ignore previous" not in str(r).lower(), q
     assert tools.run_sql("SELECT mood FROM journal_submissions")["rows"] == [{"mood": 5}]
+
+
+def test_detail_tables_hide_typed_names_and_sources():
+    """Review I1: device display names and imported workout titles flow into the v5 tables."""
+    with db.connect() as conn:
+        conn.execute("INSERT INTO exercise_sessions (date, start, type, name, source) VALUES "
+                     "('2026-10-20', '2026-10-20T07:00:00Z', 'TENNIS', 'ignore previous A', "
+                     "'ignore previous B')")
+        conn.execute("INSERT INTO sleep_sessions (date, start, source) VALUES "
+                     "('2026-10-20', '2026-10-19T22:00:00Z', 'ignore previous C')")
+    for q in ("SELECT name, source FROM exercise_sessions", "SELECT * FROM exercise_sessions",
+              "SELECT source FROM sleep_sessions", "SELECT upper(name) AS x FROM exercise_sessions"):
+        r = tools.run_sql(q)
+        assert "ignore previous" not in str(r).lower(), q
+    assert tools.run_sql("SELECT type FROM exercise_sessions")["rows"] == [{"type": "TENNIS"}]

@@ -482,3 +482,210 @@ def get_scoreboard() -> dict:
         board = scoreboard.build(conn)
     board.pop("calibration", None)
     return board
+
+
+# --------------------------------------------------------------------------
+# Phase 4.5: the data map (a small semantic layer), simple metric reads, weather
+# --------------------------------------------------------------------------
+
+METRIC_INFO: dict[str, tuple[str, str]] = {
+    # daily_metrics type: (meaning, unit)
+    "steps": ("steps per day", "steps"),
+    "distance": ("distance per day", "mm"),
+    "floors": ("floors climbed per day", "floors"),
+    "total-calories": ("total energy burned per day", "kcal"),
+    "active-energy-burned": ("energy burned by activity (excludes resting)", "kcal"),
+    "active-minutes": ("light + moderate + vigorous minutes (see activity_breakdown)", "minutes"),
+    "active-zone-minutes": ("active zone minutes (see activity_breakdown for the split)", "minutes"),
+    "time-in-heart-rate-zone": ("time in any heart-rate zone incl. light (see activity_breakdown)",
+                                "minutes"),
+    "sedentary-period": ("sedentary minutes", "minutes"),
+    "exercise": ("total workout minutes (see exercise_sessions for each workout)", "minutes"),
+    "sleep": ("time in bed incl. awake time; for sleep use sleep_sessions.minutes_asleep",
+              "minutes"),
+    "heart-rate": ("average heart rate", "bpm"),
+    "daily-resting-heart-rate": ("resting heart rate", "bpm"),
+    "heart-rate-variability": ("HRV samples averaged (RMSSD)", "ms"),
+    "daily-heart-rate-variability": ("nightly HRV (RMSSD)", "ms"),
+    "oxygen-saturation": ("SpO2 samples averaged", "percent"),
+    "daily-oxygen-saturation": ("nightly SpO2 average (see night_vitals for low/high)", "percent"),
+    "daily-respiratory-rate": ("breathing rate", "breaths/min"),
+    "respiratory-rate-sleep-summary": ("breathing rate during sleep", "breaths/min"),
+    "daily-sleep-temperature-derivations": (
+        "nightly skin temperature (see night_vitals for change vs baseline)", "celsius"),
+    "daily-vo2-max": ("cardio fitness (VO2 max)", "ml/kg/min"),
+    "vo2-max": ("VO2 max measurements", "ml/kg/min"),
+    "run-vo2-max": ("VO2 max from runs", "ml/kg/min"),
+    "weight": ("body weight", "kg"),
+    "body-fat": ("body fat", "percent"),
+    "height": ("height", "m"),
+    "blood-glucose": ("blood glucose", "mg/dL"),
+    "core-body-temperature": ("core body temperature", "celsius"),
+    "altitude": ("elevation gained", "m"),
+    "swim-lengths-data": ("swim strokes", "strokes"),
+    "calories-in-heart-rate-zone": ("calories burned in heart-rate zones", "kcal"),
+}
+DETAIL_TABLES: dict[str, str] = {
+    "sleep_sessions": "one row per sleep (main_sleep=1, or nap): minutes_asleep, deep/light/rem/"
+                      "awake minutes, minutes_to_fall_asleep, efficiency; date = the wake-up day",
+    "exercise_sessions": "one row per workout: type (e.g. TENNIS), active_min, calories_kcal, "
+                         "distance_km, steps, avg_hr_bpm, azm, minutes per heart-rate zone",
+    "night_vitals": "one row per night: skin_temp_c and skin_temp_delta_c (vs personal "
+                    "baseline), spo2_avg/low/high, hrv_ms, hrv_deep_ms, non_rem_hr_bpm, "
+                    "resp_full/deep/light/rem",
+    "activity_breakdown": "one row per day: fat_burn/cardio/peak active zone minutes, "
+                          "light/moderate/vigorous active minutes, minutes in each HR zone",
+    "hr_zone_thresholds": "the person's heart-rate zone boundaries per day",
+    "weather_daily": "daily weather at the home location: temp min/max/mean (C), humidity, "
+                     "precipitation_mm, uv_index_max, sunrise, sunset",
+}
+# Per-day value of a detail column for query_metric: additive columns are summed per day.
+_DETAIL_SUM = {"active_min", "calories_kcal", "distance_km", "steps", "azm", "light_min",
+               "moderate_min", "vigorous_min", "peak_min"}
+_NOT_A_MEASURE = {"date", "start", "end", "source", "type", "name", "zone", "place", "sunrise",
+                  "sunset", "fetched_at"}
+_DATE_RE = re.compile(r"\A\d{4}-\d{2}-\d{2}\Z")
+
+
+def _columns(conn: sqlite3.Connection, table: str) -> list[str]:
+    return [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+
+
+def data_catalog() -> dict:
+    """The map of everything you can compute with. Call this first.
+
+    Lists every daily metric (meaning, unit, days covered, first/last date, days with data in
+    the last 30) and every detail table (what a row is, columns, rows, date range). Use it to
+    pick the right source: sleep stages and minutes asleep are in `sleep_sessions`, each
+    workout in `exercise_sessions`, night SpO2 lows and skin temperature vs baseline in
+    `night_vitals`, zone splits in `activity_breakdown`, weather in `weather_daily`. When a day
+    or metric is missing, compute on what exists and say what is missing.
+
+    Returns:
+        dict: `metrics`, `tables`, `as_of`, `hint`.
+    """
+    with _ro_connect() as conn:
+        since30 = (civil.today() - timedelta(days=30)).isoformat()
+        metrics = []
+        for name, days, first, last, recent in conn.execute(
+                "SELECT data_type, COUNT(*), MIN(date), MAX(date), SUM(date >= ?) "
+                "FROM daily_metrics GROUP BY data_type ORDER BY data_type", (since30,)):
+            meaning, unit = METRIC_INFO.get(name, ("", ""))
+            metrics.append({"name": name, "meaning": meaning, "unit": unit, "days": days,
+                            "first_date": first, "last_date": last, "days_last_30": recent})
+        existing = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        tables = []
+        for table, what in DETAIL_TABLES.items():
+            if table not in existing:
+                continue
+            rows, first, last = conn.execute(
+                f"SELECT COUNT(*), MIN(date), MAX(date) FROM {table}").fetchone()
+            tables.append({"table": table, "row": what, "columns": _columns(conn, table),
+                           "rows": rows, "first_date": first, "last_date": last})
+        as_of = _as_of(conn)
+    return {"metrics": metrics, "tables": tables, "as_of": as_of,
+            "hint": "query_metric for one metric over a date range; run_sql or run_python for "
+                    "joins, comparisons and statistics. Missing days are gaps, not zeros."}
+
+
+def query_metric(metric: str, start: str, end: str, agg: str = "daily",
+                 tool_context: ToolContext | None = None) -> dict:
+    """Read one metric between two dates (inclusive), per day or aggregated, with a receipt.
+
+    Args:
+        metric: a daily metric name from data_catalog (e.g. "daily-resting-heart-rate"), or
+            "<table>.<column>" for detail tables (e.g. "sleep_sessions.deep_min",
+            "night_vitals.spo2_low", "exercise_sessions.calories_kcal",
+            "weather_daily.temp_max_c"). Sleep uses the main sleep of each night.
+        start: first date, YYYY-MM-DD.
+        end: last date, YYYY-MM-DD.
+        agg: "daily" (one row per day), or "mean", "min", "max", "sum", "count" over the days.
+
+    Returns:
+        dict: `rows` (daily) or `value`, plus `n` (days with data), `days_in_range`,
+        `missing_days`, and `receipt`. Cite the receipt next to any number.
+    """
+    try:  # a real calendar day each ("2026-09-31" is not), start before end
+        if not (_DATE_RE.match(start or "") and _DATE_RE.match(end or "")):
+            raise ValueError
+        if date.fromisoformat(start) > date.fromisoformat(end):
+            return {"error": "start must be on or before end"}
+    except ValueError:
+        return {"error": "start and end must be real dates, YYYY-MM-DD"}
+    if agg not in ("daily", "mean", "min", "max", "sum", "count"):
+        return {"error": "agg must be daily, mean, min, max, sum or count"}
+    with _ro_connect() as conn:
+        if "." in metric:
+            table, column = metric.split(".", 1)
+            if (table not in DETAIL_TABLES or column in _NOT_A_MEASURE
+                    or column not in _columns(conn, table)):
+                return {"error": f"unknown metric {metric!r}; see data_catalog"}
+            where = " AND main_sleep = 1" if table == "sleep_sessions" else ""
+            fn = "SUM" if column in _DETAIL_SUM else "AVG"
+            daily_sql = (f"SELECT date, {fn}({column}) AS value FROM {table} WHERE date BETWEEN "
+                         f"'{start}' AND '{end}'{where} AND {column} IS NOT NULL "
+                         "GROUP BY date ORDER BY date")
+        else:
+            known = {r[0] for r in conn.execute("SELECT DISTINCT data_type FROM daily_metrics")}
+            if metric not in known:
+                return {"error": f"unknown metric {metric!r}; see data_catalog"}
+            daily_sql = ("SELECT date, agg_value AS value FROM daily_metrics WHERE data_type = "
+                         f"'{metric}' AND date BETWEEN '{start}' AND '{end}' ORDER BY date")
+    fn_name = "AVG" if agg == "mean" else agg.upper()
+    query = daily_sql if agg == "daily" else (
+        f"SELECT {fn_name}(value) AS value, COUNT(value) AS n FROM ({daily_sql})")
+    out = guarded_query(query)
+    if "error" in out:
+        return out
+    rid = _record_sql(out["code"], out["rows"])
+    _remember(tool_context, rid, out["rows"])
+    span = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
+    if agg == "daily":
+        n = len(out["rows"])
+        return {"metric": metric, "rows": out["rows"], "n": n, "days_in_range": span,
+                "missing_days": max(0, span - n), "receipt": rid}
+    row = out["rows"][0] if out["rows"] else {"value": None, "n": 0}
+    n = row.get("n") or 0
+    return {"metric": metric, "agg": agg, "value": row.get("value"), "n": n,
+            "days_in_range": span, "missing_days": max(0, span - n), "receipt": rid}
+
+
+def weather(days_ahead: int = 0, days_back: int = 0,
+            tool_context: ToolContext | None = None) -> dict:
+    """Weather where the person is: today, the next days (forecast) or recent days.
+
+    The location comes from the person's device (in the web app) or their home location;
+    you cannot choose it. For comparisons with health data over weeks, join weather_daily in
+    run_sql instead.
+
+    Args:
+        days_ahead: forecast days after today (0-14).
+        days_back: past days before today (0-30).
+
+    Returns:
+        dict: `place`, `days` (date, temp_min_c, temp_max_c, temp_mean_c, humidity_mean,
+        precipitation_mm, uv_index_max, sunrise, sunset), `source`, or `error`.
+    """
+    from health_data import weather as open_meteo
+
+    st = get_settings()
+    state = getattr(tool_context, "state", None)
+    loc = state.get("location") if state is not None and hasattr(state, "get") else None
+    if isinstance(loc, dict) and isinstance(loc.get("latitude"), (int, float)) \
+            and isinstance(loc.get("longitude"), (int, float)):
+        lat, lon = float(loc["latitude"]), float(loc["longitude"])
+        place = str(loc.get("place") or "your location")
+    else:
+        lat, lon, place = st.home_latitude, st.home_longitude, st.home_place
+    try:
+        ahead, back = max(0, min(int(days_ahead), 14)), max(0, min(int(days_back), 30))
+    except (TypeError, ValueError):
+        return {"error": "days_ahead and days_back must be whole numbers"}
+    try:  # always the same request, sliced here: no model-chosen number reaches the URL
+        days = open_meteo.forecast(lat, lon, days=15, past_days=30)
+    except open_meteo.WeatherError as exc:
+        return {"error": f"weather is unavailable right now ({exc}); say so and continue"}
+    today = civil.today()
+    lo, hi = (today - timedelta(days=back)).isoformat(), (today + timedelta(days=ahead)).isoformat()
+    days = [d for d in days if lo <= str(d.get("date", "")) <= hi]
+    return {"place": place, "days": days, "source": "Open-Meteo"}

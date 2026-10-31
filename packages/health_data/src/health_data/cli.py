@@ -28,6 +28,26 @@ auth_app = typer.Typer(pretty_exceptions_show_locals=False, no_args_is_help=True
 app.add_typer(journal_app, name="journal")
 app.add_typer(db_app, name="db")
 app.add_typer(auth_app, name="auth")
+weather_app = typer.Typer(no_args_is_help=True, help="Daily weather for the home location.")
+app.add_typer(weather_app, name="weather")
+
+
+@weather_app.command("backfill")
+def weather_backfill_cmd(since: Annotated[str, typer.Option("--since")],
+                         until: Annotated[str | None, typer.Option("--until")] = None) -> None:
+    """Store daily weather history for the home location (Open-Meteo archive)."""
+    from datetime import timedelta
+
+    from health_data import civil, weather
+
+    st = get_settings()
+    end = until or (civil.today() - timedelta(days=6)).isoformat()
+    with db.connect() as conn:
+        n = weather.backfill(conn, since, end, place=st.home_place, latitude=st.home_latitude,
+                             longitude=st.home_longitude)
+        n += weather.sync_recent(conn, place=st.home_place, latitude=st.home_latitude,
+                                 longitude=st.home_longitude)
+    typer.echo(f"{n} days of weather for {st.home_place}")
 
 _STATE = {"local_only": False}
 
@@ -200,6 +220,16 @@ def parity_cmd(days: Annotated[int, typer.Option("--days", min=1)] = 30) -> None
         rows = _auth_guard(lambda dt=data_type: reconcile.parity_report(dt, start, end))
         agree, worn = reconcile.parity_summary(rows)
         typer.echo(f"{data_type:30s} worn days={worn:4d}  agree={agree:4d}")
+
+
+@db_app.command("derive")
+def derive_cmd() -> None:
+    """Rebuild the detail tables (sleep stages, workouts, night vitals, zones) from raw data."""
+    from health_data import derive
+
+    with db.connect() as conn:
+        for table, n in derive.rebuild(conn).items():
+            typer.echo(f"{table:20} {n} rows")
 
 
 @db_app.command("vacuum")

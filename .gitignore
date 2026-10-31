@@ -12,6 +12,7 @@ venv/
 data/
 config/*.json
 config/*.bak*
+config/*.key
 .env
 infra/.terraform/
 *.tfstate*

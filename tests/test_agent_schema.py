@@ -24,7 +24,7 @@ def test_v4_creates_agent_tables(tmp_path):
     conn = make_db(tmp_path / "h.db")
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert set(V4_TABLES) <= names
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
 
 
 @pytest.mark.parametrize("table", V4_TABLES)
@@ -51,7 +51,7 @@ def test_v3_database_migrates_to_v4_keeping_rows(tmp_path):
     conn.execute("INSERT INTO daily_metrics (date, data_type, agg_value, n_points, source) "
                  "VALUES ('2026-10-01','steps',1,1,'')")
     conn.commit()
-    assert db.migrate(conn) == 4
+    assert db.migrate(conn) == 5
     assert conn.execute("SELECT COUNT(*) FROM daily_metrics").fetchone()[0] == 1
     assert conn.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] == 0
 

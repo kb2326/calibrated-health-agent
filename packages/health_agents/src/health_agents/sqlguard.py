@@ -28,13 +28,20 @@ TIME_LIMIT_S = 2.0
 ALLOWED_TABLES = frozenset({
     "daily_metrics", "raw_points", "journal_submissions", "anomalies", "correlations",
     "sync_state", "devices", "sqlite_master", "sqlite_schema", "sqlite_temp_master",
+    # schema v5 (Phase 4.5): derived detail and weather; not blinded
+    "sleep_sessions", "exercise_sessions", "night_vitals", "activity_breakdown",
+    "hr_zone_thresholds", "weather_daily",
 })
 BLINDED = frozenset({
     "forecasts", "snapshots", "scores", "ledger", "lock_notes", "receipts", "hypotheses",
     "hypothesis_status", "agent_runs",
 })
-UNTRUSTED_COLUMNS = frozenset({("journal_submissions", "note"), ("raw_points", "source"),
-                               ("raw_points", "raw_json")})
+UNTRUSTED_COLUMNS = frozenset({
+    ("journal_submissions", "note"), ("raw_points", "source"), ("raw_points", "raw_json"),
+    # v5: a source can fall back to a device display name; a workout name can be a title
+    # typed in another app
+    ("sleep_sessions", "source"), ("exercise_sessions", "source"), ("exercise_sessions", "name"),
+})
 UNTRUSTED_TABLES = frozenset({"devices"})  # every column: names and models typed by people
 ALLOWED_FUNCTIONS = frozenset({
     # core scalar
