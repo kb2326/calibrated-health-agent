@@ -92,7 +92,7 @@ flowchart LR
   end
   subgraph use["Use"]
     cli["cha ask / chat<br/>(laptop)"]
-    web["Web app: Next.js + AG-UI<br/>(Phase 5)"]
+    web["Web app: Next.js + AG-UI<br/>Cloud Run behind IAP"]
     pub["Public ledger log<br/>+ scoreboard"]
   end
   watch --> job
@@ -257,17 +257,25 @@ me, hash-chained, and published to a public log
 | Evals | Custom harness (`cha-eval`), ADK eval metrics, LLM judges, red team |
 | Forecasting | Proper scoring rules (RPS), block bootstrap, DM-HLN, BigQuery `AI.FORECAST` (TimesFM) |
 | Cloud | Cloud Run jobs, Scheduler, GCS, Secret Manager, Vertex AI, BigQuery, Cloud Trace, Monitoring |
-| Engineering | Python 3.13, uv workspace, ruff, pyright, about 715 tests, Terraform, GitHub Actions, OpenTelemetry |
-| Next | Next.js + AG-UI web front end (Phase 5) |
+| Engineering | Python 3.13, uv workspace, ruff, pyright, about 790 Python and 35 front-end tests, Terraform, GitHub Actions, OpenTelemetry |
+| Web | Next.js 16 (static export), AG-UI (`ag-ui-adk` + `@ag-ui/client`), FastAPI, Tailwind, Vitest, Playwright + axe |
 
 ## Run it
 
 ```bash
 uv sync --all-packages     # Python 3.13 workspace
-uv run pytest -q           # about 715 tests on synthetic fixtures; no credentials needed
+uv run pytest -q           # about 790 tests on synthetic fixtures; no credentials needed
 uv run cha smoke           # the agent on a synthetic database (needs a Gemini backend)
 uv run cha-eval run --suite regression --must-pass-only --pace 25   # the CI gate locally
+
+cd apps/web && npm ci && npm run build && cd ../..
+uv run cha-web --demo      # the web app on synthetic data at http://127.0.0.1:8780
 ```
+
+The web app (Phase 5): streamed answers with the agent's steps visible, tappable receipts that
+re-run, inline charts, memory approval, weather at your location, a scoreboard, installable on
+a phone. Laptop mode reads your real data through Vertex AI; the cloud copy runs on Cloud Run
+behind Google sign-in (IAP), owner-only. Details: [docs/web.md](docs/web.md).
 
 On a free-tier key (synthetic data only): `GOOGLE_GENAI_USE_VERTEXAI=false` and
 `GOOGLE_API_KEY=<key from a project with no billing>`. Real-data runs refuse anything but
@@ -311,9 +319,9 @@ is capped in code, and CI evals run on a free tier. A $1 budget alerts at $0.25 
 | Phase | What | State |
 |---|---|---|
 | 1–3 | Data foundation, forecast ledger, agent core | Live |
-| 4 | Evals, red team, CI gate, tracing | Built and deployed |
-| 4.5 | Capable agent: modern architecture, full data layer, weather | Built; deploy pending |
-| 5 | Web front end: Next.js + AG-UI, streaming answers with tappable receipts, live location, phone-installable | Next |
+| 4 | Evals, red team, CI gate, tracing | Live |
+| 4.5 | Capable agent: modern architecture, full data layer, weather | Live |
+| 5 | Web front end: Next.js + AG-UI, streaming answers with tappable receipts, live location, phone-installable, Cloud Run behind IAP | Built |
 | 6 | GCP expansion (agent API behind IAP, Workflows, keyless CI) | Planned |
 | 7 | Publish: write-ups and demo | Planned |
 
