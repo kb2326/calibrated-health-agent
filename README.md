@@ -2,8 +2,8 @@
 
 **Talk to your own health data with an AI agent that does the analysis itself. It plans, writes and runs code, proves every number with a receipt, and is measured like production software.**
 
-[![ci](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml)
-[![evals](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml/badge.svg)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml)
+[![ci](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/ci.yml)
+[![evals](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml/badge.svg?branch=main&event=schedule)](https://github.com/kb2326/calibrated-health-agent/actions/workflows/evals.yml)
 ![python](https://img.shields.io/badge/python-3.13-blue)
 ![adk](https://img.shields.io/badge/Google%20ADK-2.12-4285F4)
 ![gemini](https://img.shields.io/badge/Gemini-3.5%20Flash--Lite-8E75B2)
