@@ -28,6 +28,11 @@ def fixture_db(tmp_path, monkeypatch):
                          " VALUES (?, 'heart-rate', ?, 1, '')", (f"2026-10-2{i}", v))
 
 
+def local_client(app) -> TestClient:
+    """Local mode answers only on 127.0.0.1 / localhost."""
+    return TestClient(app, base_url="http://127.0.0.1")
+
+
 def run_input(question: str, *, state: dict | None = None, thread: str | None = None) -> dict:
     return {"threadId": thread or uuid.uuid4().hex, "runId": uuid.uuid4().hex,
             "state": state or {}, "messages": [{"id": uuid.uuid4().hex, "role": "user",
@@ -53,7 +58,7 @@ def answer_text(events: list[dict]) -> str:
 def test_single_topology_streams_run_text_and_tool_events():
     llm = FakeLlm([call("run_sql", query="SELECT AVG(agg_value) AS m, COUNT(*) AS n FROM daily_metrics"),
                    text("Your heart rate averaged in the low sixties.")])
-    client = TestClient(create_app("local", model=llm))
+    client = local_client(create_app("local", model=llm))
     events = stream(client, run_input("How is my heart rate?"))
     types_ = [e["type"] for e in events]
     assert types_[0] == "RUN_STARTED" and types_[-1] == "RUN_FINISHED"
@@ -66,7 +71,7 @@ def test_team_topology_streams_and_may_call_a_specialist():
     coach = FakeLlm([text("Keep it light today.")])
     main = FakeLlm([call("coach", request="Hard workout today?"),
                     text("Take it easy today; the coach suggests a light session.")])
-    client = TestClient(create_app("local", model=main, topology="team", models={"coach": coach}))
+    client = local_client(create_app("local", model=main, topology="team", models={"coach": coach}))
     events = stream(client, run_input("Should I train hard today?"))
     assert events[-1]["type"] == "RUN_FINISHED"
     assert coach.calls == 1 and "light session" in answer_text(events)
@@ -99,7 +104,7 @@ def test_location_from_run_state_reaches_weather_tool(monkeypatch):
     seen = []
     monkeypatch.setattr(weather, "forecast", lambda lat, lon, **k: seen.append((lat, lon)) or [])
     llm = FakeLlm([call("weather"), text("It looks dry today.")])
-    client = TestClient(create_app("local", model=llm))
+    client = local_client(create_app("local", model=llm))
     stream(client, run_input("Weather today?", state={
         "location": {"latitude": 13.08, "longitude": 80.27, "place": "Chennai"},
         "turn_outputs": [{"x": 1}]}))
@@ -111,6 +116,25 @@ def test_no_location_uses_home(monkeypatch):
 
     seen = []
     monkeypatch.setattr(weather, "forecast", lambda lat, lon, **k: seen.append((lat, lon)) or [])
-    client = TestClient(create_app("local", model=FakeLlm([call("weather"), text("Dry.")])))
+    client = local_client(create_app("local", model=FakeLlm([call("weather"), text("Dry.")])))
     stream(client, run_input("Weather today?"))
     assert seen == [(pytest.approx(11.341), pytest.approx(77.7172))]
+
+
+def test_model_usage_is_recorded_against_the_chat_budget():
+    from health_agents import costs
+
+    before = costs.chat_month_spend()
+    client = local_client(create_app("local", model=FakeLlm([text("Hello.")])))
+    stream(client, run_input("Hi"))
+    assert costs.chat_month_spend() > before  # FakeLlm reports 100 in / 20 out tokens
+
+
+def test_budget_reached_refuses_the_run_in_plain_words(monkeypatch):
+    from health_agents import costs
+
+    monkeypatch.setattr(costs, "chat_month_spend", lambda: 999.0)
+    llm = FakeLlm([text("never")])
+    events = stream(local_client(create_app("local", model=llm)), run_input("Hi"))
+    err = next(e for e in events if e["type"] == "RUN_ERROR")
+    assert "budget" in err["message"].lower() and llm.calls == 0

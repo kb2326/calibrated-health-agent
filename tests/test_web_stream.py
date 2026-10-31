@@ -14,9 +14,8 @@ from ag_ui.core import (
     ToolCallStartEvent,
 )
 from agent_fakes import FakeLlm, call, text
-from fastapi.testclient import TestClient
 from health_web.stream import StreamFilter
-from test_web_agent import answer_text, fixture_db, run_input, stream  # noqa: F401
+from test_web_agent import answer_text, fixture_db, local_client, run_input, stream  # noqa: F401
 
 
 def _any(x: Any) -> Any:
@@ -106,7 +105,7 @@ def test_end_to_end_stream_has_no_fixture_values():
 
     llm = FakeLlm([call("run_sql", query="SELECT agg_value AS v FROM daily_metrics ORDER BY date"),
                    text("Here is your heart rate.")])
-    events = stream(TestClient(create_app("local", model=llm)), run_input("Heart rate?"))
+    events = stream(local_client(create_app("local", model=llm)), run_input("Heart rate?"))
     raw = json.dumps([e for e in events if e["type"] != "TOOL_CALL_ARGS"])
     for value in ("60.0", "62.0", "64.0"):
         assert value not in raw, value

@@ -13,13 +13,16 @@ import math
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from ag_ui.core import RunAgentInput
+from ag_ui.core import EventType, RunAgentInput, RunErrorEvent, RunStartedEvent
 from ag_ui_adk import ADKAgent
 from google.adk.apps import App
 from google.adk.models import BaseLlm
-from health_agents import memory
+from google.adk.models.llm_response import LlmResponse
+from google.adk.plugins.base_plugin import BasePlugin
+from health_agents import costs, memory
 from health_agents.cli import APP_NAME
 from health_agents.workflow import build_workflow
+from health_core.settings import get_settings
 
 from .stream import StreamFilter
 
@@ -50,10 +53,38 @@ def sanitise_state(state: Any) -> dict[str, Any]:
     return {"location": clean}
 
 
+class ChatBudget(BasePlugin):
+    """Records every model call's tokens against the monthly chat cap, as `cha ask` does."""
+
+    def __init__(self) -> None:
+        super().__init__(name="chat_budget")
+
+    async def after_model_callback(self, *, callback_context: Any,
+                                   llm_response: LlmResponse) -> LlmResponse | None:
+        u = llm_response.usage_metadata
+        if u is not None:
+            costs.record_chat(u.prompt_token_count or 0,
+                              (u.candidates_token_count or 0) + (u.thoughts_token_count or 0))
+        return None
+
+
+def budget_message() -> str | None:
+    cap = get_settings().chat_monthly_usd_cap
+    if costs.chat_month_spend() >= cap:
+        return f"Monthly chat budget (${cap:.2f}) reached; it resets on the 1st."
+    return None
+
+
 class HealthAgent(ADKAgent):
-    """ADKAgent whose runs carry only sanitised client state."""
+    """ADKAgent whose runs carry only sanitised client state, inside the chat budget."""
 
     async def run(self, input: RunAgentInput, *args: Any, **kwargs: Any) -> AsyncGenerator:  # type: ignore[override]
+        refused = budget_message()
+        if refused:
+            yield RunStartedEvent(type=EventType.RUN_STARTED, thread_id=input.thread_id,
+                                  run_id=input.run_id)
+            yield RunErrorEvent(type=EventType.RUN_ERROR, message=refused, code="BUDGET")
+            return
         clean = input.model_copy(update={"state": sanitise_state(input.state)})
         keep = StreamFilter()  # raw tool rows never reach the browser
         async for event in super().run(clean, *args, **kwargs):
@@ -65,6 +96,6 @@ class HealthAgent(ADKAgent):
 def build_agent(*, topology: str | None = None, model: BaseLlm | str | None = None,
                 models: dict[str, BaseLlm | str] | None = None) -> HealthAgent:
     wf = build_workflow(topology, model=model, models=models)  # type: ignore[arg-type]
-    app = App(name=APP_NAME, root_agent=wf)  # type: ignore[arg-type]
+    app = App(name=APP_NAME, root_agent=wf, plugins=[ChatBudget()])  # type: ignore[arg-type]
     agent = HealthAgent.from_app(app, user_id="owner", memory_service=memory.HealthMemoryService())
     return agent  # type: ignore[return-value]

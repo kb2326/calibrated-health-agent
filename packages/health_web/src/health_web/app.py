@@ -1,21 +1,64 @@
-"""The web app: the agent over AG-UI at /api/agent (more routes in later tasks)."""
+"""The web app: the agent over AG-UI at /api/agent, plus receipt and scoreboard routes.
+
+Modes:
+- `local`: the laptop, real data (Vertex AI only). Answers only on 127.0.0.1 / localhost,
+  so a page on another site can't read it through DNS rebinding.
+- `demo`: the synthetic eval fixture, same host rule, a "demo data" flag for screenshots.
+- `cloud`: Cloud Run behind IAP (Task 13).
+"""
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import ExitStack, asynccontextmanager
 from typing import Literal
 
 from ag_ui_adk import add_adk_fastapi_endpoint
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from google.adk.models import BaseLlm
 
+from . import routes
 from .agent import build_agent
 
 Mode = Literal["local", "demo", "cloud"]
+LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
+
+
+def _host(request: Request) -> str:
+    host = request.headers.get("host", "")
+    if host.startswith("["):  # [::1]:8780
+        return host[1:].split("]", 1)[0]
+    return host.rsplit(":", 1)[0]
 
 
 def create_app(mode: Mode, *, model: BaseLlm | str | None = None, topology: str | None = None,
                models: dict[str, BaseLlm | str] | None = None) -> FastAPI:
-    api = FastAPI(title="Calibrated Health Agent", docs_url=None, redoc_url=None, openapi_url=None)
+    stack = ExitStack()
+    if mode == "demo":  # point every tool at the synthetic fixture for the app's lifetime
+        from health_eval.runner import eval_fixture
+
+        stack.enter_context(eval_fixture())
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            stack.close()
+
+    api = FastAPI(title="Calibrated Health Agent", docs_url=None, redoc_url=None,
+                  openapi_url=None, lifespan=lifespan)
     api.state.mode = mode
+
+    if mode in ("local", "demo"):
+        @api.middleware("http")
+        async def local_only(request: Request, call_next):
+            if _host(request) not in LOCAL_HOSTS:
+                return JSONResponse({"error": "This server answers only on localhost."},
+                                    status_code=403)
+            return await call_next(request)
+
+    api.include_router(routes.router)
     add_adk_fastapi_endpoint(api, build_agent(topology=topology, model=model, models=models),
                              path="/api/agent")
     return api
