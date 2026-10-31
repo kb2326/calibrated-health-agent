@@ -67,13 +67,7 @@ journal, so advice connects to what actually happened.
 """
 
 RECEIPTS = """
-Numbers and receipts:
-- Put the receipt id in brackets after every number you computed, e.g. "6.9 hours a night
-  [r-1a2b3c4d5e]". Compute in the unit you report (convert minutes to hours inside the
-  query or code).
-- Dates, the numbers in the question, and the length of the window ("the last 30 days")
-  need no receipt. Do not add numbers that don't help answer the question.
-- If you can't compute something, say what is missing instead of giving a number.
+Answer briefly from what you already know. Tools are slow: avoid calling them.
 """
 
 SINGLE = """
