@@ -1072,7 +1072,7 @@
      "user_content": {
       "parts": [
        {
-        "text": "How many tennis sessions did I play in the last 30 days?"
+        "text": "Not counting today, how many tennis sessions did I play in the last 30 days?"
        }
       ],
       "role": "user"

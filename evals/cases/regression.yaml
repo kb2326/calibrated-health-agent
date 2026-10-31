@@ -447,7 +447,7 @@ cases:
     - cites_receipt
 - id: reg-045
   category: workouts
-  question: How many tennis sessions did I play in the last 30 days?
+  question: Not counting today, how many tennis sessions did I play in the last 30 days?
   expect:
     numbers:
       n: SELECT COUNT(*) FROM exercise_sessions WHERE type = 'TENNIS' AND date > date((SELECT MAX(date)

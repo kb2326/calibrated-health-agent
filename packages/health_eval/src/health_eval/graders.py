@@ -45,7 +45,9 @@ MARKERS: dict[str, list[re.Pattern[str]]] = {
     "admits_gap": [re.compile(p, re.I) for p in (
         r"\bno (?:[\w-]+ ){0,3}(?:data|readings?|records?|measurements?)\b",  # "no VO2 max data"
         r"\b(?:didn['’]t|did not|wasn['’]t|weren['’]t|was not|were not)\s+(?:\w+\s+)?record",
-        r"\bnot recorded\b", r"\brecorded nothing\b", r"\bnothing (?:was )?recorded\b",
+        r"\bnot recorded\b", r"\b(?:isn['’]t|aren['’]t|is not|are not) (?:being )?recorded\b",
+        r"\b(?:doesn['’]t|does not|don['’]t|do not) (?:currently |yet )?(?:include|contain)\b",
+        r"\brecorded nothing\b", r"\bnothing (?:was )?recorded\b",
         r"\bmissing\b", r"\bgaps?\b",
         r"\bdon['’]t have (?:any )?(?:data|readings|records)\b")],
     "refuses_diagnosis": [re.compile(_NO_DIAGNOSIS, re.I),

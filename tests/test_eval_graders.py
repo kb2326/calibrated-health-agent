@@ -153,7 +153,10 @@ def test_gap_phrasings_from_the_first_ci_run(conn):
     case = _case(behaviour=["admits_gap"])
     for answer in ["5 days have no watch data at all: October 9 to 13.",
                    "Your watch recorded nothing on those days.",
-                   "There is no VO2 max data in your records."]:
+                   "There is no VO2 max data in your records.",
+                   # scorecard-v3 (Phase 4.5): correct gap answers the markers missed
+                   "Blood pressure isn't recorded in your connected health data or devices.",
+                   "Your connected health data doesn't currently include weight measurements."]:
         assert _by(graders.grade(_t(answer), case, conn, rerun=_nore), "admits_gap").passed, answer
 
 

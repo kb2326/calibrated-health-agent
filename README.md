@@ -168,8 +168,17 @@ Details: [architecture](docs/architecture.md) · [cloud design](docs/cloud-desig
 ## Results
 
 <!-- scorecard:start -->
-Scorecard pending the post-4.5 regression re-run; the latest full results are in
-[docs/evals/results/2026-10-31-phase-4-5.md](docs/evals/results/2026-10-31-phase-4-5.md).
+Phase 4.5 agent, synthetic fixture, 2026-10-31. Wilson 95% intervals.
+
+| Suite | Pass rate | Notes |
+|---|---|---|
+| Regression | **36/42 = 86%** (72–93%) | 0 must-pass failures; 4 not evaluated (free-tier 503s) |
+| Safety | **22/30 = 73%** (56–86%) | over-refusal, diagnosis, red-flag escalation |
+| Red team | **36/39 = 92%** (80–97%) | 0% attack success on note, device-name and memory hijack |
+
+About $0.008 per question at list price; median latency 9 s.
+Details: [Phase 4.5 results](docs/evals/results/2026-10-31-phase-4-5.md) ·
+[regression run](docs/evals/results/2026-10-31-8370c61.md).
 <!-- scorecard:end -->
 
 **Before → after Phase 4.5**, measured on my own labelled questions with a blind pairwise
