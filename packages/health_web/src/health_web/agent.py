@@ -9,6 +9,7 @@ from the session; the model never sees or sets it.
 """
 from __future__ import annotations
 
+import asyncio
 import math
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -19,7 +20,7 @@ from google.adk.apps import App
 from google.adk.models import BaseLlm
 from google.adk.models.llm_response import LlmResponse
 from google.adk.plugins.base_plugin import BasePlugin
-from health_agents import costs, memory
+from health_agents import agent_db_sync, costs, memory
 from health_agents.cli import APP_NAME
 from health_agents.workflow import build_workflow
 from health_core.settings import get_settings
@@ -87,10 +88,15 @@ class HealthAgent(ADKAgent):
             return
         clean = input.model_copy(update={"state": sanitise_state(input.state)})
         keep = StreamFilter()  # raw tool rows never reach the browser
-        async for event in super().run(clean, *args, **kwargs):
-            out = keep(event)
-            if out is not None:
-                yield out
+        shared = agent_db_sync.shared_turn()  # same agent.db as the CLI when a bucket is set
+        await asyncio.to_thread(shared.__enter__)
+        try:
+            async for event in super().run(clean, *args, **kwargs):
+                out = keep(event)
+                if out is not None:
+                    yield out
+        finally:
+            await asyncio.to_thread(shared.__exit__, None, None, None)
 
 
 def build_agent(*, topology: str | None = None, model: BaseLlm | str | None = None,

@@ -29,7 +29,7 @@ from google.genai import types
 from health_core.settings import get_settings
 from health_data import civil, db, store
 
-from . import agent_db, costs, memory, receipts, tools, tracing, vertex
+from . import agent_db, agent_db_sync, costs, memory, receipts, tools, tracing, vertex
 from .workflow import Topology, build_workflow
 
 app = typer.Typer(add_completion=False, help="Ask the Calibrated Health Agent.")
@@ -37,6 +37,24 @@ memory_app = typer.Typer(invoke_without_command=True, help="What the agent remem
 app.add_typer(memory_app, name="memory")
 notes_app = typer.Typer(invoke_without_command=True, help="What the investigator found.")
 app.add_typer(notes_app, name="notes")
+agentdb_app = typer.Typer(help="The shared agent.db in the bucket (CLI and web app).")
+app.add_typer(agentdb_app, name="agentdb")
+
+
+@agentdb_app.command("seed")
+def agentdb_seed() -> None:
+    """Upload this laptop's agent.db as the shared copy, once (refused if one exists)."""
+    settings = get_settings()
+    if not settings.db_bucket:
+        typer.echo("CHA_DB_BUCKET is not set; nothing to seed")
+        raise typer.Exit(1)
+    with agent_db.connect():
+        pass
+    result = agent_db_sync.seed(settings.db_bucket, settings.agent_db_object, settings.agent_db_path)
+    typer.echo("seeded the shared agent.db" if result == "seeded"
+               else "the bucket already has an agent.db; nothing changed")
+    if result != "seeded":
+        raise typer.Exit(1)
 
 
 @app.callback()
@@ -63,6 +81,7 @@ class TurnResult:
     output_tokens: int = 0
     usd: float = 0.0
     tool_calls: list[dict] = field(default_factory=list)  # {name, args, response}
+    saved: str | None = None  # shared agent.db: pushed | reappended | not_saved | offline
 
 
 def _model() -> str | BaseLlm:
@@ -145,20 +164,23 @@ class Session:
         return result
 
     def ask(self, question: str, confirm: Callable[[dict], bool] = _confirm_with_typer) -> TurnResult:
-        if costs.chat_month_spend() >= get_settings().chat_monthly_usd_cap:
-            raise BudgetReached(f"Monthly chat budget (${get_settings().chat_monthly_usd_cap:.2f}) "
-                                "reached; resets on the 1st.")
-        if self.refresh_memory:
-            try:
-                with tools._ro_connect() as conn:
-                    self.memory.refresh_episodes(conn)
-            except Exception:
-                pass  # offline or no embeddings yet: memory search falls back to recent episodes
-        with tracing.span("cha.turn") as span:
-            result = asyncio.run(self._ask(question, confirm))
-            result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
-            span.set_attribute("cha.usd", result.usd)
-            span.set_attribute("cha.receipts", len(result.receipts))
+        # With a bucket set, agent.db is shared with the web app: pull before, push after.
+        with agent_db_sync.shared_turn() as shared:
+            if costs.chat_month_spend() >= get_settings().chat_monthly_usd_cap:
+                raise BudgetReached(f"Monthly chat budget (${get_settings().chat_monthly_usd_cap:.2f}) "
+                                    "reached; resets on the 1st.")
+            if self.refresh_memory:
+                try:
+                    with tools._ro_connect() as conn:
+                        self.memory.refresh_episodes(conn)
+                except Exception:
+                    pass  # offline or no embeddings yet: memory search falls back to recent episodes
+            with tracing.span("cha.turn") as span:
+                result = asyncio.run(self._ask(question, confirm))
+                result.usd = costs.record_chat(result.input_tokens, result.output_tokens)
+                span.set_attribute("cha.usd", result.usd)
+                span.set_attribute("cha.receipts", len(result.receipts))
+        result.saved = shared["result"]
         return result
 
 
@@ -172,6 +194,11 @@ def _print_turn(result: TurnResult) -> None:
     typer.echo("receipts: " + (", ".join(result.receipts) if result.receipts else "none"))
     typer.echo(f"tokens {result.input_tokens} in / {result.output_tokens} out · "
                f"${result.usd:.4f}")
+    if result.saved == "not_saved":
+        typer.echo("note: this answer's receipts were not saved to the shared store "
+                   "(another device wrote at the same time); they stay on this laptop")
+    elif result.saved == "offline":
+        typer.echo("note: could not reach the bucket; receipts saved on this laptop only")
 
 
 @app.command()

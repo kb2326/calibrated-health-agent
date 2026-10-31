@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     gcp_region: str = "us-central1"
     db_bucket: str | None = None
     db_object: str = "health.db"
+    agent_db_object: str = "agent.db"  # shared chat state (Phase 5): receipts, memory, spend
     token_secret: str | None = None
     client_secret_secret: str | None = None
     forms_token_secret: str | None = None
