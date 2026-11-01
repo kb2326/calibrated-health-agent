@@ -26,7 +26,7 @@ local weather. Not a medical device, and not a replacement for any health produc
 
 <p align="center">
   <a href="docs/images/brag.mp4"><img src="docs/images/web-desktop-dark.png" alt="The web app: the agent's steps, an answer whose every number has a receipt chip, a sleep chart drawn from the receipt, and a receipt that re-ran to Matches" width="100%"/></a>
-  <br/><sub>The real agent on synthetic demo data. <a href="docs/images/brag.mp4">Watch the 21-second video</a>.</sub>
+  <br/><sub>The real agent on synthetic demo data. <a href="docs/images/brag.mp4">Watch the 21-second video</a> · <a href="https://medium.com/@karthickbalaje01/i-built-a-health-ai-agent-that-has-to-prove-every-number-it-tells-you-f8856a6a3f4e">Read the deep dive on Medium</a>.</sub>
 </p>
 
 <p align="center">
@@ -235,7 +235,8 @@ flowchart LR
 - **CI gate** on a free-tier key with synthetic data only. It fails on a must-pass failure
   confirmed by retry, on anything not evaluated, or on a drop beyond the noise band.
 
-Details: [methodology](docs/evals/methodology.md) · [system card](docs/system-card.md).
+Details: [methodology](docs/evals/methodology.md) · [system card](docs/system-card.md) ·
+[the full write-up on Medium](https://medium.com/@karthickbalaje01/i-built-a-health-ai-agent-that-has-to-prove-every-number-it-tells-you-f8856a6a3f4e).
 
 ## Security
 
@@ -336,7 +337,7 @@ is capped in code, and CI evals run on a free tier. A $1 budget alerts at $0.25 
 | 4.5 | Capable agent: modern architecture, full data layer, weather | Live |
 | 5 | Web front end: Next.js + AG-UI, streaming answers with tappable receipts, live location, phone-installable, Cloud Run behind IAP | Built |
 | 6 | GCP expansion (agent API behind IAP, Workflows, keyless CI) | Not needed: the API behind IAP shipped in Phase 5, and CI holds no cloud credentials |
-| 7 | Publish: open source, screenshots, demo video, write-ups | In progress |
+| 7 | Publish: open source, screenshots, demo video, write-ups | Done |
 
 ## Limitations
 
