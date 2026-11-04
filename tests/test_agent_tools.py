@@ -35,6 +35,31 @@ def test_sql_tool_allows_a_cte():
     assert "error" not in tools.run_sql("WITH t AS (SELECT 1 AS x) SELECT x FROM t")
 
 
+def test_sql_comment_markers_inside_strings_are_left_alone():
+    """Issue #11: '--' or '/*' inside a quoted string is data, not a comment."""
+    for q, want in (("SELECT '%--%' AS s", "%--%"), ("SELECT 'a /* b */ c' AS s", "a /* b */ c"),
+                    ("SELECT 'x--y' AS s -- real comment", "x--y")):
+        out = tools.guarded_query(q)
+        assert "error" not in out, q
+        assert out["rows"] == [{"s": want}]
+        assert out["code"] == q, "the receipt must record the SQL exactly as it ran"
+
+
+def test_sql_real_comments_still_work():
+    for q in ("/* note */ SELECT 1 AS x", "SELECT 1 AS x -- note", "SELECT 1 AS x;"):
+        assert tools.guarded_query(q)["rows"] == [{"x": 1}], q
+
+
+def test_sql_comment_cannot_hide_a_second_statement():
+    for q in ("SELECT 1; -- x\nDROP TABLE raw_points", "SELECT 1 /* x */; DELETE FROM raw_points",
+              "SELECT 1; -- just a comment\nSELECT 2"):
+        assert "error" in tools.run_sql(q), f"must refuse: {q!r}"
+
+
+def test_sql_comment_only_query_is_refused():
+    assert "error" in tools.guarded_query("-- nothing here")
+
+
 def test_connection_itself_is_read_only():
     """Belt and braces: even past the guard, SQLite refuses the write."""
     with pytest.raises(sqlite3.OperationalError, match="readonly"):
