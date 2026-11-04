@@ -381,26 +381,26 @@ def run_sql(query: str, tool_context: ToolContext | None = None) -> dict:
 
 def guarded_query(query: str) -> dict:
     """`{"rows", "code"}` from one guarded read-only statement, or `{"error", "rows", "n"}`."""
-    cleaned = _strip_sql_comments(query).strip().rstrip(";").strip()
+    # Run the text exactly as written (SQLite parses comments itself and refuses a second
+    # statement), so the receipt records what actually ran. Pre-stripping comments with a
+    # regex mangled string literals such as LIKE '%--%' (issue #11).
+    cleaned = query.strip()
     if not cleaned:
         return {"error": "empty query", "rows": [], "n": 0}
     with _ro_connect():  # schema check: refuse a database newer than this code
         pass
     conn, denied = sqlguard.guarded_connect(db.DB_PATH)
     try:
-        rows = _rows(conn.execute(cleaned))
+        cur = conn.execute(cleaned)
+        if cur.description is None:  # e.g. only a comment: no result set, not "zero rows"
+            return {"error": "no SELECT statement to run", "rows": [], "n": 0}
+        rows = _rows(cur)
     except (sqlite3.Error, ValueError) as e:  # ValueError: more than one statement
         reason = sqlguard.explain(denied, e, cleaned) if isinstance(e, sqlite3.Error) else str(e)
         return {"error": reason, "rows": [], "n": 0}
     finally:
         conn.close()
     return {"rows": rows, "code": cleaned}
-
-
-def _strip_sql_comments(sql: str) -> str:
-    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.S)
-    sql = re.sub(r"--[^\n]*", " ", sql)
-    return sql
 
 
 def _record_sql(code: str, rows: list[dict]) -> str:
